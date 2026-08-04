@@ -1,6 +1,6 @@
-# [Project name]
+# OMXS30 Screener Dashboard
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A daily stock screener dashboard for OMXS30 — import raw screener text each day, browse candidates by category, and log trade outcomes over time.
 
 ## Run & Operate
 

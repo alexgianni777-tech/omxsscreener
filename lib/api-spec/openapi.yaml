@@ -3,20 +3,25 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: OMXS30 Screener API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: sessions
+    description: Screener sessions
+  - name: candidates
+    description: Stock candidates
+  - name: dashboard
+    description: Dashboard aggregates
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +29,371 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /screener/sessions/import:
+    post:
+      operationId: importSession
+      tags: [sessions]
+      summary: Import raw screener text and parse into a session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionImport"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionDetail"
+        "400":
+          description: Parse error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Session for this date already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /screener/sessions:
+    get:
+      operationId: listSessions
+      tags: [sessions]
+      summary: List all screener sessions
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SessionSummary"
+
+  /screener/sessions/{id}:
+    get:
+      operationId: getSession
+      tags: [sessions]
+      summary: Get a session with all its candidates
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: Session detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteSession
+      tags: [sessions]
+      summary: Delete a screener session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /candidates:
+    get:
+      operationId: listCandidates
+      tags: [candidates]
+      summary: List candidates with optional filters
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [MOMENTUM, SQUEEZE, STUDS, WEAKEST]
+        - name: outcome
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [WIN, LOSS, SKIP, PENDING]
+        - name: direction
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [LONG, SHORT]
+      responses:
+        "200":
+          description: List of candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CandidateWithSession"
+
+  /candidates/{id}/outcome:
+    patch:
+      operationId: updateCandidateOutcome
+      tags: [candidates]
+      summary: Log the trade outcome for a candidate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CandidateOutcome"
+      responses:
+        "200":
+          description: Updated candidate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Candidate"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Overall stats — session counts, win rate, R/R by category
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    SessionImport:
+      type: object
+      required: [rawText]
+      properties:
+        rawText:
+          type: string
+          description: The raw text output from the screener
+
+    MarketWeather:
+      type: object
+      required: [omxsValue, perf5d, perf1m, perf3m, rsi, trendLabel]
+      properties:
+        omxsValue:
+          type: number
+        perf5d:
+          type: number
+        perf1m:
+          type: number
+        perf3m:
+          type: number
+        rsi:
+          type: number
+        trendLabel:
+          type: string
+
+    Candidate:
+      type: object
+      required: [id, sessionId, category, rank, ticker, price, rs3m, perf1m, rsi, pctB, atr, volMultiplier, distFrom20dH, direction, entryPrice, stopPrice, targetPrice, rr, oneR, outcome]
+      properties:
+        id:
+          type: number
+        sessionId:
+          type: number
+        category:
+          type: string
+          enum: [MOMENTUM, SQUEEZE, STUDS, WEAKEST]
+        rank:
+          type: number
+        ticker:
+          type: string
+        price:
+          type: number
+        rs3m:
+          type: number
+        perf1m:
+          type: number
+        rsi:
+          type: number
+        pctB:
+          type: number
+        atr:
+          type: number
+        volMultiplier:
+          type: number
+        distFrom20dH:
+          type: number
+        gapWarning:
+          type: ["number", "null"]
+        direction:
+          type: string
+          enum: [LONG, SHORT]
+        entryPrice:
+          type: number
+        stopPrice:
+          type: number
+        targetPrice:
+          type: number
+        rr:
+          type: number
+        oneR:
+          type: number
+        outcome:
+          type: string
+          enum: [WIN, LOSS, SKIP, PENDING]
+        exitPrice:
+          type: ["number", "null"]
+        outcomeNotes:
+          type: ["string", "null"]
+
+    CandidateWithSession:
+      allOf:
+        - $ref: "#/components/schemas/Candidate"
+        - type: object
+          required: [sessionDate]
+          properties:
+            sessionDate:
+              type: string
+              description: "YYYY-MM-DD"
+
+    CandidateOutcome:
+      type: object
+      required: [outcome]
+      properties:
+        outcome:
+          type: string
+          enum: [WIN, LOSS, SKIP, PENDING]
+        exitPrice:
+          type: ["number", "null"]
+        outcomeNotes:
+          type: ["string", "null"]
+
+    SessionSummary:
+      type: object
+      required: [id, date, marketWeather, momentumCount, squeezeCount, studsCount, weakestCount, totalCandidates, trackedCount]
+      properties:
+        id:
+          type: number
+        date:
+          type: string
+          description: "YYYY-MM-DD"
+        marketWeather:
+          $ref: "#/components/schemas/MarketWeather"
+        momentumCount:
+          type: number
+        squeezeCount:
+          type: number
+        studsCount:
+          type: number
+        weakestCount:
+          type: number
+        totalCandidates:
+          type: number
+        trackedCount:
+          type: number
+          description: Number of candidates with a non-PENDING outcome
+
+    SessionDetail:
+      type: object
+      required: [id, date, marketWeather, candidates]
+      properties:
+        id:
+          type: number
+        date:
+          type: string
+          description: "YYYY-MM-DD"
+        marketWeather:
+          $ref: "#/components/schemas/MarketWeather"
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/Candidate"
+
+    CategoryStats:
+      type: object
+      required: [category, total, wins, losses, skips, pending, winRate]
+      properties:
+        category:
+          type: string
+          enum: [MOMENTUM, SQUEEZE, STUDS, WEAKEST]
+        total:
+          type: number
+        wins:
+          type: number
+        losses:
+          type: number
+        skips:
+          type: number
+        pending:
+          type: number
+        winRate:
+          type: ["number", "null"]
+          description: Win rate as a fraction (0-1), null if no resolved trades
+
+    DashboardSummary:
+      type: object
+      required: [totalSessions, totalCandidates, resolvedTrades, wins, losses, overallWinRate, byCategory]
+      properties:
+        totalSessions:
+          type: number
+        totalCandidates:
+          type: number
+        resolvedTrades:
+          type: number
+        wins:
+          type: number
+        losses:
+          type: number
+        overallWinRate:
+          type: ["number", "null"]
+        byCategory:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryStats"
