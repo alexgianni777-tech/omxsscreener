@@ -1,0 +1,53 @@
+📊 SCREENER · 2026-08-04
+OMXS30 SCREENER · 2026-08-04
+Hämtar index + 30 bolag 
+..............................
+
+MARKNADSVÄDER  OMXS30 3305.0 | 5d    2.7% | 1m    1.8% | 3m    8.9% | RSI  79
+               → MEDVIND (index över SMA50 & SMA200 — long-setups gynnade)
+
+=== 1 · MOMENTUM — relativ styrka mot index (fortsättnings-long) ===
+    Starkast i flocken, i trend, ej överköpt. Bäst i medvind.
+1. SSAB             102.85 | RS3m   18.5 | 1m    9.4% | RSI   57 | %B  0.90 | ATR    3.3% | vol  0.2x | ↔20dH   -0.3%
+      plan(LONG): entry ~102.85 · stop 98.83 (1.2×ATR) · mål +1% 103.88 (R/R 0.26) · 1R 106.87
+2. Getinge          240.30 | RS3m   22.7 | 1m   15.5% | RSI   86 | %B  0.81 | ATR    2.5% | vol  0.1x | ↔20dH   -0.2%
+      plan(LONG): entry ~240.30 · stop 233.19 (1.2×ATR) · mål +1% 242.70 (R/R 0.34) · 1R 247.41
+3. SEB              226.00 | RS3m   17.9 | 1m   14.6% | RSI   82 | %B  0.89 | ATR    1.8% | vol  0.2x | ↔20dH   -0.4%
+      plan(LONG): entry ~226.00 · stop 221.21 (1.2×ATR) · mål +1% 228.26 (R/R 0.47) · 1R 230.79
+4. Atlas Copco      207.20 | RS3m   12.6 | 1m    5.0% | RSI   69 | %B  0.99 | ATR    3.1% | vol  0.1x | ↔20dH   -0.5%
+      plan(LONG): entry ~207.20 · stop 199.61 (1.2×ATR) · mål +1% 209.27 (R/R 0.27) · 1R 214.79
+5. Swedbank         385.90 | RS3m   11.3 | 1m    5.4% | RSI   69 | %B  1.12 | ATR    1.7% | vol  0.2x | ↔20dH   -0.5%
+      plan(LONG): entry ~385.90 · stop 378.02 (1.2×ATR) · mål +1% 389.76 (R/R 0.49) · 1R 393.78
+
+=== 2 · SQUEEZE — hoptryckta Bollinger nära högsta (utbrottsvakt) ===
+    Låg bandbredd-percentil = laddad fjäder. Invänta utbrott — jaga inte i förväg.
+1. Alfa Laval       573.60 | RS3m   -3.6 | 1m   -2.6% | RSI   55 | %B  0.87 | ATR    2.4% | vol  0.1x | ↔20dH   -1.6%
+      plan(LONG): entry ~573.60 · stop 557.40 (1.2×ATR) · mål +1% 579.34 (R/R 0.35) · 1R 589.80
+2. SKF              265.30 | RS3m    8.1 | 1m   -0.2% | RSI   56 | %B  0.96 | ATR    2.5% | vol  0.1x | ↔20dH   -1.0%   ⚠ gap +3.4%
+      plan(LONG): entry ~265.30 · stop 257.28 (1.2×ATR) · mål +1% 267.95 (R/R 0.33) · 1R 273.32
+
+=== 3 · STUDS — översålda i intakt trend (rekyl-long, kort horisont) ===
+    RSI<35 eller under nedre bandet, men över SMA200 och positiv 3m.
+    Inga kvalificerade idag.
+
+=== 4 · SVAGAST — undvik long / ev. short-idéer ===
+    Under SMA50, sämst relativ styrka. Short i mini-future = egen riskkalkyl.
+1. AstraZeneca     1509.50 | RS3m  -20.7 | 1m  -19.0% | RSI   36 | %B -0.00 | ATR    3.1% | vol  1.0x | ↔20dH  -19.3%   ⚠ gap -7.4%
+      plan(SHORT): entry ~1509.50 · stop 1565.60 (1.2×ATR) · mål +1% 1494.40 (R/R 0.27) · 1R 1453.40
+2. Ericsson          96.98 | RS3m  -20.0 | 1m   -8.9% | RSI   46 | %B  0.45 | ATR    2.4% | vol  0.2x | ↔20dH  -14.1%   ⚠ gap +3.6%
+      plan(SHORT): entry ~96.98 · stop 99.79 (1.2×ATR) · mål +1% 96.01 (R/R 0.34) · 1R 94.17
+3. Sandvik          364.70 | RS3m  -11.1 | 1m  -11.4% | RSI   38 | %B  0.52 | ATR    3.2% | vol  0.1x | ↔20dH   -9.7%
+      plan(SHORT): entry ~364.70 · stop 378.61 (1.2×ATR) · mål +1% 361.05 (R/R 0.26) · 1R 350.79
+
+(Loggade 10 kandidater till candidates-log.csv — fyll på utfall själv för Oraklet-mätning senare.)
+
+─────────────────────────────────────────────────────────────
+DIN DEL AV JOBBET:
+ 1. Ta topp 3–5 till Claude: "kolla nyheter/rapporter/makro på X, Y, Z".
+    Screenern ser INTE rapportdatum eller nyheter — det är människans jobb.
+ 2. Välj 0–2. Ingen kvalificerad = ingen trade. Det är disciplin, inte passivitet.
+ 3. Positionsstorlek: riskera en FAST liten andel av kapitalet per trade
+    (stop-avståndet ovan ger kronor per aktie → antal aktier därefter).
+ 4. LOGGA varje trade (setup, val, utfall). Efter 20–30 trades: kör vinst-
+    andel + payoff genom Monte Carlo-Oraklet = då VET du om edgen finns.
+Urvalsverktyg, inte rådgivning. Beslut och risk är dina.
