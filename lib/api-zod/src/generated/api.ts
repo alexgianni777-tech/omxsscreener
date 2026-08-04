@@ -222,6 +222,25 @@ export const UpdateCandidateOutcomeResponse = zod.object({
 
 
 /**
+ * @summary Fetch live prices from Yahoo Finance for a list of tickers
+ */
+export const GetQuotesQueryParams = zod.object({
+  "tickers": zod.coerce.string()
+})
+
+export const GetQuotesResponseItem = zod.object({
+  "ticker": zod.string().describe('Original screener ticker'),
+  "yahooTicker": zod.string().describe('Yahoo Finance ticker (with .ST suffix)'),
+  "livePrice": zod.number().nullish(),
+  "change": zod.number().nullish().describe('Absolute price change from previous close'),
+  "changePct": zod.number().nullish().describe('Percent change from previous close'),
+  "marketState": zod.string().nullish().describe('REGULAR, PRE, POST, CLOSED'),
+  "error": zod.string().nullish()
+})
+export const GetQuotesResponse = zod.array(GetQuotesResponseItem)
+
+
+/**
  * @summary Overall stats — session counts, win rate, R/R by category
  */
 export const GetDashboardSummaryResponse = zod.object({

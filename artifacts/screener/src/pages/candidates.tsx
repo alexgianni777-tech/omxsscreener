@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { useListCandidates } from "@workspace/api-client-react";
+import { useListCandidates, useGetQuotes } from "@workspace/api-client-react";
 import { formatNumber, formatPercent, formatDate } from "../lib/utils";
 import { Link } from "wouter";
-import { Filter, Search, ChevronRight } from "lucide-react";
+import { Filter, ChevronRight } from "lucide-react";
 
 export function Candidates() {
   const [category, setCategory] = useState<string>("");
@@ -15,6 +15,17 @@ export function Candidates() {
   if (direction) params.direction = direction;
 
   const { data: candidates, isLoading, isError } = useListCandidates(params);
+
+  // Deduplicated tickers for live price lookup
+  const tickers = [...new Set(candidates?.map((c) => c.ticker) ?? [])];
+  const { data: quotes } = useGetQuotes(
+    { tickers: tickers.join(",") },
+    { query: { enabled: tickers.length > 0, refetchInterval: 60_000 } }
+  );
+  const quoteMap: Record<string, number | null> = {};
+  quotes?.forEach((q) => { quoteMap[q.ticker] = q.livePrice ?? null; });
+  const changePctMap: Record<string, number | null> = {};
+  quotes?.forEach((q) => { changePctMap[q.ticker] = q.changePct ?? null; });
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -76,7 +87,9 @@ export function Candidates() {
                 <th className="px-4 py-3">Ticker</th>
                 <th className="px-4 py-3">Dir</th>
                 <th className="px-4 py-3">Category</th>
-                <th className="px-4 py-3 text-right">Price</th>
+                <th className="px-4 py-3 text-right">Screen Px</th>
+                <th className="px-4 py-3 text-right">Live Px</th>
+                <th className="px-4 py-3 text-right">Entry</th>
                 <th className="px-4 py-3 text-right">Target</th>
                 <th className="px-4 py-3 text-right">Stop</th>
                 <th className="px-4 py-3 text-center">Outcome</th>
@@ -85,48 +98,67 @@ export function Candidates() {
             </thead>
             <tbody className="divide-y divide-border">
               {isLoading ? (
-                <tr><td colSpan={9} className="px-4 py-8 text-center text-muted-foreground animate-pulse">Loading candidates...</td></tr>
+                <tr><td colSpan={11} className="px-4 py-8 text-center text-muted-foreground animate-pulse">Loading candidates...</td></tr>
               ) : isError || !candidates ? (
-                <tr><td colSpan={9} className="px-4 py-8 text-center text-destructive">Failed to load data.</td></tr>
+                <tr><td colSpan={11} className="px-4 py-8 text-center text-destructive">Failed to load data.</td></tr>
               ) : candidates.length === 0 ? (
-                <tr><td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">No candidates match these filters.</td></tr>
+                <tr><td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">No candidates match these filters.</td></tr>
               ) : (
-                candidates.map(c => (
-                  <tr key={c.id} className="hover:bg-muted/50 transition-colors group">
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <Link href={`/sessions/${c.sessionId}`} className="text-primary hover:underline">
-                        {formatDate(c.sessionDate)}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 font-bold">{c.ticker}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${c.direction === 'LONG' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
-                        {c.direction}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 bg-muted rounded text-xs font-medium">{c.category}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono">{formatNumber(c.price)}</td>
-                    <td className="px-4 py-3 text-right font-mono text-success">{formatNumber(c.targetPrice)}</td>
-                    <td className="px-4 py-3 text-right font-mono text-destructive">{formatNumber(c.stopPrice)}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold border ${
-                        c.outcome === 'WIN' ? 'border-success text-success bg-success/10' :
-                        c.outcome === 'LOSS' ? 'border-destructive text-destructive bg-destructive/10' :
-                        c.outcome === 'SKIP' ? 'border-muted-foreground text-muted-foreground bg-muted' :
-                        'border-border text-foreground bg-background'
-                      }`}>
-                        {c.outcome}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Link href={`/sessions/${c.sessionId}`} className="inline-flex items-center justify-center w-8 h-8 rounded text-muted-foreground hover:bg-background hover:text-primary transition-colors">
-                        <ChevronRight className="w-4 h-4" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))
+                candidates.map(c => {
+                  const live = quoteMap[c.ticker];
+                  const chg = changePctMap[c.ticker];
+                  return (
+                    <tr key={c.id} className="hover:bg-muted/50 transition-colors group">
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <Link href={`/sessions/${c.sessionId}`} className="text-primary hover:underline">
+                          {formatDate(c.sessionDate)}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 font-bold">{c.ticker}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${c.direction === 'LONG' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
+                          {c.direction}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="px-2 py-0.5 bg-muted rounded text-xs font-medium">{c.category}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-muted-foreground">{formatNumber(c.price)}</td>
+                      <td className="px-4 py-3 text-right">
+                        {live != null ? (
+                          <div className="flex flex-col items-end">
+                            <span className="font-mono font-semibold">{formatNumber(live)}</span>
+                            {chg != null && (
+                              <span className={`text-[10px] font-mono ${chg >= 0 ? "text-success" : "text-destructive"}`}>
+                                {chg >= 0 ? "+" : ""}{chg.toFixed(2)}%
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono">{formatNumber(c.entryPrice)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-success">{formatNumber(c.targetPrice)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-destructive">{formatNumber(c.stopPrice)}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold border ${
+                          c.outcome === 'WIN' ? 'border-success text-success bg-success/10' :
+                          c.outcome === 'LOSS' ? 'border-destructive text-destructive bg-destructive/10' :
+                          c.outcome === 'SKIP' ? 'border-muted-foreground text-muted-foreground bg-muted' :
+                          'border-border text-foreground bg-background'
+                        }`}>
+                          {c.outcome}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <Link href={`/sessions/${c.sessionId}`} className="inline-flex items-center justify-center w-8 h-8 rounded text-muted-foreground hover:bg-background hover:text-primary transition-colors">
+                          <ChevronRight className="w-4 h-4" />
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

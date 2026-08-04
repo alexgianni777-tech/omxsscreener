@@ -153,6 +153,32 @@ export interface CategoryStats {
   winRate: number | null;
 }
 
+export interface QuoteResult {
+  /** Original screener ticker */
+  ticker: string;
+  /** Yahoo Finance ticker (with .ST suffix) */
+  yahooTicker: string;
+  /** @nullable */
+  livePrice?: number | null;
+  /**
+     * Absolute price change from previous close
+     * @nullable
+     */
+  change?: number | null;
+  /**
+     * Percent change from previous close
+     * @nullable
+     */
+  changePct?: number | null;
+  /**
+     * REGULAR, PRE, POST, CLOSED
+     * @nullable
+     */
+  marketState?: string | null;
+  /** @nullable */
+  error?: string | null;
+}
+
 export interface DashboardSummary {
   totalSessions: number;
   totalCandidates: number;
@@ -197,4 +223,11 @@ export const ListCandidatesDirection = {
   LONG: 'LONG',
   SHORT: 'SHORT',
 } as const;
+
+export type GetQuotesParams = {
+/**
+ * Comma-separated list of screener tickers (e.g. SSAB-B,ERIC-B)
+ */
+tickers: string;
+};
 

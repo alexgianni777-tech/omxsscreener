@@ -185,6 +185,28 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /screener/quotes:
+    get:
+      operationId: getQuotes
+      tags: [sessions]
+      summary: Fetch live prices from Yahoo Finance for a list of tickers
+      parameters:
+        - name: tickers
+          in: query
+          required: true
+          schema:
+            type: string
+            description: Comma-separated list of screener tickers (e.g. SSAB-B,ERIC-B)
+      responses:
+        "200":
+          description: Live quote data per ticker
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuoteResult"
+
   /dashboard/summary:
     get:
       operationId: getDashboardSummary
@@ -376,6 +398,30 @@ components:
         winRate:
           type: ["number", "null"]
           description: Win rate as a fraction (0-1), null if no resolved trades
+
+    QuoteResult:
+      type: object
+      required: [ticker, yahooTicker]
+      properties:
+        ticker:
+          type: string
+          description: Original screener ticker
+        yahooTicker:
+          type: string
+          description: Yahoo Finance ticker (with .ST suffix)
+        livePrice:
+          type: ["number", "null"]
+        change:
+          type: ["number", "null"]
+          description: Absolute price change from previous close
+        changePct:
+          type: ["number", "null"]
+          description: Percent change from previous close
+        marketState:
+          type: ["string", "null"]
+          description: REGULAR, PRE, POST, CLOSED
+        error:
+          type: ["string", "null"]
 
     DashboardSummary:
       type: object

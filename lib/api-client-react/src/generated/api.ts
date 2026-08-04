@@ -25,8 +25,10 @@ import type {
   CandidateWithSession,
   DashboardSummary,
   ErrorResponse,
+  GetQuotesParams,
   HealthStatus,
   ListCandidatesParams,
+  QuoteResult,
   SessionDetail,
   SessionImport,
   SessionSummary
@@ -587,6 +589,90 @@ export const useUpdateCandidateOutcome = <TError = ErrorType<ErrorResponse>,
       > => {
       return useMutation(getUpdateCandidateOutcomeMutationOptions(options));
     }
+
+export const getGetQuotesUrl = (params: GetQuotesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/screener/quotes?${stringifiedParams}` : `/api/screener/quotes`
+}
+
+/**
+ * @summary Fetch live prices from Yahoo Finance for a list of tickers
+ */
+export const getQuotes = async (params: GetQuotesParams, options?: Parameters<typeof customFetch>[1]): Promise<QuoteResult[]> => {
+
+  return customFetch<QuoteResult[]>(getGetQuotesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetQuotesQueryKey = (params?: GetQuotesParams,) => {
+    return [
+    `/api/screener/quotes`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetQuotesQueryOptions = <TData = Awaited<ReturnType<typeof getQuotes>>, TError = ErrorType<unknown>>(params: GetQuotesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getQuotes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetQuotesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getQuotes>>> = ({ signal }) => getQuotes(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getQuotes>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetQuotesQueryResult = NonNullable<Awaited<ReturnType<typeof getQuotes>>>
+export type GetQuotesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Fetch live prices from Yahoo Finance for a list of tickers
+ */
+
+export function useGetQuotes<TData = Awaited<ReturnType<typeof getQuotes>>, TError = ErrorType<unknown>>(
+ params: GetQuotesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getQuotes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetQuotesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetDashboardSummaryUrl = () => {
 

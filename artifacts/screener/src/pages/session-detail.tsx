@@ -1,7 +1,7 @@
-import { useGetSession, getGetSessionQueryKey, Candidate, CandidateOutcomeProperty, useUpdateCandidateOutcome } from "@workspace/api-client-react";
+import { useGetSession, getGetSessionQueryKey, useGetQuotes, Candidate, CandidateOutcomeProperty, useUpdateCandidateOutcome, QuoteResult } from "@workspace/api-client-react";
 import { useParams, Link } from "wouter";
 import { formatNumber, formatPercent, formatDate } from "../lib/utils";
-import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2 } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useCallback } from "react";
 
@@ -9,6 +9,16 @@ export function SessionDetail() {
   const params = useParams();
   const id = parseInt(params.id || "0", 10);
   const { data: session, isLoading, isError } = useGetSession(id, { query: { enabled: !!id, queryKey: getGetSessionQueryKey(id) } });
+
+  const tickers = session?.candidates.map((c) => c.ticker) ?? [];
+  const tickersParam = tickers.join(",");
+  const { data: quotes } = useGetQuotes(
+    { tickers: tickersParam },
+    { query: { enabled: tickers.length > 0, refetchInterval: 60_000 } }
+  );
+
+  const quoteMap: Record<string, QuoteResult> = {};
+  quotes?.forEach((q) => { quoteMap[q.ticker] = q; });
 
   if (isLoading) {
     return <div className="animate-pulse space-y-8">
@@ -73,7 +83,7 @@ export function SessionDetail() {
               
               <div className="grid gap-4">
                 {catCandidates.map(candidate => (
-                  <CandidateRow key={candidate.id} candidate={candidate} sessionId={id} />
+                  <CandidateRow key={candidate.id} candidate={candidate} sessionId={id} quote={quoteMap[candidate.ticker]} />
                 ))}
               </div>
             </div>
@@ -96,7 +106,7 @@ function WeatherMetric({ label, value, isPercent }: { label: string, value: numb
   );
 }
 
-function CandidateRow({ candidate, sessionId }: { candidate: Candidate, sessionId: number }) {
+function CandidateRow({ candidate, sessionId, quote }: { candidate: Candidate, sessionId: number, quote?: QuoteResult }) {
   const updateOutcome = useUpdateCandidateOutcome();
   const queryClient = useQueryClient();
   const mutateFnRef = useRef(updateOutcome.mutate);
@@ -132,6 +142,18 @@ function CandidateRow({ candidate, sessionId }: { candidate: Candidate, sessionI
   const DirIcon = isLong ? TrendingUp : TrendingDown;
   const dirColor = isLong ? "text-success bg-success/10 border-success/20" : "text-destructive bg-destructive/10 border-destructive/20";
 
+  // Live price derived values
+  const livePrice = quote?.livePrice ?? null;
+  const changePct = quote?.changePct ?? null;
+  const distFromEntry = livePrice != null
+    ? ((livePrice - candidate.entryPrice) / candidate.entryPrice) * 100
+    : null;
+  const distFromStop = livePrice != null
+    ? ((livePrice - candidate.stopPrice) / candidate.stopPrice) * 100
+    : null;
+  const pastEntry = livePrice != null && (isLong ? livePrice >= candidate.entryPrice : livePrice <= candidate.entryPrice);
+  const nearStop = distFromStop != null && Math.abs(distFromStop) < 1.5;
+
   return (
     <div className="bg-card border border-border rounded-lg p-4 shadow-sm text-sm flex flex-col xl:flex-row gap-4 xl:items-stretch group">
       
@@ -148,13 +170,53 @@ function CandidateRow({ candidate, sessionId }: { candidate: Candidate, sessionI
         </div>
         
         <div className="grid grid-cols-3 gap-y-2 gap-x-4 text-xs">
-          <div><span className="text-muted-foreground block text-[10px]">PRICE</span><span className="font-mono font-medium">{formatNumber(candidate.price)}</span></div>
+          <div><span className="text-muted-foreground block text-[10px]">SCREEN Px</span><span className="font-mono font-medium">{formatNumber(candidate.price)}</span></div>
           <div><span className="text-muted-foreground block text-[10px]">RS3M</span><span className="font-mono">{formatNumber(candidate.rs3m, 1)}</span></div>
           <div><span className="text-muted-foreground block text-[10px]">1M%</span><span className="font-mono">{formatPercent(candidate.perf1m)}</span></div>
           <div><span className="text-muted-foreground block text-[10px]">RSI</span><span className="font-mono">{formatNumber(candidate.rsi, 1)}</span></div>
           <div><span className="text-muted-foreground block text-[10px]">ATR</span><span className="font-mono">{formatNumber(candidate.atr)}</span></div>
           <div><span className="text-muted-foreground block text-[10px]">VOL</span><span className="font-mono">{formatNumber(candidate.volMultiplier)}x</span></div>
         </div>
+      </div>
+
+      {/* Live Price */}
+      <div className="flex flex-col justify-center min-w-[140px] xl:border-r border-border xl:pr-4">
+        <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
+          <Activity className="w-3 h-3" /> Live Price
+        </div>
+        {livePrice != null ? (
+          <div className="space-y-1">
+            <div className={`font-mono font-bold text-xl ${pastEntry ? (isLong ? "text-success" : "text-destructive") : ""}`}>
+              {formatNumber(livePrice)}
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              {changePct != null && (
+                <span className={`font-mono ${changePct >= 0 ? "text-success" : "text-destructive"}`}>
+                  {changePct >= 0 ? "+" : ""}{changePct.toFixed(2)}%
+                </span>
+              )}
+              {nearStop && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-destructive/20 text-destructive font-bold animate-pulse">
+                  NEAR STOP
+                </span>
+              )}
+              {pastEntry && !nearStop && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/20 text-success font-bold">
+                  TRIGGERED
+                </span>
+              )}
+            </div>
+            {distFromEntry != null && (
+              <div className="text-[10px] text-muted-foreground font-mono">
+                vs entry: <span className={distFromEntry >= 0 ? "text-success" : "text-destructive"}>
+                  {distFromEntry >= 0 ? "+" : ""}{distFromEntry.toFixed(2)}%
+                </span>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-muted-foreground font-mono text-sm">—</div>
+        )}
       </div>
 
       {/* Trade Plan */}
