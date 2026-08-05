@@ -15,7 +15,13 @@ import YahooFinance from "yahoo-finance2";
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 const EDGEAI_URL = "https://alexgianni777-tech.github.io/edgeai/public/data.json";
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-const EARLIEST_HOUR_UTC = 6; // don't import before 06:00 UTC
+
+// Import window: OMXS30 closes 17:30 CET/CEST = 15:30 UTC (summer) and
+// US market open +2 h = 11:30 ET = 15:30 UTC (EDT, summer) — same moment.
+// In winter (CET/EST) both shift to ~16:30 UTC, but EdgeAI data is
+// generated in the morning so 15:30 UTC is always a safe lower bound.
+const EARLIEST_HOUR_UTC   = 15;
+const EARLIEST_MINUTE_UTC = 30;
 
 // In-memory status — reset on server restart
 export let schedulerStatus: {
@@ -182,7 +188,9 @@ async function tick() {
   schedulerStatus.lastChecked = now.toISOString();
 
   if (!isWeekday(now)) return;
-  if (now.getUTCHours() < EARLIEST_HOUR_UTC) return;
+  const utcH = now.getUTCHours();
+  const utcM = now.getUTCMinutes();
+  if (utcH < EARLIEST_HOUR_UTC || (utcH === EARLIEST_HOUR_UTC && utcM < EARLIEST_MINUTE_UTC)) return;
 
   const today = todayUtc();
   if (await sessionExistsForDate(today)) return;
@@ -208,6 +216,6 @@ export function startScheduler() {
   const nextCheck = new Date(Date.now() + CHECK_INTERVAL_MS);
   schedulerStatus.nextCheckAt = nextCheck.toISOString();
 
-  logger.info("[scheduler] Started — checking EdgeAI every 5 minutes on weekdays after 06:00 UTC");
+  logger.info("[scheduler] Started — checking EdgeAI every 5 min on weekdays; imports after 15:30 UTC (≈ OMXS30 close / US open +2 h)");
   return interval;
 }
