@@ -51,16 +51,18 @@ export function Import() {
           setLocation(`/sessions/${data.id}`);
         },
         onError: (err: any) => {
+          // ApiError wraps the response body in `.data`; fall back to top-level for safety.
+          const body = err?.data ?? err;
           // 409 conflict with outcome details → show confirmation modal
-          if (err?.sessionId !== undefined && Array.isArray(err?.affectedOutcomes)) {
+          if (body?.sessionId !== undefined && Array.isArray(body?.affectedOutcomes)) {
             setConflict({
-              sessionId: err.sessionId,
-              date: err.date,
-              affectedOutcomes: err.affectedOutcomes,
+              sessionId: body.sessionId,
+              date: body.date,
+              affectedOutcomes: body.affectedOutcomes,
               rawText: text,
             });
           } else {
-            setError(err?.error || "Failed to parse and import session. Check format.");
+            setError(body?.error || err?.message || "Failed to parse and import session. Check format.");
           }
         },
       }

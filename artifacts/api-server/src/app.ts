@@ -9,6 +9,10 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+// Replit (and most PaaS) run behind a reverse proxy that sets X-Forwarded-For.
+// Without this, express-rate-limit throws a ValidationError on every request.
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,

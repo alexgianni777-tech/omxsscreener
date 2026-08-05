@@ -9,7 +9,7 @@ import { eq } from "drizzle-orm";
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import YahooFinance from "yahoo-finance2";
 
-const yf = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
+const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
 const router: IRouter = Router();
 

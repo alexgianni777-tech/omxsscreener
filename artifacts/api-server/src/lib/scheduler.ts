@@ -12,7 +12,7 @@ import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import YahooFinance from "yahoo-finance2";
 
-const yf = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
+const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 const EDGEAI_URL = "https://alexgianni777-tech.github.io/edgeai/public/data.json";
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const EARLIEST_HOUR_UTC = 6; // don't import before 06:00 UTC
