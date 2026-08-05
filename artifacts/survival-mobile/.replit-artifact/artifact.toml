@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/survival-mobile/"
+title = "Survival Challenge Mobile"
+description = "A mobile companion app for the Survival Challenge trading tracker. Lets the user log trades (P&L, läst/reflex, plan discipline), view the equity curve, check the circuit breaker status, and track milestone progress — all synced with the server database so it works across devices."
+version = "1.0.0"
+id = "artifacts/survival-mobile"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/survival-mobile/" ]
+localPort = 22262
+
+[services.development]
+run = "pnpm --filter @workspace/survival-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/survival-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/survival-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "22262"
+BASE_PATH = "/survival-mobile/"

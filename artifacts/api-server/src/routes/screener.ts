@@ -283,21 +283,30 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     .where(eq(candidatesTable.sessionId, session.id))
     .orderBy(candidatesTable.category, candidatesTable.rank);
 
-  res.json(
-    GetSessionResponse.parse({
-      id: session.id,
-      date: session.date,
-      marketWeather: {
-        omxsValue: session.omxsValue,
-        perf5d: session.perf5d,
-        perf1m: session.perf1m,
-        perf3m: session.perf3m,
-        rsi: session.marketRsi,
-        trendLabel: session.trendLabel,
-      },
-      candidates: candidates.map(mapCandidate),
-    })
-  );
+  const parsed = GetSessionResponse.parse({
+    id: session.id,
+    date: session.date,
+    marketWeather: {
+      omxsValue: session.omxsValue,
+      perf5d: session.perf5d,
+      perf1m: session.perf1m,
+      perf3m: session.perf3m,
+      rsi: session.marketRsi,
+      trendLabel: session.trendLabel,
+    },
+    candidates: candidates.map(mapCandidate),
+  });
+
+  // Append EdgeAI metadata (not in Zod schema — passed through directly)
+  res.json({
+    ...parsed,
+    source: session.source ?? null,
+    edgeRegime: session.edgeRegime ? (() => { try { return JSON.parse(session.edgeRegime!); } catch { return null; } })() : null,
+    edgeExpectancy: session.edgeExpectancy ?? null,
+    edgeWinRate: session.edgeWinRate ?? null,
+    edgePF: session.edgePF ?? null,
+    edgeN: session.edgeN ?? null,
+  });
 });
 
 // DELETE /screener/sessions/:id

@@ -1,4 +1,4 @@
-import { pgTable, serial, text, real, date, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, real, integer, date, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -12,6 +12,13 @@ export const screenerSessionsTable = pgTable("screener_sessions", {
   marketRsi: real("market_rsi").notNull(),
   trendLabel: text("trend_label").notNull(),
   rawText: text("raw_text").notNull(),
+  // EdgeAI metadata — populated when source is "edgeai"
+  source: text("source"),          // "edgeai" | null (manual)
+  edgeRegime: text("edge_regime"), // JSON string
+  edgeExpectancy: real("edge_expectancy"),
+  edgeWinRate: real("edge_win_rate"),
+  edgePF: real("edge_pf"),
+  edgeN: integer("edge_n"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

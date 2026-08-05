@@ -191,6 +191,12 @@ router.post(
           marketRsi: 0,
           trendLabel: se.regime?.label ?? "n/a",
           rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt}`,
+          source: "edgeai",
+          edgeRegime: JSON.stringify(se.regime ?? {}),
+          edgeExpectancy: se.edge?.expectancyR ?? null,
+          edgeWinRate: se.edge?.winRate ?? null,
+          edgePF: se.edge?.profitFactor ?? null,
+          edgeN: se.edge?.n ?? null,
         })
         .returning();
 

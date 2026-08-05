@@ -67,6 +67,11 @@ export function SessionDetail() {
         </div>
       </div>
 
+      {/* EdgeAI Panel — shown when session was imported from EdgeAI */}
+      {(session as any).source === "edgeai" && (
+        <EdgeAIPanel session={session as any} />
+      )}
+
       {/* Categories */}
       <div className="space-y-12">
         {categories.map(cat => {
@@ -90,6 +95,96 @@ export function SessionDetail() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+interface EdgeAISessionExtra {
+  source: "edgeai" | null;
+  edgeRegime: { label?: string; trend?: string; strength?: number } | null;
+  edgeExpectancy: number | null;
+  edgeWinRate: number | null;
+  edgePF: number | null;
+  edgeN: number | null;
+  candidates: Candidate[];
+}
+
+function EdgeAIPanel({ session }: { session: EdgeAISessionExtra }) {
+  const resolved = session.candidates.filter(c => c.outcome === "WIN" || c.outcome === "LOSS");
+  const wins = resolved.filter(c => c.outcome === "WIN");
+  const actualWR = resolved.length > 0 ? wins.length / resolved.length : null;
+
+  const expColor = session.edgeExpectancy != null
+    ? session.edgeExpectancy > 0 ? "text-success" : "text-destructive"
+    : "";
+
+  const regime = session.edgeRegime;
+  const regimeLabel = regime?.label ?? regime?.trend ?? null;
+
+  return (
+    <div className="bg-card border border-blue-500/30 rounded-lg p-5 shadow-sm">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1.5">
+          <Activity className="w-3.5 h-3.5" />
+          EdgeAI — System Edge
+        </div>
+        {regimeLabel && (
+          <span className="ml-auto text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
+            {regimeLabel}
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <div className="bg-background rounded p-3 border border-border">
+          <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider">Expectancy R</div>
+          <div className={`font-mono font-bold text-lg ${expColor}`}>
+            {session.edgeExpectancy != null ? (session.edgeExpectancy > 0 ? "+" : "") + session.edgeExpectancy.toFixed(2) + "R" : "—"}
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">per trade OOS</div>
+        </div>
+        <div className="bg-background rounded p-3 border border-border">
+          <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider">Win Rate OOS</div>
+          <div className="font-mono font-bold text-lg">
+            {session.edgeWinRate != null ? Math.round(session.edgeWinRate * 100) + "%" : "—"}
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">historical</div>
+        </div>
+        <div className="bg-background rounded p-3 border border-border">
+          <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider">Profit Factor</div>
+          <div className="font-mono font-bold text-lg">
+            {session.edgePF != null ? session.edgePF.toFixed(2) : "—"}
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">gross W / gross L</div>
+        </div>
+        <div className="bg-background rounded p-3 border border-border">
+          <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider">N Trades</div>
+          <div className="font-mono font-bold text-lg">
+            {session.edgeN ?? "—"}
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">sample size</div>
+        </div>
+      </div>
+
+      {/* Actual vs Expected comparison */}
+      {resolved.length > 0 && session.edgeWinRate != null && (
+        <div className="bg-muted/40 rounded p-3 border border-border text-sm flex flex-wrap gap-4 items-center">
+          <div>
+            <span className="text-muted-foreground text-xs uppercase tracking-wider">Actual WR </span>
+            <span className={`font-mono font-semibold ${actualWR! >= session.edgeWinRate ? "text-success" : "text-destructive"}`}>
+              {Math.round(actualWR! * 100)}%
+            </span>
+          </div>
+          <div className="text-muted-foreground text-xs">vs</div>
+          <div>
+            <span className="text-muted-foreground text-xs uppercase tracking-wider">Edge WR </span>
+            <span className="font-mono font-semibold">{Math.round(session.edgeWinRate * 100)}%</span>
+          </div>
+          <div className="text-muted-foreground text-xs ml-auto">
+            {resolved.length} resolved · {session.candidates.filter(c => c.outcome === "PENDING").length} pending
+          </div>
+        </div>
+      )}
     </div>
   );
 }
