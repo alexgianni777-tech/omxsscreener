@@ -1,10 +1,62 @@
 import { useGetSession, getGetSessionQueryKey, useGetQuotes, Candidate, CandidateOutcomeProperty, useUpdateCandidateOutcome, QuoteResult } from "@workspace/api-client-react";
 import { useParams, Link } from "wouter";
 import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
-import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity, AlertTriangle, Clock } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity, AlertTriangle, Clock, Newspaper, ExternalLink } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
+// ── News types & hook ─────────────────────────────────────────────────────────
+interface NewsItem {
+  uuid: string;
+  title: string;
+  publisher: string;
+  link: string;
+  publishedAt: number;
+}
+
+function useSessionNews(tickers: string[]) {
+  const [news, setNews] = useState<NewsItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const key = tickers.slice().sort().join(",");
+
+  useEffect(() => {
+    if (!key) return;
+    setLoading(true);
+    fetch(`/api/screener/news?tickers=${encodeURIComponent(key)}`)
+      .then((r) => r.json())
+      .then((data: NewsItem[]) => setNews(Array.isArray(data) ? data : []))
+      .catch(() => setNews([]))
+      .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  return { news, loading };
+}
+
+// ── Edge score helpers ────────────────────────────────────────────────────────
+// For EdgeAI sessions: rsi field stores expectancyR × 100; perf1m stores winRate.
+// compositeScore = winRate × expectancyR (Kelly-ish proxy).
+function edgeScore(c: Candidate): number {
+  const expectancyR = c.rsi / 100; // stored as rsi×100
+  const winRate = c.perf1m;        // stored as decimal 0-1
+  return winRate * expectancyR;
+}
+
+function edgeScoreColor(score: number): string {
+  if (score >= 0.15) return "text-success border-success/30 bg-success/10";
+  if (score >= 0.05) return "text-amber-400 border-amber-500/30 bg-amber-500/10";
+  return "text-destructive border-destructive/30 bg-destructive/10";
+}
+
+function formatTimeAgo(unixSec: number): string {
+  const diffMs = Date.now() - unixSec * 1000;
+  const h = Math.floor(diffMs / 3_600_000);
+  if (h < 1) return "< 1h";
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 export function SessionDetail() {
   const params = useParams();
   const id = parseInt(params.id || "0", 10);
@@ -16,6 +68,7 @@ export function SessionDetail() {
     { tickers: tickersParam },
     { query: { enabled: tickers.length > 0, refetchInterval: 60_000 } }
   );
+  const { news, loading: newsLoading } = useSessionNews(tickers);
 
   const quoteMap: Record<string, QuoteResult> = {};
   quotes?.forEach((q) => { quoteMap[q.ticker] = q; });
@@ -33,7 +86,7 @@ export function SessionDetail() {
   }
 
   const { marketWeather, candidates } = session;
-
+  const isEdgeAI = (session as any).source === "edgeai";
   const categories = ["MOMENTUM", "SQUEEZE", "STUDS", "WEAKEST"] as const;
 
   // ── Signal age ──────────────────────────────────────────────────────────────
@@ -43,7 +96,6 @@ export function SessionDetail() {
   const daysOld   = Math.round((todayMs - sessionMs) / 86_400_000);
 
   // ── Correlation / concentration analysis ────────────────────────────────────
-  // Group pending candidates by category+direction to flag correlated bets
   const pending = candidates.filter(c => c.outcome === "PENDING");
   type GroupKey = string;
   const groups: Record<GroupKey, number> = {};
@@ -131,14 +183,20 @@ export function SessionDetail() {
       )}
 
       {/* EdgeAI Panel — shown when session was imported from EdgeAI */}
-      {(session as any).source === "edgeai" && (
+      {isEdgeAI && (
         <EdgeAIPanel session={session as any} />
       )}
 
       {/* Categories */}
       <div className="space-y-12">
         {categories.map(cat => {
-          const catCandidates = candidates.filter(c => c.category === cat).sort((a, b) => a.rank - b.rank);
+          let catCandidates = candidates.filter(c => c.category === cat);
+          // For EdgeAI sessions: sort by composite edge score (winRate × expectancyR) descending
+          if (isEdgeAI) {
+            catCandidates = [...catCandidates].sort((a, b) => edgeScore(b) - edgeScore(a));
+          } else {
+            catCandidates = catCandidates.sort((a, b) => a.rank - b.rank);
+          }
           if (catCandidates.length === 0) return null;
 
           return (
@@ -147,21 +205,34 @@ export function SessionDetail() {
                 <div className="w-2 h-2 rounded-full bg-primary"></div>
                 {cat}
                 <span className="ml-2 text-sm font-normal text-muted-foreground px-2 py-0.5 bg-muted rounded-full">{catCandidates.length}</span>
+                {isEdgeAI && <span className="ml-1 text-[10px] text-muted-foreground">sorterat efter sannolikhet</span>}
               </h3>
               
               <div className="grid gap-4">
-                {catCandidates.map(candidate => (
-                  <CandidateRow key={candidate.id} candidate={candidate} sessionId={id} quote={quoteMap[candidate.ticker]} daysOld={daysOld} />
+                {catCandidates.map((candidate, idx) => (
+                  <CandidateRow
+                    key={candidate.id}
+                    candidate={candidate}
+                    sessionId={id}
+                    quote={quoteMap[candidate.ticker]}
+                    daysOld={daysOld}
+                    isEdgeAI={isEdgeAI}
+                    rank={idx + 1}
+                  />
                 ))}
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* ── Latest News ── */}
+      <NewsPanel news={news} loading={newsLoading} />
     </div>
   );
 }
 
+// ── EdgeAI system panel ───────────────────────────────────────────────────────
 interface EdgeAISessionExtra {
   source: "edgeai" | null;
   edgeRegime: { label?: string; trend?: string; strength?: number } | null;
@@ -252,6 +323,7 @@ function EdgeAIPanel({ session }: { session: EdgeAISessionExtra }) {
   );
 }
 
+// ── Weather metric tile ───────────────────────────────────────────────────────
 function WeatherMetric({ label, value, isPercent }: { label: string, value: number, isPercent: boolean }) {
   const colorClass = value > 0 && isPercent ? "text-success" : value < 0 && isPercent ? "text-destructive" : "";
   return (
@@ -264,7 +336,83 @@ function WeatherMetric({ label, value, isPercent }: { label: string, value: numb
   );
 }
 
-function CandidateRow({ candidate, sessionId, quote, daysOld }: { candidate: Candidate, sessionId: number, quote?: QuoteResult, daysOld: number }) {
+// ── News panel ────────────────────────────────────────────────────────────────
+function NewsPanel({ news, loading }: { news: NewsItem[]; loading: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (loading) {
+    return (
+      <div className="bg-card border border-border rounded-lg p-5 shadow-sm">
+        <div className="flex items-center gap-2 mb-3">
+          <Newspaper className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm font-semibold text-muted-foreground">Senaste nyheter</span>
+        </div>
+        <div className="space-y-2">
+          {[1,2,3].map(i => <div key={i} className="h-10 bg-muted rounded animate-pulse" />)}
+        </div>
+      </div>
+    );
+  }
+
+  if (news.length === 0) return null;
+
+  const visible = expanded ? news : news.slice(0, 5);
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-5 shadow-sm">
+      <div className="flex items-center gap-2 mb-4">
+        <Newspaper className="w-4 h-4 text-muted-foreground" />
+        <span className="text-sm font-semibold">Senaste nyheter</span>
+        <span className="ml-auto text-xs text-muted-foreground">{news.length} artiklar</span>
+      </div>
+
+      <div className="space-y-1">
+        {visible.map((item) => (
+          <a
+            key={item.uuid}
+            href={item.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-start gap-3 p-2.5 rounded-md hover:bg-muted/60 transition-colors group"
+          >
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium leading-snug group-hover:text-primary transition-colors line-clamp-2">
+                {item.title}
+              </div>
+              <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground">
+                <span>{item.publisher}</span>
+                <span>·</span>
+                <span>{formatTimeAgo(item.publishedAt)}</span>
+              </div>
+            </div>
+            <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </a>
+        ))}
+      </div>
+
+      {news.length > 5 && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="mt-3 text-xs text-muted-foreground hover:text-foreground transition-colors w-full text-center py-1"
+        >
+          {expanded ? "Visa färre" : `Visa ${news.length - 5} till`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Candidate row ─────────────────────────────────────────────────────────────
+function CandidateRow({
+  candidate, sessionId, quote, daysOld, isEdgeAI, rank,
+}: {
+  candidate: Candidate;
+  sessionId: number;
+  quote?: QuoteResult;
+  daysOld: number;
+  isEdgeAI: boolean;
+  rank: number;
+}) {
   const updateOutcome = useUpdateCandidateOutcome();
   const queryClient = useQueryClient();
   const mutateFnRef = useRef(updateOutcome.mutate);
@@ -311,9 +459,15 @@ function CandidateRow({ candidate, sessionId, quote, daysOld }: { candidate: Can
     : null;
   const pastEntry = livePrice != null && (isLong ? livePrice >= candidate.entryPrice : livePrice <= candidate.entryPrice);
   const nearStop = distFromStop != null && Math.abs(distFromStop) < 1.5;
-  // Flag when price has moved >2% from entry AND session is old — setup may no longer be valid
   const entryDriftPct = distFromEntry != null ? Math.abs(distFromEntry) : 0;
   const entryStale = daysOld >= 1 && entryDriftPct > 2 && candidate.outcome === "PENDING";
+
+  // EdgeAI per-candidate edge score
+  const score = edgeScore(candidate);
+  const expectancyR = candidate.rsi / 100;
+  const winRatePct = Math.round(candidate.perf1m * 100);
+  const sampleN = candidate.pctB;
+  const barsAgo = Math.round(candidate.distFrom20dH);
 
   return (
     <div className="bg-card border border-border rounded-lg p-4 shadow-sm text-sm flex flex-col xl:flex-row gap-4 xl:items-stretch group">
@@ -322,21 +476,72 @@ function CandidateRow({ candidate, sessionId, quote, daysOld }: { candidate: Can
       <div className="flex flex-col gap-3 min-w-[280px] xl:border-r border-border xl:pr-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-muted-foreground text-xs">#{candidate.rank}</span>
+            <span className="font-mono text-muted-foreground text-xs">#{rank}</span>
             <span className="font-bold text-lg">{candidate.ticker.replace(/\.ST$/i, "")}</span>
           </div>
-          <div className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold ${dirColor}`}>
-            <DirIcon className="w-3 h-3" /> {candidate.direction}
+          <div className="flex items-center gap-1.5">
+            {/* Edge probability score badge — only for EdgeAI sessions */}
+            {isEdgeAI && (
+              <div className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold font-mono ${edgeScoreColor(score)}`}
+                   title={`Sannolikhet = WR × E[R] = ${winRatePct}% × ${expectancyR.toFixed(2)}R`}>
+                E[R] {expectancyR >= 0 ? "+" : ""}{expectancyR.toFixed(2)}
+              </div>
+            )}
+            <div className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold ${dirColor}`}>
+              <DirIcon className="w-3 h-3" /> {candidate.direction}
+            </div>
           </div>
         </div>
         
+        {/* Metrics grid — labels adapt to EdgeAI vs manual */}
         <div className="grid grid-cols-3 gap-y-2 gap-x-4 text-xs">
-          <div><span className="text-muted-foreground block text-[10px]">SCREEN Px</span><span className="font-mono font-medium">{formatNumber(candidate.price)}</span></div>
-          <div><span className="text-muted-foreground block text-[10px]">RS3M</span><span className="font-mono">{formatNumber(candidate.rs3m, 1)}</span></div>
-          <div><span className="text-muted-foreground block text-[10px]">1M%</span><span className="font-mono">{formatPct(candidate.perf1m)}</span></div>
-          <div><span className="text-muted-foreground block text-[10px]">RSI</span><span className="font-mono">{formatNumber(candidate.rsi, 1)}</span></div>
-          <div><span className="text-muted-foreground block text-[10px]">ATR</span><span className="font-mono">{formatNumber(candidate.atr)}</span></div>
-          <div><span className="text-muted-foreground block text-[10px]">VOL</span><span className="font-mono">{formatNumber(candidate.volMultiplier)}x</span></div>
+          <div>
+            <span className="text-muted-foreground block text-[10px]">SCREEN Px</span>
+            <span className="font-mono font-medium">{formatNumber(candidate.price)}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground block text-[10px]">RS3M</span>
+            <span className="font-mono">{formatNumber(candidate.rs3m, 1)}</span>
+          </div>
+          {isEdgeAI ? (
+            <div>
+              <span className="text-muted-foreground block text-[10px]">WIN%</span>
+              <span className="font-mono">{winRatePct}%</span>
+            </div>
+          ) : (
+            <div>
+              <span className="text-muted-foreground block text-[10px]">1M%</span>
+              <span className="font-mono">{formatPct(candidate.perf1m)}</span>
+            </div>
+          )}
+          {isEdgeAI ? (
+            <div>
+              <span className="text-muted-foreground block text-[10px]">E[R]</span>
+              <span className={`font-mono font-semibold ${expectancyR > 0 ? "text-success" : "text-destructive"}`}>
+                {expectancyR >= 0 ? "+" : ""}{expectancyR.toFixed(2)}
+              </span>
+            </div>
+          ) : (
+            <div>
+              <span className="text-muted-foreground block text-[10px]">RSI</span>
+              <span className="font-mono">{formatNumber(candidate.rsi, 1)}</span>
+            </div>
+          )}
+          <div>
+            <span className="text-muted-foreground block text-[10px]">{isEdgeAI ? "1R" : "ATR"}</span>
+            <span className="font-mono">{formatNumber(candidate.atr)}</span>
+          </div>
+          {isEdgeAI ? (
+            <div>
+              <span className="text-muted-foreground block text-[10px]">N / {barsAgo}b</span>
+              <span className="font-mono">{sampleN > 0 ? Math.round(sampleN) : "—"}</span>
+            </div>
+          ) : (
+            <div>
+              <span className="text-muted-foreground block text-[10px]">VOL</span>
+              <span className="font-mono">{formatNumber(candidate.volMultiplier)}x</span>
+            </div>
+          )}
         </div>
       </div>
 
