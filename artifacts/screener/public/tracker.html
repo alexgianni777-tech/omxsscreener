@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Survival Challenge · Tracker</title>
+<meta name="theme-color" content="#0E1116">
+<style>
+  :root{
+    --bg:#0E1116;--panel:#161B22;--panel2:#1B222B;--line:#232A33;
+    --text:#C9D1D9;--muted:#6E7681;--dim:#484F58;
+    --green:#3FB950;--amber:#D29922;--red:#F85149;--blue:#58A6FF;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+    --r:10px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%;background:var(--bg)}
+  body{
+    background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.5;
+    padding:20px 16px 100px;max-width:720px;margin:0 auto;
+    background-image:radial-gradient(circle at 50% -10%,rgba(63,185,80,.05),transparent 60%);
+  }
+
+  /* ── Header ── */
+  header{
+    display:flex;justify-content:space-between;align-items:flex-start;
+    border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:20px;gap:12px;flex-wrap:wrap;
+  }
+  .logo{display:flex;align-items:center;gap:10px}
+  .logo-icon{
+    width:36px;height:36px;border-radius:10px;
+    background:linear-gradient(135deg,var(--green),#2ea043);
+    display:flex;align-items:center;justify-content:center;font-size:18px;
+  }
+  h1{font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text)}
+  .sub{font-size:11px;color:var(--muted);margin-top:1px}
+  .equity-block{text-align:right}
+  .equity-label{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+  .equity-num{font-family:var(--mono);font-size:28px;font-weight:600;line-height:1;margin-top:2px}
+  .equity-delta{font-family:var(--mono);font-size:11px;margin-top:3px}
+  .capital-inputs{display:flex;align-items:center;gap:6px;margin-top:6px;justify-content:flex-end;flex-wrap:wrap}
+  .capital-inputs label{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+  .capital-inputs input{
+    width:82px;background:#0a0d10;border:1px solid var(--line);color:var(--text);
+    font-family:var(--mono);font-size:12px;padding:4px 7px;border-radius:6px;
+    text-align:right;-webkit-appearance:none;
+  }
+  .capital-inputs input:focus{outline:none;border-color:var(--green)}
+  .pos{color:var(--green)}.neg{color:var(--red)}.neu{color:var(--muted)}
+
+  /* ── Panels ── */
+  .panel{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+    padding:14px;margin-bottom:14px;
+  }
+  .panel-title{
+    font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+    margin-bottom:10px;font-weight:600;display:flex;align-items:center;gap:6px;
+  }
+  .panel-title svg{opacity:.6}
+
+  /* ── Circuit breaker ── */
+  .breaker{border-color:rgba(248,81,73,.35);background:rgba(248,81,73,.05)}
+  .breaker-title{font-size:13px;font-weight:600;color:var(--red)}
+  .breaker-why{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.5}
+
+  /* ── Equity curve ── */
+  .curve svg{width:100%;height:100px;display:block}
+
+  /* ── Stats tiles ── */
+  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  @media(max-width:440px){.tiles{grid-template-columns:repeat(2,1fr)}}
+  .tile{background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px}
+  .tile-label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+  .tile-val{font-family:var(--mono);font-size:17px;font-weight:600;margin-top:3px}
+  .tile-sub{font-size:10px;color:var(--muted);font-family:var(--mono)}
+
+  /* ── Split ── */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .side{background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);padding:12px}
+  .side.win{border-color:rgba(63,185,80,.3)}.side.lose{border-color:rgba(210,153,34,.25)}
+  .side-title{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+  .side-big{font-family:var(--mono);font-size:20px;font-weight:600;margin:4px 0 2px}
+  .side-detail{font-size:10px;color:var(--muted);font-family:var(--mono)}
+  .verdict{
+    font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5;padding:10px 12px;
+    background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+  }
+
+  /* ── Milestone ladder ── */
+  .ladder{display:flex;flex-direction:column;gap:6px}
+  .rung{display:flex;align-items:center;gap:8px;transition:opacity .2s}
+  .rung.done{opacity:.5}.rung.next{opacity:1}.rung:not(.done):not(.next){opacity:.25}
+  .rung-chk{width:14px;font-size:11px;font-family:var(--mono);text-align:center;flex-shrink:0}
+  .rung.done .rung-chk{color:var(--green)}.rung.next .rung-chk{color:var(--amber)}
+  .rung-bar{flex:1;height:5px;background:var(--line);border-radius:3px;overflow:hidden}
+  .rung-fill{height:100%;border-radius:3px;transition:width .5s ease}
+  .rung.done .rung-fill{background:var(--green)}.rung.next .rung-fill{background:var(--amber)}
+  .rung:not(.done):not(.next) .rung-fill{background:var(--dim)}
+  .rung-amt{width:38px;text-align:right;font-family:var(--mono);font-size:10px;color:var(--muted)}
+
+  /* ── Add form ── */
+  .form-section{margin-bottom:14px}
+  .flag-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+  .flag-btn{
+    padding:11px;border-radius:var(--r);border:1px solid var(--line);
+    background:#0a0d10;color:var(--muted);font-family:var(--sans);font-size:13px;
+    font-weight:600;cursor:pointer;transition:all .15s;
+  }
+  .flag-btn.on-last{border-color:var(--green);color:var(--green);background:rgba(63,185,80,.08)}
+  .flag-btn.on-reflex{border-color:var(--amber);color:var(--amber);background:rgba(210,153,34,.08)}
+  .plan-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .plan-label{font-size:11px;color:var(--muted)}
+  .plan-btn{
+    padding:6px 14px;border-radius:8px;border:1px solid var(--line);
+    background:#0a0d10;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;
+  }
+  .plan-btn.yes{border-color:var(--green);color:var(--green)}
+  .plan-btn.no{border-color:var(--red);color:var(--red)}
+  .input-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+  .field input,.field select{
+    width:100%;background:#0a0d10;border:1px solid var(--line);color:var(--text);
+    font-family:var(--mono);font-size:13px;padding:9px 11px;border-radius:8px;
+    -webkit-appearance:none;
+  }
+  .field input:focus,.field select:focus{outline:none;border-color:var(--green)}
+  .field label{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);display:block;margin-bottom:4px}
+  .field select option{background:var(--panel)}
+  .pnl-row{display:flex;gap:8px}
+  .pnl-row .field{flex:1}
+  .pnl-row input{width:100%}
+  .add-btn{
+    padding:11px 24px;border-radius:var(--r);border:none;
+    background:var(--green);color:#0E1116;font-size:13px;font-weight:700;
+    cursor:pointer;transition:opacity .15s;flex-shrink:0;
+  }
+  .add-btn:disabled{opacity:.35;cursor:not-allowed}
+  .add-btn:not(:disabled):hover{opacity:.85}
+
+  /* ── Log ── */
+  .log-item{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:10px 12px;border-bottom:1px solid var(--line);
+  }
+  .log-item:last-child{border-bottom:none}
+  .log-left{}
+  .log-name{font-size:13px;display:flex;align-items:center;gap:6px}
+  .log-meta{font-size:10px;color:var(--muted);font-family:var(--mono);margin-top:1px}
+  .tag{font-size:10px;padding:1px 6px;border-radius:4px;font-weight:600}
+  .tag-last{background:rgba(63,185,80,.12);color:var(--green)}
+  .tag-reflex{background:rgba(210,153,34,.12);color:var(--amber)}
+  .no-plan{color:var(--red);font-size:10px;font-family:var(--mono)}
+  .log-right{display:flex;align-items:center;gap:8px}
+  .log-pnl{font-family:var(--mono);font-size:13px;font-weight:600}
+  .del-btn{
+    background:none;border:none;color:var(--dim);cursor:pointer;padding:4px;
+    border-radius:4px;transition:color .15s;font-size:14px;
+  }
+  .del-btn:hover{color:var(--red)}
+  .empty-log{padding:20px;text-align:center;color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">▲</div>
+    <div>
+      <h1>Survival Challenge</h1>
+      <div class="sub">Läst vs reflex · circuit breaker · milestone ladder</div>
+    </div>
+  </div>
+  <div class="equity-block">
+    <div class="equity-label">Kapital</div>
+    <div class="equity-num pos" id="equityNum">5 000 kr</div>
+    <div class="equity-delta neu" id="equityDelta"></div>
+    <div class="capital-inputs">
+      <label>Start</label>
+      <input type="number" id="startCap" value="5000">
+      <label>Mål</label>
+      <input type="number" id="goalCap" value="1000000">
+    </div>
+  </div>
+</header>
+
+<!-- ── Circuit breaker ── -->
+<div class="panel breaker" id="breakerPanel" style="display:none">
+  <div class="breaker-title">⬛ Circuit Breaker — STOPP</div>
+  <div class="breaker-why">
+    Stanna. Ingen ny trade idag. Sviter är när reflex-trades föds och stop-nivåer breddas —
+    matematiken säger paus, inte känslan. Kom tillbaka imorgon med en läst setup.
+  </div>
+</div>
+
+<!-- ── Equity curve ── -->
+<div class="panel">
+  <div class="panel-title">
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><polyline points="1,10 4,5 7,7 11,2" stroke="#3FB950" stroke-width="1.5" fill="none"/></svg>
+    Kapitalutveckling
+  </div>
+  <div class="curve" id="curveWrap">
+    <div style="height:100px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px">
+      Kurvan byggs från första trade
+    </div>
+  </div>
+</div>
+
+<!-- ── Stats ── -->
+<div class="tiles" id="tilesWrap"></div>
+<div style="height:14px"></div>
+
+<!-- ── Läst vs Reflex ── -->
+<div class="panel">
+  <div class="panel-title">Läst vs Reflex</div>
+  <div class="split" id="splitWrap"></div>
+  <div class="verdict" id="verdict" style="display:none"></div>
+</div>
+
+<!-- ── Milestones ── -->
+<div class="panel">
+  <div class="panel-title">
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1l1.5 3h3l-2.5 2 1 3L6 8l-3 1.5 1-3L1.5 4h3z" stroke="#D29922" stroke-width="1.2" fill="none"/></svg>
+    Milestones
+  </div>
+  <div class="ladder" id="ladder"></div>
+</div>
+
+<!-- ── Add trade ── -->
+<div class="panel">
+  <div class="panel-title">
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.5"/></svg>
+    Logga trade
+  </div>
+  <div class="form-section">
+    <div class="flag-grid">
+      <button class="flag-btn" id="bLast" onclick="setFlag('last')">📖 Läst (planerad)</button>
+      <button class="flag-btn" id="bReflex" onclick="setFlag('reflex')">⚡ Reflex</button>
+    </div>
+    <div class="plan-row">
+      <span class="plan-label">Följde du planen (stop &amp; target)?</span>
+      <button class="plan-btn" id="pYes" onclick="setPlan(true)">Ja</button>
+      <button class="plan-btn" id="pNo" onclick="setPlan(false)">Nej</button>
+    </div>
+    <div class="input-grid">
+      <div class="field">
+        <label>Ticker (valfri)</label>
+        <input type="text" id="inTicker" placeholder="ERIC-B">
+      </div>
+      <div class="field">
+        <label>Strategi</label>
+        <input type="text" id="inStrategy" placeholder="trend pullback" value="trend pullback">
+      </div>
+      <div class="field">
+        <label>Riktning</label>
+        <select id="inDir"><option value="LONG">LONG</option><option value="SHORT">SHORT</option></select>
+      </div>
+      <div class="field">
+        <label>Hävstång (valfri)</label>
+        <input type="number" id="inLev" placeholder="1">
+      </div>
+    </div>
+    <div class="pnl-row">
+      <div class="field">
+        <label>P&amp;L i kr</label>
+        <input type="number" id="inKr" placeholder="+ vinst / − förlust" oninput="renderAdd()">
+      </div>
+      <button class="add-btn" id="addBtn" disabled onclick="addTrade()">Lägg till</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Trade log ── -->
+<div class="panel" id="logPanel" style="display:none">
+  <div class="panel-title">Tradelog</div>
+  <div id="logList"></div>
+</div>
+
+<script>
+const KEY = 'survival_v2';
+let state = { start: 5000, goal: 1000000, trades: [] };
+try { const s = localStorage.getItem(KEY); if (s) state = { ...state, ...JSON.parse(s) }; } catch(e){}
+
+let flag = null, plan = null;
+
+function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e) {} }
+function equity() { return state.start + state.trades.reduce((a,t)=>a+t.kr,0); }
+function lossStreak() {
+  let s=0;
+  for(let i=state.trades.length-1;i>=0;i--) { if(state.trades[i].kr<0) s++; else break; }
+  return s;
+}
+function fmt(n) { return Math.abs(n).toLocaleString('sv-SE',{maximumFractionDigits:0}); }
+function sgn(n,dec=0) {
+  const s = Math.abs(n).toLocaleString('sv-SE',{minimumFractionDigits:dec,maximumFractionDigits:dec});
+  return (n>=0?'+':'−')+s;
+}
+function stats(arr) {
+  if(!arr.length) return null;
+  const sum=arr.reduce((a,t)=>a+t.kr,0);
+  const w=arr.filter(t=>t.kr>0).length;
+  return {n:arr.length,sum,avg:sum/arr.length,win:Math.round(w/arr.length*100)};
+}
+
+function setFlag(f) {
+  flag = f;
+  document.getElementById('bLast').className='flag-btn'+(f==='last'?' on-last':'');
+  document.getElementById('bReflex').className='flag-btn'+(f==='reflex'?' on-reflex':'');
+  renderAdd();
+}
+function setPlan(v) {
+  plan = v;
+  document.getElementById('pYes').className='plan-btn'+(v===true?' yes':'');
+  document.getElementById('pNo').className='plan-btn'+(v===false?' no':'');
+  renderAdd();
+}
+function renderAdd() {
+  const kr = document.getElementById('inKr').value;
+  document.getElementById('addBtn').disabled = !(flag && plan!==null && kr!=='');
+}
+
+function addTrade() {
+  const kr = Math.round(+document.getElementById('inKr').value||0);
+  const t = {
+    date: new Date().toISOString().slice(0,10),
+    tk: (document.getElementById('inTicker').value||'').toUpperCase().trim(),
+    st: document.getElementById('inStrategy').value || 'okänd',
+    dir: document.getElementById('inDir').value,
+    lev: +document.getElementById('inLev').value||null,
+    kr, flag, plan
+  };
+  state.trades.push(t);
+  save();
+  // reset
+  document.getElementById('inTicker').value='';
+  document.getElementById('inKr').value='';
+  document.getElementById('inLev').value='';
+  flag=null; plan=null;
+  document.getElementById('bLast').className='flag-btn';
+  document.getElementById('bReflex').className='flag-btn';
+  document.getElementById('pYes').className='plan-btn';
+  document.getElementById('pNo').className='plan-btn';
+  renderAdd();
+  render();
+}
+
+function deleteTrade(i) {
+  state.trades.splice(i,1); save(); render();
+}
+
+function drawCurve(pts, startVal) {
+  if(pts.length < 2) return null;
+  const W=600, H=90;
+  const ys=pts.map(p=>p.eq);
+  const mn=Math.min(...ys), mx=Math.max(...ys), rng=mx-mn||1;
+  const maxX=pts.length-1||1;
+  const px=i=>(i/maxX)*W;
+  const py=eq=>H-((eq-mn)/rng)*H*.82-H*.09;
+  const polyline=pts.map((p,i)=>`${px(i).toFixed(1)},${py(p.eq).toFixed(1)}`).join(' ');
+  const lastEq=ys[ys.length-1];
+  const isUp=lastEq>=startVal;
+  const startY=py(startVal).toFixed(1);
+  const col=isUp?'#3FB950':'#F85149';
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:90px;display:block">
+    <line x1="0" y1="${startY}" x2="${W}" y2="${startY}" stroke="rgba(255,255,255,0.07)" stroke-width="1" stroke-dasharray="4 4"/>
+    <polyline points="${polyline}" fill="none" stroke="${col}" stroke-width="1.8" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+function render() {
+  const eq = equity();
+  const d = eq - state.start;
+
+  // Sync inputs
+  document.getElementById('startCap').value = state.start;
+  document.getElementById('goalCap').value = state.goal;
+
+  // Equity header
+  const enEl = document.getElementById('equityNum');
+  enEl.textContent = fmt(eq) + ' kr';
+  enEl.className = 'equity-num ' + (eq >= state.start ? 'pos' : 'neg');
+
+  const edEl = document.getElementById('equityDelta');
+  if(state.trades.length) {
+    const pct = state.start ? (d/state.start*100).toFixed(1) : 0;
+    edEl.textContent = sgn(d) + ' kr · ' + (d>=0?'+':'') + pct + '%';
+    edEl.className = 'equity-delta ' + (d>=0?'pos':'neg');
+  } else { edEl.textContent=''; }
+
+  // Circuit breaker
+  const streak = lossStreak();
+  const bp = document.getElementById('breakerPanel');
+  bp.style.display = streak >= 3 ? '' : 'none';
+
+  // Equity curve
+  const curvePts = [{ eq: state.start }];
+  let running = state.start;
+  state.trades.forEach(t => { running += t.kr; curvePts.push({ eq: running }); });
+  const curveEl = document.getElementById('curveWrap');
+  if(curvePts.length >= 2) {
+    const svg = drawCurve(curvePts, state.start);
+    curveEl.innerHTML = svg || '';
+  } else {
+    curveEl.innerHTML = '<div style="height:100px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px">Kurvan byggs från första trade</div>';
+  }
+
+  // Stats tiles
+  const wins = state.trades.filter(t=>t.kr>0);
+  const losses = state.trades.filter(t=>t.kr<0);
+  let maxStreak=0,cur=0;
+  state.trades.forEach(t=>{ if(t.kr<0){cur++;maxStreak=Math.max(maxStreak,cur);}else cur=0;});
+  const planned = state.trades.filter(t=>t.plan!==false);
+  const discPct = state.trades.length ? Math.round(planned.length/state.trades.length*100) : null;
+  const goalFmt = state.goal>=1e6
+    ? (state.goal/1e6).toFixed(state.goal%1e6?1:0)+'M'
+    : Math.round(state.goal/1000)+'k';
+  const tiles = [
+    {l:'Trades',v:state.trades.length,s:`${wins.length}W · ${losses.length}L`},
+    {l:'Win %',v:state.trades.length?Math.round(wins.length/state.trades.length*100)+'%':'—',s:'alla trades'},
+    {l:'Max svit',v:maxStreak,s:`nu: ${streak}`},
+    {l:'Disciplin',v:discPct!=null?discPct+'%':'—',s:'följde plan'},
+    {l:'P&L',v:sgn(d)+' kr',s:d>=0?'vinst':'förlust',c:d>=0?'pos':'neg'},
+    {l:'Mål',v:goalFmt,s:'slutmål'},
+  ];
+  document.getElementById('tilesWrap').innerHTML = tiles.map(t=>`
+    <div class="tile">
+      <div class="tile-label">${t.l}</div>
+      <div class="tile-val ${t.c||''}">${t.v}</div>
+      <div class="tile-sub">${t.s}</div>
+    </div>`).join('');
+
+  // Läst vs Reflex
+  const L = stats(state.trades.filter(t=>t.flag==='last'));
+  const R = stats(state.trades.filter(t=>t.flag==='reflex'));
+  document.getElementById('splitWrap').innerHTML = `
+    <div class="side win">
+      <div class="side-title" style="color:var(--green)">📖 Läst</div>
+      ${L?`<div class="side-big ${L.sum>=0?'pos':'neg'}">${sgn(L.sum)} kr</div>
+           <div class="side-detail">${L.n} trades · ${L.win}% · snitt ${sgn(L.avg,0)}</div>`
+         :'<div class="side-detail" style="margin-top:6px">inga än</div>'}
+    </div>
+    <div class="side lose">
+      <div class="side-title" style="color:var(--amber)">⚡ Reflex</div>
+      ${R?`<div class="side-big ${R.sum>=0?'pos':'neg'}">${sgn(R.sum)} kr</div>
+           <div class="side-detail">${R.n} trades · ${R.win}% · snitt ${sgn(R.avg,0)}</div>`
+         :'<div class="side-detail" style="margin-top:6px">inga än</div>'}
+    </div>`;
+
+  // Verdict
+  const vEl = document.getElementById('verdict');
+  let v = '';
+  if(L&&R&&L.n>=3&&R.n>=3) {
+    const gap = L.avg - R.avg;
+    v = gap>0
+      ? `Dina <b>lästa</b> trades slår reflex med <b>${sgn(gap,0)} kr/trade</b>. Varje reflex-entry du hoppar är i snitt värd det.`
+      : `Just nu går reflex bättre — men på n=${R.n} är det brus, inte bevis. Edgen byggs i det lästa.`;
+  } else if(state.trades.length) {
+    v = 'Splitten blir meningsfull från ~3 trades per kategori. Flagga ärligt — mätaren är bara så bra som din ärlighet.';
+  }
+  vEl.style.display = v ? '' : 'none';
+  vEl.innerHTML = v;
+
+  // Ladder
+  const rungs=[]; let r=state.start*2;
+  while(r<state.goal&&rungs.length<8){rungs.push(r);r*=2;}
+  rungs.push(state.goal);
+  let nextMarked=false;
+  document.getElementById('ladder').innerHTML = rungs.map(v0=>{
+    const done=eq>=v0,pct=Math.max(0,Math.min(1,eq/v0));
+    const next=!done&&!nextMarked;if(next)nextMarked=true;
+    const label=v0>=1e6?(v0/1e6).toFixed(v0%1e6?1:0)+'M':Math.round(v0/1000)+'k';
+    return `<div class="rung ${done?'done':''} ${next?'next':''}">
+      <span class="rung-chk">${done?'✓':'·'}</span>
+      <div class="rung-bar"><div class="rung-fill" style="width:${(pct*100).toFixed(1)}%"></div></div>
+      <span class="rung-amt">${label}</span>
+    </div>`;
+  }).join('');
+
+  // Log
+  const logPanel = document.getElementById('logPanel');
+  logPanel.style.display = state.trades.length ? '' : 'none';
+  if(state.trades.length) {
+    document.getElementById('logList').innerHTML = state.trades.slice().reverse().map((t,ri)=>{
+      const i = state.trades.length-1-ri;
+      const pnlColor = t.kr>=0?'pos':'neg';
+      return `<div class="log-item">
+        <div class="log-left">
+          <div class="log-name">
+            <span>${t.tk||t.st}</span>
+            <span class="tag ${t.flag==='last'?'tag-last':'tag-reflex'}">${t.flag==='last'?'Läst':'Reflex'}</span>
+            ${t.plan===false?'<span class="no-plan">✗plan</span>':''}
+          </div>
+          <div class="log-meta">${t.date} · ${t.st} · ${t.dir}${t.lev?' · '+t.lev+'x':''}</div>
+        </div>
+        <div class="log-right">
+          <span class="log-pnl ${pnlColor}">${sgn(t.kr)} kr</span>
+          <button class="del-btn" onclick="deleteTrade(${i})" title="Ta bort">✕</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+}
+
+// Config changes
+document.getElementById('startCap').addEventListener('change', e => {
+  state.start = +e.target.value||0; save(); render();
+});
+document.getElementById('goalCap').addEventListener('change', e => {
+  state.goal = Math.max(+e.target.value||0, state.start*2); save(); render();
+});
+
+render();
+</script>
+</body>
+</html>
