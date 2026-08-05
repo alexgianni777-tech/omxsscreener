@@ -1,0 +1,24 @@
+EdgeAI: what it is
+
+A daily batch screener + edge-validation engine — not realtime signals. Three parts:
+
+1. Engine (Node.js, runs on GitHub Actions every weekday ~06:00 UTC)
+Fetches daily OHLC for 80 US large caps + 29 OMXS30 names via yahoo-finance2. Runs five long/short strategies (trend pullback, breakout, Bollinger reversion, Qullamaggie-style momentum flag, breakdown short), each independently walk-forward validated per market — params picked in-sample, stats reported out-of-sample only. A validation guard suppresses any strategy that doesn't clear n≥30, expectancy>0.03, PF>1.1. A regime filter gates longs to index>SMA200 and shorts to index<SMA200. Also computes RS percentiles, market breadth, Monte Carlo risk distribution, and a growing track-record ledger.
+
+2. Output — a single artifact, this is the integration point
+public/data.json, publicly fetchable at:
+https://alexgianni777-tech.github.io/edgeai/public/data.json
+
+Shape:
+
+{ generatedAt, demo, markets: { US: {...}, SE: {...} } }
+
+Each market: label, currency, edge, strategies[], regime{on,label,breadth}, risk, rTrades[], equityCurve[], setups[], trackRecord
+
+Each setup: dir (long|short), ticker, setup, grade, barsAgo, typicalDays, rs, entry, stop, target, rr, size, edge{expectancyR,winRate,sample}, above200, chart[22 OHLC bars]
+
+3. Frontend — static single-file HTML consuming that JSON. Plus tracker.html, a separate trade journal / "survival challenge" tracker (läst vs reflex discipline split, circuit breaker on 3 consecutive losses, equity curve, milestone ladder) that currently persists to localStorage only — per device, no login, no sync.
+
+So, to answer directly: it produces screener output (validated setups with entry/stop/target/sizing) and it contains a journal tool with no persistence layer. No realtime.
+
+My recommendation on integrate vs link: link for the data, integrate for the journal. The screener output should stay decoupled — just fetch data.json read-only; it costs nothing, keeps working if the Replit app goes away, and needs no coupling. The genuine integration opportunity is the tracker: it needs auth + a database for cross-device sync, which is exactly what a static host can't provide.
