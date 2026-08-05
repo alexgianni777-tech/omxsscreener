@@ -149,7 +149,7 @@ router.post("/survival/trades", async (req, res): Promise<void> => {
       ticker: ticker ?? null,
       strategy,
       direction,
-      leverageX: typeof leverageX === "number" ? leverageX : null,
+      leverageX: typeof leverageX === "number" && isFinite(leverageX) ? leverageX : null,
       pnlKr,
       flag,
       followedPlan,
