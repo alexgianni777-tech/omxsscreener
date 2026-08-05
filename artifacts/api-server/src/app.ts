@@ -1,6 +1,7 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import rateLimit from "express-rate-limit";
 import path from "path";
 import { existsSync } from "fs";
 import router from "./routes";
@@ -29,6 +30,30 @@ app.use(
 );
 app.use(cors());
 app.use(express.json());
+
+// General rate limiter — 200 req/min per IP
+app.use(
+  "/api",
+  rateLimit({
+    windowMs: 60_000,
+    max: 200,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many requests — try again in a minute." },
+  }),
+);
+
+// Stricter limit on EdgeAI import (hits external service)
+app.use(
+  "/api/screener/sessions/import-from-edgeai",
+  rateLimit({
+    windowMs: 60_000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "EdgeAI import rate limit — max 5 per minute." },
+  }),
+);
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
