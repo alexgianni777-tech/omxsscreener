@@ -16,6 +16,8 @@ export * from './candidateWithSession';
 export * from './categoryStats';
 export * from './categoryStatsCategory';
 export * from './dashboardSummary';
+export * from './equityCurvePoint';
+export * from './equityCurvePointOutcome';
 export * from './errorResponse';
 export * from './getQuotesParams';
 export * from './healthStatus';

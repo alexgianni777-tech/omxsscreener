@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CategoryStats } from './categoryStats';
+import type { EquityCurvePoint } from './equityCurvePoint';
 
 export interface DashboardSummary {
   totalSessions: number;
@@ -16,4 +17,26 @@ export interface DashboardSummary {
   /** @nullable */
   overallWinRate: number | null;
   byCategory: CategoryStats[];
+  /**
+     * Average R-multiple for winning trades
+     * @nullable
+     */
+  avgRWin: number | null;
+  /**
+     * Average R-multiple for losing trades (negative)
+     * @nullable
+     */
+  avgRLoss: number | null;
+  /**
+     * avgRWin divided by absolute avgRLoss
+     * @nullable
+     */
+  payoffRatio: number | null;
+  /**
+     * Expected R per trade (winRate * avgRWin + lossRate * avgRLoss)
+     * @nullable
+     */
+  expectedValue: number | null;
+  /** Chronological sequence of resolved trades for equity curve chart */
+  equityCurve: EquityCurvePoint[];
 }

@@ -423,9 +423,31 @@ components:
         error:
           type: ["string", "null"]
 
+    EquityCurvePoint:
+      type: object
+      required: [tradeIndex, cumulativeR, r, date, ticker, outcome]
+      properties:
+        tradeIndex:
+          type: number
+          description: Sequential trade number (1-based)
+        cumulativeR:
+          type: number
+          description: Cumulative R-multiple after this trade
+        r:
+          type: number
+          description: R-multiple for this individual trade
+        date:
+          type: string
+          description: Session date (YYYY-MM-DD)
+        ticker:
+          type: string
+        outcome:
+          type: string
+          enum: [WIN, LOSS]
+
     DashboardSummary:
       type: object
-      required: [totalSessions, totalCandidates, resolvedTrades, wins, losses, overallWinRate, byCategory]
+      required: [totalSessions, totalCandidates, resolvedTrades, wins, losses, overallWinRate, byCategory, avgRWin, avgRLoss, payoffRatio, expectedValue, equityCurve]
       properties:
         totalSessions:
           type: number
@@ -443,3 +465,20 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CategoryStats"
+        avgRWin:
+          type: ["number", "null"]
+          description: Average R-multiple for winning trades
+        avgRLoss:
+          type: ["number", "null"]
+          description: Average R-multiple for losing trades (negative)
+        payoffRatio:
+          type: ["number", "null"]
+          description: avgRWin divided by absolute avgRLoss
+        expectedValue:
+          type: ["number", "null"]
+          description: Expected R per trade (winRate * avgRWin + lossRate * avgRLoss)
+        equityCurve:
+          type: array
+          description: Chronological sequence of resolved trades for equity curve chart
+          items:
+            $ref: "#/components/schemas/EquityCurvePoint"

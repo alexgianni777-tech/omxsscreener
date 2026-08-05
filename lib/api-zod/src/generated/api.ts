@@ -258,7 +258,19 @@ export const GetDashboardSummaryResponse = zod.object({
   "skips": zod.number(),
   "pending": zod.number(),
   "winRate": zod.number().nullable().describe('Win rate as a fraction (0-1), null if no resolved trades')
-}))
+})),
+  "avgRWin": zod.number().nullable().describe('Average R-multiple for winning trades'),
+  "avgRLoss": zod.number().nullable().describe('Average R-multiple for losing trades (negative)'),
+  "payoffRatio": zod.number().nullable().describe('avgRWin divided by absolute avgRLoss'),
+  "expectedValue": zod.number().nullable().describe('Expected R per trade (winRate \* avgRWin + lossRate \* avgRLoss)'),
+  "equityCurve": zod.array(zod.object({
+  "tradeIndex": zod.number().describe('Sequential trade number (1-based)'),
+  "cumulativeR": zod.number().describe('Cumulative R-multiple after this trade'),
+  "r": zod.number().describe('R-multiple for this individual trade'),
+  "date": zod.string().describe('Session date (YYYY-MM-DD)'),
+  "ticker": zod.string(),
+  "outcome": zod.enum(['WIN', 'LOSS'])
+})).describe('Chronological sequence of resolved trades for equity curve chart')
 })
 
 

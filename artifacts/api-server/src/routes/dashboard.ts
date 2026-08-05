@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { sql, eq, and, ne } from "drizzle-orm";
+import { sql, eq, and, ne, inArray } from "drizzle-orm";
 import { db, candidatesTable, screenerSessionsTable } from "@workspace/db";
 import { GetDashboardSummaryResponse } from "@workspace/api-zod";
 
@@ -78,6 +78,97 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
     };
   });
 
+  // P&L / R-multiple stats — fetch resolved trades with prices, ordered by session date
+  const resolvedRows = await db
+    .select({
+      ticker: candidatesTable.ticker,
+      outcome: candidatesTable.outcome,
+      direction: candidatesTable.direction,
+      entryPrice: candidatesTable.entryPrice,
+      stopPrice: candidatesTable.stopPrice,
+      exitPrice: candidatesTable.exitPrice,
+      sessionDate: screenerSessionsTable.date,
+    })
+    .from(candidatesTable)
+    .innerJoin(screenerSessionsTable, eq(candidatesTable.sessionId, screenerSessionsTable.id))
+    .where(inArray(candidatesTable.outcome, ["WIN", "LOSS"]))
+    .orderBy(screenerSessionsTable.date, candidatesTable.id);
+
+  // Calculate R for each trade: R = signed gain / |entry - stop|
+  interface TradeR {
+    r: number;
+    date: string;
+    ticker: string;
+    outcome: "WIN" | "LOSS";
+  }
+  const tradeRs: TradeR[] = [];
+
+  for (const row of resolvedRows) {
+    if (
+      row.exitPrice == null ||
+      row.entryPrice == null ||
+      row.stopPrice == null
+    ) {
+      continue;
+    }
+    const oneRUnit = Math.abs(row.entryPrice - row.stopPrice);
+    if (oneRUnit === 0) continue;
+
+    let r: number;
+    if (row.direction === "LONG") {
+      r = (row.exitPrice - row.entryPrice) / oneRUnit;
+    } else {
+      // SHORT
+      r = (row.entryPrice - row.exitPrice) / oneRUnit;
+    }
+
+    tradeRs.push({
+      r,
+      date: row.sessionDate,
+      ticker: row.ticker,
+      outcome: row.outcome as "WIN" | "LOSS",
+    });
+  }
+
+  // Equity curve
+  let cumulative = 0;
+  const equityCurve = tradeRs.map((t, i) => {
+    cumulative += t.r;
+    return {
+      tradeIndex: i + 1,
+      cumulativeR: Math.round(cumulative * 1000) / 1000,
+      r: Math.round(t.r * 1000) / 1000,
+      date: t.date,
+      ticker: t.ticker,
+      outcome: t.outcome,
+    };
+  });
+
+  // Aggregate stats
+  const winRs = tradeRs.filter((t) => t.outcome === "WIN").map((t) => t.r);
+  const lossRs = tradeRs.filter((t) => t.outcome === "LOSS").map((t) => t.r);
+
+  const avgRWin =
+    winRs.length > 0 ? winRs.reduce((a, b) => a + b, 0) / winRs.length : null;
+  const avgRLoss =
+    lossRs.length > 0 ? lossRs.reduce((a, b) => a + b, 0) / lossRs.length : null;
+
+  const payoffRatio =
+    avgRWin != null && avgRLoss != null && avgRLoss !== 0
+      ? avgRWin / Math.abs(avgRLoss)
+      : null;
+
+  // EV is computed from the same exit-priced population as the R stats
+  const pricedWins = winRs.length;
+  const pricedLosses = lossRs.length;
+  const pricedResolved = pricedWins + pricedLosses;
+  const pricedWinRate = pricedResolved > 0 ? pricedWins / pricedResolved : null;
+
+  const expectedValue =
+    pricedWinRate != null && avgRWin != null && avgRLoss != null
+      ? pricedWinRate * avgRWin + (1 - pricedWinRate) * avgRLoss
+      : null;
+
   res.json(
     GetDashboardSummaryResponse.parse({
       totalSessions,
@@ -87,6 +178,11 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
       losses,
       overallWinRate,
       byCategory,
+      avgRWin,
+      avgRLoss,
+      payoffRatio,
+      expectedValue,
+      equityCurve,
     })
   );
 });

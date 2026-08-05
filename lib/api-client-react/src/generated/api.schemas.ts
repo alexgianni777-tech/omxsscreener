@@ -179,6 +179,27 @@ export interface QuoteResult {
   error?: string | null;
 }
 
+export type EquityCurvePointOutcome = typeof EquityCurvePointOutcome[keyof typeof EquityCurvePointOutcome];
+
+
+export const EquityCurvePointOutcome = {
+  WIN: 'WIN',
+  LOSS: 'LOSS',
+} as const;
+
+export interface EquityCurvePoint {
+  /** Sequential trade number (1-based) */
+  tradeIndex: number;
+  /** Cumulative R-multiple after this trade */
+  cumulativeR: number;
+  /** R-multiple for this individual trade */
+  r: number;
+  /** Session date (YYYY-MM-DD) */
+  date: string;
+  ticker: string;
+  outcome: EquityCurvePointOutcome;
+}
+
 export interface DashboardSummary {
   totalSessions: number;
   totalCandidates: number;
@@ -188,6 +209,28 @@ export interface DashboardSummary {
   /** @nullable */
   overallWinRate: number | null;
   byCategory: CategoryStats[];
+  /**
+     * Average R-multiple for winning trades
+     * @nullable
+     */
+  avgRWin: number | null;
+  /**
+     * Average R-multiple for losing trades (negative)
+     * @nullable
+     */
+  avgRLoss: number | null;
+  /**
+     * avgRWin divided by absolute avgRLoss
+     * @nullable
+     */
+  payoffRatio: number | null;
+  /**
+     * Expected R per trade (winRate * avgRWin + lossRate * avgRLoss)
+     * @nullable
+     */
+  expectedValue: number | null;
+  /** Chronological sequence of resolved trades for equity curve chart */
+  equityCurve: EquityCurvePoint[];
 }
 
 export type ListCandidatesParams = {

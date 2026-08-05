@@ -40,7 +40,7 @@ if (process.env.NODE_ENV === "production") {
   if (existsSync(staticDir)) {
     app.use(express.static(staticDir));
     // Catch-all: serve index.html for client-side routing (wouter)
-    app.get("*", (_req, res) => {
+    app.get("*splat", (_req, res) => {
       res.sendFile(path.join(staticDir, "index.html"));
     });
     logger.info({ staticDir }, "Serving frontend static files");
