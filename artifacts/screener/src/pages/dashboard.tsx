@@ -301,7 +301,7 @@ function EquityCurveTooltip({ active, payload }: TooltipProps<number, string>) {
           className={`font-mono font-bold ${isWin ? "text-success" : "text-destructive"}`}
         >
           {d.r >= 0 ? "+" : ""}
-          {d.r}R
+          {Number(d.r).toFixed(2)}R
         </span>
       </div>
       <div className="text-muted-foreground">{d.date}</div>
@@ -309,7 +309,7 @@ function EquityCurveTooltip({ active, payload }: TooltipProps<number, string>) {
         <span className="text-muted-foreground">Kumulativt</span>
         <span className="font-mono font-semibold">
           {d.cumulativeR >= 0 ? "+" : ""}
-          {d.cumulativeR}R
+          {Number(d.cumulativeR).toFixed(2)}R
         </span>
       </div>
     </div>

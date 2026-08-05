@@ -88,8 +88,8 @@ router.patch("/candidates/:id/outcome", async (req, res): Promise<void> => {
     .update(candidatesTable)
     .set({
       outcome: body.data.outcome,
-      exitPrice: body.data.exitPrice ?? undefined,
-      outcomeNotes: body.data.outcomeNotes ?? undefined,
+      exitPrice: body.data.exitPrice ?? null,
+      outcomeNotes: body.data.outcomeNotes ?? null,
     })
     .where(eq(candidatesTable.id, params.data.id))
     .returning();

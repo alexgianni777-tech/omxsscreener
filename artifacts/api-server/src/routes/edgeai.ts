@@ -173,10 +173,12 @@ router.post(
         .from(candidatesTable)
         .where(eq(candidatesTable.sessionId, existingId));
 
+      // Composite key ticker|direction so LONG and SHORT of the same stock
+      // are preserved independently during a force re-import.
       const outcomeMap = new Map(
         existingCands
           .filter((c) => c.outcome !== "PENDING")
-          .map((c) => [c.ticker, c]),
+          .map((c) => [`${c.ticker}|${c.direction}`, c]),
       );
 
       await db.delete(candidatesTable).where(eq(candidatesTable.sessionId, existingId));
@@ -197,7 +199,7 @@ router.post(
 
       await db.insert(candidatesTable).values(
         mappedSetups.map((c) => {
-          const prev = outcomeMap.get(c.ticker);
+          const prev = outcomeMap.get(`${c.ticker}|${c.direction}`);
           return {
             ...c,
             sessionId: updated.id,
