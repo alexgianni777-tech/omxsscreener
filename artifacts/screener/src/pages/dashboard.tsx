@@ -2,13 +2,14 @@ import { useGetDashboardSummary } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import {
   ArrowUpRight, ArrowDownRight, Target, Activity, CheckCircle2,
-  Clock, Zap, TrendingUp, TrendingDown, BarChart2, Sigma,
+  Clock, Zap, TrendingUp, TrendingDown, BarChart2, Sigma, Trophy,
 } from "lucide-react";
 import { formatNumber, formatPercent } from "../lib/utils";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, TooltipProps,
 } from "recharts";
+import { useTop3Analytics, type Top3Session } from "../lib/useTop3Analytics";
 
 export function Dashboard() {
   const { data: summary, isLoading, isError } = useGetDashboardSummary();
@@ -224,6 +225,9 @@ export function Dashboard() {
         )}
       </div>
 
+      {/* Top 3 Strategy */}
+      <Top3Section />
+
       {/* Category Breakdown */}
       <div>
         <h3 className="text-lg font-semibold mb-4 border-b border-border pb-2">
@@ -315,6 +319,226 @@ function EquityCurveTooltip({ active, payload }: TooltipProps<number, string>) {
     </div>
   );
 }
+
+// ─── Top 3 Strategy ───────────────────────────────────────────────────────────
+
+function Top3Section() {
+  const { data, isLoading } = useTop3Analytics();
+
+  const chartData: { date: string; cumulativeR: number }[] = data
+    ? [
+        { date: "Start", cumulativeR: 0 },
+        ...data.sessions
+          .filter((s) => s.sessionR !== null)
+          .map((s) => ({ date: s.date.slice(5), cumulativeR: s.cumulativeR })),
+      ]
+    : [];
+
+  const hasData = chartData.length > 1;
+  const stats = data?.stats;
+  const finalR = hasData ? chartData[chartData.length - 1].cumulativeR : null;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 border-b border-border pb-2">
+        <div className="flex items-center gap-2">
+          <Trophy className="h-5 w-5 text-muted-foreground" />
+          <h3 className="text-lg font-semibold">Top 3 per dag — hypotetisk avkastning</h3>
+        </div>
+        {finalR != null && (
+          <span
+            className={`text-sm font-mono font-bold ${
+              finalR >= 0 ? "text-success" : "text-destructive"
+            }`}
+          >
+            {finalR >= 0 ? "+" : ""}
+            {formatNumber(finalR, 2)}R totalt
+          </span>
+        )}
+      </div>
+
+      {/* Stat pills */}
+      {stats && stats.totalTrades > 0 && (
+        <div className="flex flex-wrap gap-3 mb-4">
+          <Pill
+            label="Trades"
+            value={`${stats.wins}V / ${stats.losses}F`}
+          />
+          <Pill
+            label="Hitrate"
+            value={stats.winRate != null ? formatPercent(stats.winRate) : "–"}
+            color={stats.winRate != null ? (stats.winRate >= 0.5 ? "success" : "destructive") : ""}
+          />
+          <Pill
+            label="Snitt-R/trade"
+            value={
+              stats.avgRPerTrade != null
+                ? `${stats.avgRPerTrade >= 0 ? "+" : ""}${formatNumber(stats.avgRPerTrade, 2)}R`
+                : "–"
+            }
+            color={stats.avgRPerTrade != null ? (stats.avgRPerTrade > 0 ? "success" : "destructive") : ""}
+          />
+          <Pill
+            label="Sessioner"
+            value={`${stats.completedSessions}/${stats.totalSessions}`}
+          />
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="h-48 bg-muted rounded-lg animate-pulse" />
+      ) : !hasData ? (
+        <div className="flex flex-col items-center justify-center h-48 bg-card border border-border rounded-lg text-muted-foreground gap-2">
+          <Trophy className="h-8 w-8 opacity-30" />
+          <p className="text-sm">Logga utfall på kandidater för att se Top 3-kurvan.</p>
+          <p className="text-xs opacity-60">Rangordningen baseras på edge-score (WIN% × E[R]).</p>
+        </div>
+      ) : (
+        <div className="bg-card border border-border rounded-lg p-4 shadow-sm">
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart
+              data={chartData}
+              margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v) => `${v}R`}
+                width={40}
+              />
+              <ReferenceLine y={0} stroke="currentColor" strokeOpacity={0.25} />
+              <Tooltip content={<Top3Tooltip sessions={data?.sessions ?? []} />} />
+              <Line
+                type="linear"
+                dataKey="cumulativeR"
+                strokeWidth={2}
+                stroke="hsl(var(--primary))"
+                dot={{ r: 4, fill: "hsl(var(--primary))" }}
+                activeDot={{ r: 6 }}
+                isAnimationActive={true}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+
+          {/* Per-session breakdown table */}
+          <div className="mt-4 border-t border-border pt-3 space-y-2">
+            {data!.sessions
+              .filter((s) => s.sessionR !== null)
+              .map((s) => (
+                <div key={s.date} className="flex items-center gap-3 text-xs">
+                  <span className="text-muted-foreground w-14 shrink-0">{s.date.slice(5)}</span>
+                  <div className="flex gap-1.5 flex-1 flex-wrap">
+                    {s.picks.map((p) => (
+                      <span
+                        key={p.ticker}
+                        className={`px-1.5 py-0.5 rounded font-mono font-medium ${
+                          p.outcome === "WIN"
+                            ? "bg-success/15 text-success"
+                            : p.outcome === "LOSS"
+                            ? "bg-destructive/15 text-destructive"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {p.ticker}
+                        {p.r != null
+                          ? ` ${p.r >= 0 ? "+" : ""}${formatNumber(p.r, 1)}R`
+                          : ""}
+                      </span>
+                    ))}
+                  </div>
+                  <span
+                    className={`font-mono font-bold shrink-0 ${
+                      s.sessionR! >= 0 ? "text-success" : "text-destructive"
+                    }`}
+                  >
+                    {s.sessionR! >= 0 ? "+" : ""}
+                    {formatNumber(s.sessionR!, 1)}R
+                  </span>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Pill({
+  label,
+  value,
+  color = "",
+}: {
+  label: string;
+  value: string;
+  color?: string;
+}) {
+  const colorClass =
+    color === "success"
+      ? "text-success"
+      : color === "destructive"
+      ? "text-destructive"
+      : "text-foreground";
+  return (
+    <div className="bg-muted/60 rounded-md px-3 py-1.5 text-xs flex gap-2 items-baseline">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`font-mono font-bold ${colorClass}`}>{value}</span>
+    </div>
+  );
+}
+
+function Top3Tooltip({
+  active,
+  payload,
+  sessions,
+}: TooltipProps<number, string> & { sessions: Top3Session[] }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload as { date: string; cumulativeR: number };
+  if (d.date === "Start") return null;
+
+  const fullDate = sessions.find((s) => s.date.slice(5) === d.date)?.date;
+  const session = sessions.find((s) => s.date === fullDate);
+
+  return (
+    <div className="bg-popover border border-border rounded-lg p-3 shadow-lg text-xs space-y-2 min-w-[180px]">
+      <div className="font-semibold text-muted-foreground">{fullDate ?? d.date}</div>
+      {session?.picks.map((p) => (
+        <div key={p.ticker} className="flex justify-between gap-4">
+          <span className="font-mono">{p.ticker}</span>
+          <span
+            className={
+              p.outcome === "WIN"
+                ? "text-success font-mono"
+                : p.outcome === "LOSS"
+                ? "text-destructive font-mono"
+                : "text-muted-foreground"
+            }
+          >
+            {p.r != null
+              ? `${p.r >= 0 ? "+" : ""}${formatNumber(p.r, 2)}R`
+              : p.outcome}
+          </span>
+        </div>
+      ))}
+      <div className="border-t border-border pt-1 flex justify-between">
+        <span className="text-muted-foreground">Kumulativt</span>
+        <span className="font-mono font-semibold">
+          {d.cumulativeR >= 0 ? "+" : ""}
+          {formatNumber(d.cumulativeR, 2)}R
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Stat Card ────────────────────────────────────────────────────────────────
 
 function StatCard({
   title,
