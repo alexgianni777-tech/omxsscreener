@@ -1,7 +1,7 @@
 import { useGetSession, getGetSessionQueryKey, useGetQuotes, Candidate, CandidateOutcomeProperty, useUpdateCandidateOutcome, QuoteResult } from "@workspace/api-client-react";
 import { useParams, Link } from "wouter";
 import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
-import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity, AlertTriangle, Clock } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useCallback } from "react";
 
@@ -36,6 +36,29 @@ export function SessionDetail() {
 
   const categories = ["MOMENTUM", "SQUEEZE", "STUDS", "WEAKEST"] as const;
 
+  // ── Signal age ──────────────────────────────────────────────────────────────
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const sessionMs = new Date(session.date).getTime();
+  const todayMs   = new Date(todayStr).getTime();
+  const daysOld   = Math.round((todayMs - sessionMs) / 86_400_000);
+
+  // ── Correlation / concentration analysis ────────────────────────────────────
+  // Group pending candidates by category+direction to flag correlated bets
+  const pending = candidates.filter(c => c.outcome === "PENDING");
+  type GroupKey = string;
+  const groups: Record<GroupKey, number> = {};
+  pending.forEach(c => {
+    const key = `${c.category} ${c.direction}`;
+    groups[key] = (groups[key] ?? 0) + 1;
+  });
+  const correlationWarnings: string[] = [];
+  Object.entries(groups).forEach(([key, count]) => {
+    if (count >= 2) correlationWarnings.push(`${count}× ${key}`);
+  });
+  const totalPending = pending.length;
+  const dominantCount = Math.max(0, ...Object.values(groups));
+  const isHighlyCorrelated = totalPending >= 2 && dominantCount === totalPending;
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-12">
       <div className="flex items-center gap-4">
@@ -67,6 +90,46 @@ export function SessionDetail() {
         </div>
       </div>
 
+      {/* ── Stale signal warning ── */}
+      {daysOld === 1 && (
+        <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-500/30 bg-amber-500/5">
+          <Clock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-semibold text-amber-400 text-sm">Signalen är 1 dag gammal</span>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Kontrollera att priset fortfarande är nära entry — om marknaden sprungit ifrån gäller inte längre samma R/R.
+            </p>
+          </div>
+        </div>
+      )}
+      {daysOld >= 2 && (
+        <div className="flex items-start gap-3 p-4 rounded-lg border border-destructive/30 bg-destructive/5">
+          <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+          <div>
+            <span className="font-semibold text-destructive text-sm">Signalen är {daysOld} dagar gammal</span>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Gamla setups är sannolikt ogiltiga — entry-priset stämmer troligen inte längre. Verifiera live-pris mot entry för varje kandidat nedan.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Correlation / concentration notice ── */}
+      {correlationWarnings.length > 0 && (
+        <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-500/20 bg-amber-500/5">
+          <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-semibold text-amber-400 text-sm">
+              {isHighlyCorrelated ? "Alla " : ""}{totalPending} pendande setups är korrelerade
+            </span>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {correlationWarnings.join(", ")} — det är inte diversifiering, det är samma edge {isHighlyCorrelated ? "i " + totalPending + " positioner" : "upprepat"}.
+              Tar du alla tar du {isHighlyCorrelated ? "exakt" : "i princip"} samma risk flera gånger.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* EdgeAI Panel — shown when session was imported from EdgeAI */}
       {(session as any).source === "edgeai" && (
         <EdgeAIPanel session={session as any} />
@@ -88,7 +151,7 @@ export function SessionDetail() {
               
               <div className="grid gap-4">
                 {catCandidates.map(candidate => (
-                  <CandidateRow key={candidate.id} candidate={candidate} sessionId={id} quote={quoteMap[candidate.ticker]} />
+                  <CandidateRow key={candidate.id} candidate={candidate} sessionId={id} quote={quoteMap[candidate.ticker]} daysOld={daysOld} />
                 ))}
               </div>
             </div>
@@ -201,7 +264,7 @@ function WeatherMetric({ label, value, isPercent }: { label: string, value: numb
   );
 }
 
-function CandidateRow({ candidate, sessionId, quote }: { candidate: Candidate, sessionId: number, quote?: QuoteResult }) {
+function CandidateRow({ candidate, sessionId, quote, daysOld }: { candidate: Candidate, sessionId: number, quote?: QuoteResult, daysOld: number }) {
   const updateOutcome = useUpdateCandidateOutcome();
   const queryClient = useQueryClient();
   const mutateFnRef = useRef(updateOutcome.mutate);
@@ -248,6 +311,9 @@ function CandidateRow({ candidate, sessionId, quote }: { candidate: Candidate, s
     : null;
   const pastEntry = livePrice != null && (isLong ? livePrice >= candidate.entryPrice : livePrice <= candidate.entryPrice);
   const nearStop = distFromStop != null && Math.abs(distFromStop) < 1.5;
+  // Flag when price has moved >2% from entry AND session is old — setup may no longer be valid
+  const entryDriftPct = distFromEntry != null ? Math.abs(distFromEntry) : 0;
+  const entryStale = daysOld >= 1 && entryDriftPct > 2 && candidate.outcome === "PENDING";
 
   return (
     <div className="bg-card border border-border rounded-lg p-4 shadow-sm text-sm flex flex-col xl:flex-row gap-4 xl:items-stretch group">
@@ -298,6 +364,11 @@ function CandidateRow({ candidate, sessionId, quote }: { candidate: Candidate, s
               {pastEntry && !nearStop && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/20 text-success font-bold">
                   TRIGGERED
+                </span>
+              )}
+              {entryStale && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold">
+                  ENTRY ÄNDRAT {entryDriftPct > 5 ? "⚠" : ""}
                 </span>
               )}
             </div>
