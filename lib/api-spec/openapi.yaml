@@ -55,11 +55,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
-          description: Session for this date already exists
+          description: Session for this date already exists — includes logged outcomes that would be preserved on force re-import
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "#/components/schemas/ImportConflict"
 
   /screener/sessions:
     get:
@@ -243,6 +243,39 @@ components:
         rawText:
           type: string
           description: The raw text output from the screener
+        force:
+          type: boolean
+          description: If true, replace the existing session for this date while preserving logged outcomes
+
+    AffectedOutcome:
+      type: object
+      required: [ticker, category, outcome]
+      properties:
+        ticker:
+          type: string
+        category:
+          type: string
+          enum: [MOMENTUM, SQUEEZE, STUDS, WEAKEST]
+        outcome:
+          type: string
+          enum: [WIN, LOSS, SKIP]
+        exitPrice:
+          type: ["number", "null"]
+
+    ImportConflict:
+      type: object
+      required: [error, sessionId, date, affectedOutcomes]
+      properties:
+        error:
+          type: string
+        sessionId:
+          type: number
+        date:
+          type: string
+        affectedOutcomes:
+          type: array
+          items:
+            $ref: "#/components/schemas/AffectedOutcome"
 
     MarketWeather:
       type: object

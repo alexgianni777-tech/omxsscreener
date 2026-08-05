@@ -9,4 +9,6 @@
 export interface SessionImport {
   /** The raw text output from the screener */
   rawText: string;
+  /** If true, replace the existing session for this date while preserving logged outcomes */
+  force?: boolean;
 }

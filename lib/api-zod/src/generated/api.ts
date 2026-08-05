@@ -20,7 +20,8 @@ export const HealthCheckResponse = zod.object({
  * @summary Import raw screener text and parse into a session
  */
 export const ImportSessionBody = zod.object({
-  "rawText": zod.string().describe('The raw text output from the screener')
+  "rawText": zod.string().describe('The raw text output from the screener'),
+  "force": zod.boolean().optional().describe('If true, replace the existing session for this date while preserving logged outcomes')
 })
 
 export const ImportSessionResponse = zod.object({
