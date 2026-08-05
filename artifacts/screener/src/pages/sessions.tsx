@@ -1,6 +1,6 @@
 import { useListSessions, useDeleteSession, getListSessionsQueryKey } from "@workspace/api-client-react";
 import { Link } from "wouter";
-import { formatNumber, formatDate } from "../lib/utils";
+import { formatNumber, formatPct, formatDate } from "../lib/utils";
 import { Trash2, ChevronRight, BarChart3, Activity } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -75,7 +75,7 @@ export function Sessions() {
                       <span className={`text-xs font-mono font-medium px-1.5 py-0.5 rounded ${
                         session.marketWeather.perf1m > 0 ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
                       }`}>
-                        {session.marketWeather.perf1m > 0 ? "+" : ""}{formatNumber(session.marketWeather.perf1m * 100, 1)}% 1m
+                        {session.marketWeather.perf1m > 0 ? "+" : ""}{formatPct(session.marketWeather.perf1m)} 1m
                       </span>
                     </div>
                   </div>

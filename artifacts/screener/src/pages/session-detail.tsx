@@ -1,6 +1,6 @@
 import { useGetSession, getGetSessionQueryKey, useGetQuotes, Candidate, CandidateOutcomeProperty, useUpdateCandidateOutcome, QuoteResult } from "@workspace/api-client-react";
 import { useParams, Link } from "wouter";
-import { formatNumber, formatPercent, formatDate } from "../lib/utils";
+import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
 import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useCallback } from "react";
@@ -100,7 +100,7 @@ function WeatherMetric({ label, value, isPercent }: { label: string, value: numb
     <div className="bg-background rounded p-3 border border-border">
       <div className="text-xs text-muted-foreground mb-1">{label}</div>
       <div className={`font-mono font-semibold ${colorClass}`}>
-        {value > 0 && isPercent ? "+" : ""}{isPercent ? formatPercent(value) : formatNumber(value, 1)}
+        {value > 0 && isPercent ? "+" : ""}{isPercent ? formatPct(value) : formatNumber(value, 1)}
       </div>
     </div>
   );
@@ -172,7 +172,7 @@ function CandidateRow({ candidate, sessionId, quote }: { candidate: Candidate, s
         <div className="grid grid-cols-3 gap-y-2 gap-x-4 text-xs">
           <div><span className="text-muted-foreground block text-[10px]">SCREEN Px</span><span className="font-mono font-medium">{formatNumber(candidate.price)}</span></div>
           <div><span className="text-muted-foreground block text-[10px]">RS3M</span><span className="font-mono">{formatNumber(candidate.rs3m, 1)}</span></div>
-          <div><span className="text-muted-foreground block text-[10px]">1M%</span><span className="font-mono">{formatPercent(candidate.perf1m)}</span></div>
+          <div><span className="text-muted-foreground block text-[10px]">1M%</span><span className="font-mono">{formatPct(candidate.perf1m)}</span></div>
           <div><span className="text-muted-foreground block text-[10px]">RSI</span><span className="font-mono">{formatNumber(candidate.rsi, 1)}</span></div>
           <div><span className="text-muted-foreground block text-[10px]">ATR</span><span className="font-mono">{formatNumber(candidate.atr)}</span></div>
           <div><span className="text-muted-foreground block text-[10px]">VOL</span><span className="font-mono">{formatNumber(candidate.volMultiplier)}x</span></div>

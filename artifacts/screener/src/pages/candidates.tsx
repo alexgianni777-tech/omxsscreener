@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useListCandidates, useGetQuotes } from "@workspace/api-client-react";
-import { formatNumber, formatPercent, formatDate } from "../lib/utils";
+import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
 import { Link } from "wouter";
 import { Filter, ChevronRight } from "lucide-react";
 
