@@ -111,6 +111,11 @@ router.patch("/survival/config", async (req, res): Promise<void> => {
       res.status(400).json({ error: "goalCapital must be a positive number" });
       return;
     }
+    const effectiveStart = patch.startCapital ?? (await getOrCreateConfig()).startCapital;
+    if (goalCapital <= effectiveStart) {
+      res.status(400).json({ error: "goalCapital must be greater than startCapital" });
+      return;
+    }
     patch.goalCapital = goalCapital;
   }
   patch.updatedAt = new Date();
@@ -130,7 +135,7 @@ router.post("/survival/trades", async (req, res): Promise<void> => {
     typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
     typeof strategy !== "string" || !strategy ||
     !["LONG", "SHORT"].includes(direction) ||
-    typeof pnlKr !== "number" ||
+    typeof pnlKr !== "number" || !isFinite(pnlKr) ||
     !["LAST", "REFLEX"].includes(flag) ||
     typeof followedPlan !== "boolean"
   ) {

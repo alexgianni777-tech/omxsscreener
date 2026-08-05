@@ -210,7 +210,7 @@ export function Dashboard() {
                 <ReferenceLine y={0} stroke="currentColor" strokeOpacity={0.25} />
                 <Tooltip content={<EquityCurveTooltip />} />
                 <Line
-                  type="monotone"
+                  type="linear"
                   dataKey="cumulativeR"
                   dot={(props) => <CurveDot {...props} />}
                   activeDot={{ r: 5 }}

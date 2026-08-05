@@ -189,7 +189,7 @@ export function Survival() {
   };
 
   const addTrade = async () => {
-    if (!flag || followedPlan === null || !pnlKr || !strategy) return;
+    if (!flag || followedPlan === null || pnlKr === "" || !strategy) return;
     setSubmitting(true);
     try {
       await fetch(api("/survival/trades"), {
@@ -215,7 +215,10 @@ export function Survival() {
   };
 
   const deleteTrade = async (id: number) => {
-    await fetch(api(`/survival/trades/${id}`), { method: "DELETE" });
+    if (!window.confirm("Ta bort den här traden?")) return;
+    try {
+      await fetch(api(`/survival/trades/${id}`), { method: "DELETE" });
+    } catch { /* ignore network errors — reload will show current state */ }
     load();
   };
 
@@ -232,7 +235,8 @@ export function Survival() {
 
   const { config, trades, stats } = data;
   const delta = stats.equity - config.startCapital;
-  const canAdd = flag !== null && followedPlan !== null && pnlKr !== "" && strategy !== "";
+  // Allow pnlKr = "0" (break-even) — only block truly empty string
+  const canAdd = flag !== null && followedPlan !== null && pnlKr !== "" && strategy !== "" && isFinite(Number(pnlKr));
 
   // Läst vs Reflex verdict
   let verdict = "";
@@ -299,6 +303,18 @@ export function Survival() {
           <p className="text-sm text-muted-foreground">
             Stanna. Ingen ny trade idag. {stats.currentStreak} förluster i rad —
             matematiken säger paus, inte känslan. Kom tillbaka imorgon med en läst setup.
+          </p>
+        </div>
+      )}
+
+      {/* ── Streak Warning (2 losses — one away from circuit breaker) ── */}
+      {!stats.circuitBreakerActive && stats.currentStreak === 2 && (
+        <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 space-y-1">
+          <div className="font-semibold text-amber-400 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" /> Varning — 2 förluster i rad
+          </div>
+          <p className="text-sm text-muted-foreground">
+            En till och circuit breakern slår till. Nästa trade: bara om den är 100% läst. Ingen reflex.
           </p>
         </div>
       )}
@@ -445,7 +461,7 @@ export function Survival() {
             type="number"
             value={pnlKr}
             onChange={(e) => setPnlKr(e.target.value)}
-            placeholder="P&L i kr (+ vinst / − förlust)"
+            placeholder="P&L i kr  (+ vinst / − förlust / 0 break-even)"
             className="flex-1 bg-muted border border-border rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary"
           />
           <button
