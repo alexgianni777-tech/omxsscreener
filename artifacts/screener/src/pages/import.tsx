@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useImportSession, getListSessionsQueryKey } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
-import { Terminal, Upload, AlertTriangle, RefreshCw, X, ShieldAlert } from "lucide-react";
+import { Terminal, Upload, AlertTriangle, RefreshCw, X, ShieldAlert, Zap, CheckCircle2 } from "lucide-react";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 type AffectedOutcome = {
   ticker: string;
@@ -24,10 +26,17 @@ const OUTCOME_COLORS: Record<string, string> = {
   SKIP: "text-slate-400 bg-slate-500/10 border-slate-500/20",
 };
 
+type EdgeAIStatus =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "success"; setupCount: number; date: string; generatedAt: string }
+  | { kind: "error"; message: string };
+
 export function Import() {
   const [rawText, setRawText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<ConflictInfo | null>(null);
+  const [edgeStatus, setEdgeStatus] = useState<EdgeAIStatus>({ kind: "idle" });
   const [, setLocation] = useLocation();
   const importSession = useImportSession();
   const queryClient = useQueryClient();
@@ -72,6 +81,50 @@ export function Import() {
     runImport(conflict.rawText, true);
   };
 
+  const handleEdgeAIImport = async (force = false) => {
+    setEdgeStatus({ kind: "loading" });
+    setError(null);
+    try {
+      const res = await fetch(`${BASE}/api/screener/sessions/import-from-edgeai`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force }),
+      });
+      const data = await res.json();
+      if (res.status === 409) {
+        // Reuse the same conflict modal as manual import
+        setConflict({
+          sessionId: data.sessionId,
+          date: data.date,
+          affectedOutcomes: data.affectedOutcomes,
+          rawText: "__edgeai__", // sentinel — not used for edge import
+        });
+        setEdgeStatus({ kind: "idle" });
+        return;
+      }
+      if (!res.ok) {
+        setEdgeStatus({ kind: "error", message: data.error ?? `HTTP ${res.status}` });
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+      setEdgeStatus({ kind: "success", setupCount: data.setupCount, date: data.date, generatedAt: data.generatedAt });
+      setTimeout(() => setLocation(`/sessions/${data.id}`), 1200);
+    } catch (e: any) {
+      setEdgeStatus({ kind: "error", message: e.message ?? "Nätverksfel" });
+    }
+  };
+
+  // Override force-reimport so both EdgeAI and manual conflicts work from same modal
+  const handleForceFromConflict = () => {
+    if (!conflict) return;
+    if (conflict.rawText === "__edgeai__") {
+      setConflict(null);
+      handleEdgeAIImport(true);
+    } else {
+      handleForceReimport();
+    }
+  };
+
   const loggedOutcomes = conflict?.affectedOutcomes.filter((o) => o.outcome !== "SKIP") ?? [];
   const skipped = conflict?.affectedOutcomes.filter((o) => o.outcome === "SKIP") ?? [];
 
@@ -81,6 +134,44 @@ export function Import() {
         <h2 className="text-3xl font-bold tracking-tight">Import Screener Data</h2>
         <p className="text-muted-foreground mt-1">Paste the raw text output from your daily screener tool.</p>
       </header>
+
+      {/* ── EdgeAI auto-import card ── */}
+      <div className="bg-card border border-border rounded-xl p-4 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-2 bg-blue-500/10 rounded-lg shrink-0">
+            <Zap className="w-5 h-5 text-blue-400" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Importera från EdgeAI</p>
+            <p className="text-xs text-muted-foreground truncate">
+              Hämtar dagens SE-setups direkt från{" "}
+              <span className="font-mono text-blue-400/80">edgeai/public/data.json</span>
+              {edgeStatus.kind === "success" && (
+                <span className="text-emerald-400 ml-1">
+                  · {edgeStatus.setupCount} setups ({edgeStatus.date})
+                </span>
+              )}
+              {edgeStatus.kind === "error" && (
+                <span className="text-red-400 ml-1">· {edgeStatus.message}</span>
+              )}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => handleEdgeAIImport(false)}
+          disabled={edgeStatus.kind === "loading"}
+          className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          data-testid="btn-edgeai-import"
+        >
+          {edgeStatus.kind === "loading" ? (
+            <span className="animate-pulse">Hämtar…</span>
+          ) : edgeStatus.kind === "success" ? (
+            <><CheckCircle2 className="w-4 h-4" /> Importerad</>
+          ) : (
+            <><Zap className="w-4 h-4" /> Hämta & importera</>
+          )}
+        </button>
+      </div>
 
       {error && (
         <div className="p-4 bg-destructive/10 text-destructive border border-destructive/20 rounded-md flex items-start gap-3">
@@ -202,7 +293,7 @@ export function Import() {
                 Cancel
               </button>
               <button
-                onClick={handleForceReimport}
+                onClick={handleForceFromConflict}
                 disabled={importSession.isPending}
                 className="inline-flex items-center justify-center rounded-md text-sm font-medium h-9 px-4 bg-amber-500 text-black hover:bg-amber-400 transition-colors disabled:opacity-50"
                 data-testid="btn-confirm-reimport"
