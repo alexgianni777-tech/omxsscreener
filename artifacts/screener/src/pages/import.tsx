@@ -188,7 +188,19 @@ export function Import() {
         <textarea
           value={rawText}
           onChange={(e) => setRawText(e.target.value)}
-          placeholder="Paste screener text here...&#10;Must include 'OMXS30 MARKET WEATHER' and candidate categories."
+          placeholder={`Klistra in screener-texten här. Formatet ska innehålla:
+
+SCREENER · YYYY-MM-DD
+
+MARKNADSVÄDER  OMXS30 3305.0 | 5d  2.7% | 1m  1.8% | 3m  8.9% | RSI  79
+→ MEDVIND
+
+=== 1 · MOMENTUM — ...===
+1. SSAB   102.85 | RS3m  18.5 | 1m  9.4% | RSI  57 | %B  0.90 | ATR  3.3% | vol  0.2x | ↔20dH  -0.3%
+      plan(LONG): entry ~102.85 · stop 98.83 (1.2×ATR) · mål +1% 103.88 (R/R 0.26) · 1R 106.87
+
+=== 2 · SQUEEZE — ...===
+...`}
           className="w-full h-[500px] p-4 bg-transparent font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
           spellCheck={false}
           data-testid="input-raw-text"

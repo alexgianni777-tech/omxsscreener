@@ -7,6 +7,9 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
+import YahooFinance from "yahoo-finance2";
+
+const yf = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
 
 const router: IRouter = Router();
 
@@ -63,6 +66,26 @@ router.post(
     // 2. Derive session date from generatedAt
     const sessionDate = (edgeData.generatedAt as string).slice(0, 10);
 
+    // 2b. Fetch real OMXS30 market weather from Yahoo Finance
+    let omxsValue = 0, perf5d = 0, perf1m = 0, perf3m = 0, marketRsi = 0;
+    try {
+      const now = new Date();
+      const ninetyFiveDaysAgo = new Date(now.getTime() - 95 * 86_400_000);
+      const history = await yf.historical("^OMX", {
+        period1: ninetyFiveDaysAgo,
+        period2: now,
+        interval: "1d",
+      }) as Array<{ close: number }>;
+      if (history.length > 0) {
+        omxsValue = history[history.length - 1].close;
+        if (history.length >= 6)  perf5d  = ((omxsValue - history[history.length - 6].close)  / history[history.length - 6].close)  * 100;
+        if (history.length >= 22) perf1m  = ((omxsValue - history[history.length - 22].close) / history[history.length - 22].close) * 100;
+        if (history.length >= 64) perf3m  = ((omxsValue - history[history.length - 64].close) / history[history.length - 64].close) * 100;
+      }
+    } catch {
+      // non-fatal — market weather stays 0 if Yahoo Finance is unavailable
+    }
+
     // 3. Check for existing session (respect force flag)
     const force = req.body?.force === true;
     const existing = await db
@@ -104,19 +127,25 @@ router.post(
       const stop = Number(s.stop ?? 0);
       const target = Number(s.target ?? 0);
       const oneR = Math.abs(entry - stop);
+      // Strip .ST suffix so resolveYahooTicker() can re-add it correctly
+      // e.g. "ALFA.ST" → "ALFA" → resolveYahooTicker → "ALFA.ST" ✓
+      //      "ERIC-B.ST" → "ERIC-B" → resolveYahooTicker → "ERIC-B.ST" ✓
+      const ticker = String(s.ticker ?? "").replace(/\.ST$/i, "").toUpperCase();
+      // barsAgo: how many bars (trading days) ago the signal was first triggered
+      const barsAgo = Number(s.barsAgo ?? 0);
       return {
         category,
         rank: rankCounter[category],
-        ticker: String(s.ticker ?? "").toUpperCase(),
+        ticker,
         price: entry,
         rs3m: Number(s.rs ?? 0),
-        perf1m: 0,
-        rsi: 50, // not provided by EdgeAI
-        pctB: 0,
-        atr: oneR, // best proxy available
-        volMultiplier: 1,
-        distFrom20dH: 0,
-        gapWarning: null,
+        perf1m: Number(s.edge?.winRate ?? 0), // store winRate here for per-candidate display
+        rsi: Number(s.edge?.expectancyR ?? 0) * 100, // store expectancyR × 100 for display
+        pctB: Number(s.edge?.sample ?? 0),           // store N (sample size)
+        atr: oneR,
+        volMultiplier: Number(s.rr ?? 0),  // store actual R/R from EdgeAI
+        distFrom20dH: barsAgo,             // store signal age in trading days
+        gapWarning: s.grade === "A" ? null : -1, // non-A grade as soft gap warning
         direction,
         entryPrice: entry,
         stopPrice: stop,
@@ -155,11 +184,11 @@ router.post(
         .set({
           trendLabel: se.regime?.label ?? "n/a",
           rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt}`,
-          omxsValue: 0,
-          perf5d: 0,
-          perf1m: 0,
-          perf3m: 0,
-          marketRsi: 0,
+          omxsValue,
+          perf5d,
+          perf1m,
+          perf3m,
+          marketRsi,
         })
         .where(eq(screenerSessionsTable.id, existingId))
         .returning();
@@ -184,11 +213,11 @@ router.post(
         .insert(screenerSessionsTable)
         .values({
           date: sessionDate,
-          omxsValue: 0,
-          perf5d: 0,
-          perf1m: 0,
-          perf3m: 0,
-          marketRsi: 0,
+          omxsValue,
+          perf5d,
+          perf1m,
+          perf3m,
+          marketRsi,
           trendLabel: se.regime?.label ?? "n/a",
           rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt}`,
           source: "edgeai",
