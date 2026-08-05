@@ -116,10 +116,12 @@ router.post(
       return;
     }
 
-    // 4. Map setups → candidates, group by category for ranking
+    // 4. Map setups → candidates (SE + US combined), group by category for ranking
+    const usSetups: any[] = edgeData?.markets?.US?.setups ?? [];
+    const allSetups = [...setups, ...usSetups];
     const rankCounter: Record<string, number> = {};
 
-    const mappedSetups = setups.map((s: any) => {
+    const mappedSetups = allSetups.map((s: any) => {
       const category = mapSetupToCategory(s.dir, s.setup ?? "");
       rankCounter[category] = (rankCounter[category] ?? 0) + 1;
       const direction = s.dir === "short" ? "SHORT" : "LONG";
@@ -127,9 +129,9 @@ router.post(
       const stop = Number(s.stop ?? 0);
       const target = Number(s.target ?? 0);
       const oneR = Math.abs(entry - stop);
-      // Strip .ST suffix so resolveYahooTicker() can re-add it correctly
-      // e.g. "ALFA.ST" → "ALFA" → resolveYahooTicker → "ALFA.ST" ✓
-      //      "ERIC-B.ST" → "ERIC-B" → resolveYahooTicker → "ERIC-B.ST" ✓
+      // Strip .ST so SE tickers are stored as base form (ALFA, ERIC-B).
+      // US tickers have no .ST so stripping is a no-op (AMD stays AMD).
+      // resolveYahooTicker() re-adds .ST for SE tickers via SE_BASE_TICKERS / hyphen rule.
       const ticker = String(s.ticker ?? "").replace(/\.ST$/i, "").toUpperCase();
       // barsAgo: how many bars (trading days) ago the signal was first triggered
       const barsAgo = Number(s.barsAgo ?? 0);

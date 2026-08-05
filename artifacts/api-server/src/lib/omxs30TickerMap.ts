@@ -57,9 +57,29 @@ export const OMXS30_TICKER_MAP: Record<string, string> = {
 };
 
 /**
- * Resolve a screener display name to a Yahoo Finance ticker.
- * Falls back to DISPLAYNAME.ST for any unmapped ticker.
+ * Swedish base tickers that arrive stripped of .ST (e.g. from EdgeAI imports).
+ * These need .ST re-added for Yahoo Finance. Tickers containing a hyphen
+ * (ERIC-B, SSAB-B, etc.) are handled by the hyphen rule below.
+ */
+const SE_BASE_TICKERS = new Set([
+  "ABB", "ALFA", "AZN", "BOL", "EVO",
+  "SAND", "SINCH", "SWMA", "TELIA",
+]);
+
+/**
+ * Resolve a ticker to a Yahoo Finance symbol.
+ *
+ * Priority order:
+ *  1. Display-name map (manually pasted SE stock names like "Alfa Laval")
+ *  2. Already a full Yahoo ticker ending in .ST → return as-is
+ *  3. Known SE base ticker (stripped from .ST by EdgeAI import) → add .ST
+ *  4. Contains a Nordic hyphen class suffix (ERIC-B, SSAB-B, NDA-SE) → add .ST
+ *  5. Everything else (US stocks: AMD, ABBV, SBUX…) → return as-is
  */
 export function resolveYahooTicker(screenerTicker: string): string {
-  return OMXS30_TICKER_MAP[screenerTicker] ?? `${screenerTicker}.ST`;
+  if (OMXS30_TICKER_MAP[screenerTicker]) return OMXS30_TICKER_MAP[screenerTicker];
+  if (screenerTicker.endsWith(".ST")) return screenerTicker;
+  if (SE_BASE_TICKERS.has(screenerTicker)) return `${screenerTicker}.ST`;
+  if (screenerTicker.includes("-")) return `${screenerTicker}.ST`;
+  return screenerTicker; // US or other market — use as-is
 }

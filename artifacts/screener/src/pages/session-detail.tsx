@@ -323,7 +323,7 @@ function CandidateRow({ candidate, sessionId, quote, daysOld }: { candidate: Can
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="font-mono text-muted-foreground text-xs">#{candidate.rank}</span>
-            <span className="font-bold text-lg">{candidate.ticker}</span>
+            <span className="font-bold text-lg">{candidate.ticker.replace(/\.ST$/i, "")}</span>
           </div>
           <div className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold ${dirColor}`}>
             <DirIcon className="w-3 h-3" /> {candidate.direction}
