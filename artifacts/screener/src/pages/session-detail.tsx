@@ -448,6 +448,24 @@ function CandidateRow({
   const DirIcon = isLong ? TrendingUp : TrendingDown;
   const dirColor = isLong ? "text-success bg-success/10 border-success/20" : "text-destructive bg-destructive/10 border-destructive/20";
 
+  // Earnings proximity warning
+  const earningsInDays = quote?.earningsInDays ?? null;
+  const earningsDate = quote?.earningsDate ?? null;
+  const hasEarningsWarning =
+    earningsInDays != null && earningsInDays >= 0 && earningsInDays <= 5;
+  const earningsBadgeStyle =
+    earningsInDays === 0
+      ? "bg-destructive/15 text-destructive border-destructive/30"
+      : earningsInDays != null && earningsInDays <= 2
+      ? "bg-orange-500/15 text-orange-500 border-orange-500/30"
+      : "bg-amber-500/15 text-amber-600 border-amber-500/30";
+  const earningsLabel =
+    earningsInDays === 0
+      ? "Rapport idag"
+      : earningsInDays === 1
+      ? "Rapport imorgon"
+      : `Rapport om ${earningsInDays}d`;
+
   // Live price derived values
   const livePrice = quote?.livePrice ?? null;
   const changePct = quote?.changePct ?? null;
@@ -479,7 +497,17 @@ function CandidateRow({
             <span className="font-mono text-muted-foreground text-xs">#{rank}</span>
             <span className="font-bold text-lg">{candidate.ticker.replace(/\.ST$/i, "")}</span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+            {/* Earnings warning badge */}
+            {hasEarningsWarning && (
+              <div
+                className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold ${earningsBadgeStyle}`}
+                title={`Rapport: ${earningsDate} — undvik att ta nya positioner inom 5 dagar`}
+              >
+                <AlertTriangle className="w-3 h-3" />
+                {earningsLabel}
+              </div>
+            )}
             {/* Edge probability score badge — only for EdgeAI sessions */}
             {isEdgeAI && (
               <div className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold font-mono ${edgeScoreColor(score)}`}

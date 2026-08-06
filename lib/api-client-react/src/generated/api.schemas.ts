@@ -175,6 +175,16 @@ export interface QuoteResult {
      * @nullable
      */
   marketState?: string | null;
+  /**
+   * Next earnings date as ISO date string (YYYY-MM-DD), if known.
+   * @nullable
+   */
+  earningsDate?: string | null;
+  /**
+   * Calendar days from today until next earnings. Negative = already reported.
+   * @nullable
+   */
+  earningsInDays?: number | null;
   /** @nullable */
   error?: string | null;
 }
