@@ -7,6 +7,7 @@ import { SessionDetail } from './pages/session-detail';
 import { Import } from './pages/import';
 import { Candidates } from './pages/candidates';
 import { Survival } from './pages/survival';
+import { Earnings } from './pages/earnings';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,6 +38,7 @@ function Router() {
         <Route path="/import" component={Import} />
         <Route path="/candidates" component={Candidates} />
         <Route path="/survival" component={Survival} />
+        <Route path="/earnings" component={Earnings} />
         <Route component={NotFound} />
       </Switch>
     </Shell>

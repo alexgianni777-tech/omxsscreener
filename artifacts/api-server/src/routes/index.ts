@@ -8,6 +8,7 @@ import edgeaiRouter from "./edgeai";
 import survivalRouter from "./survival";
 import newsRouter from "./news";
 import analyticsRouter from "./analytics";
+import earningsScreenerRouter from "./earningsScreener";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(edgeaiRouter);
 router.use(survivalRouter);
 router.use(newsRouter);
 router.use(analyticsRouter);
+router.use(earningsScreenerRouter);
 
 export default router;

@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { LineChart, LayoutDashboard, History, FileDown, Activity, ShieldAlert } from "lucide-react";
+import { LineChart, LayoutDashboard, History, FileDown, Activity, ShieldAlert, CalendarDays } from "lucide-react";
 
 export function Shell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
@@ -11,6 +11,7 @@ export function Shell({ children }: { children: ReactNode }) {
     { href: "/candidates", label: "Candidates", icon: Activity },
     { href: "/import", label: "Import Data", icon: FileDown },
     { href: "/survival", label: "Survival", icon: ShieldAlert },
+    { href: "/earnings", label: "Rapporter", icon: CalendarDays },
   ];
 
   return (
