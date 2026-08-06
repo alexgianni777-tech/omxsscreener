@@ -9,6 +9,7 @@ import survivalRouter from "./survival";
 import newsRouter from "./news";
 import analyticsRouter from "./analytics";
 import earningsScreenerRouter from "./earningsScreener";
+import priceChartRouter from "./priceChart";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(survivalRouter);
 router.use(newsRouter);
 router.use(analyticsRouter);
 router.use(earningsScreenerRouter);
+router.use(priceChartRouter);
 
 export default router;

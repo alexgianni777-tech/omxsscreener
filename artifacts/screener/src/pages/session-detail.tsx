@@ -1,9 +1,10 @@
 import { useGetSession, getGetSessionQueryKey, useGetQuotes, Candidate, CandidateOutcomeProperty, useUpdateCandidateOutcome, QuoteResult } from "@workspace/api-client-react";
 import { useParams, Link } from "wouter";
 import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
-import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity, AlertTriangle, Clock, Newspaper, ExternalLink } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity, AlertTriangle, Clock, Newspaper, ExternalLink, CandlestickChart as CandlestickIcon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useCallback, useEffect } from "react";
+import { CandlestickChart } from "../components/CandlestickChart";
 
 // ── News types & hook ─────────────────────────────────────────────────────────
 interface NewsItem {
@@ -420,6 +421,7 @@ function CandidateRow({
 
   const [localOutcome, setLocalOutcome] = useState<CandidateOutcomeProperty>(candidate.outcome);
   const [localExit, setLocalExit] = useState<string>(candidate.exitPrice ? String(candidate.exitPrice) : "");
+  const [showChart, setShowChart] = useState(false);
   
   const handleSave = useCallback(() => {
     mutateFnRef.current(
@@ -488,7 +490,8 @@ function CandidateRow({
   const barsAgo = Math.round(candidate.distFrom20dH);
 
   return (
-    <div className="bg-card border border-border rounded-lg p-4 shadow-sm text-sm flex flex-col xl:flex-row gap-4 xl:items-stretch group">
+    <div className="bg-card border border-border rounded-lg shadow-sm text-sm group">
+    <div className="p-4 flex flex-col xl:flex-row gap-4 xl:items-stretch">
       
       {/* Identity & Core Metrics */}
       <div className="flex flex-col gap-3 min-w-[280px] xl:border-r border-border xl:pr-4">
@@ -496,6 +499,13 @@ function CandidateRow({
           <div className="flex items-center gap-2">
             <span className="font-mono text-muted-foreground text-xs">#{rank}</span>
             <span className="font-bold text-lg">{candidate.ticker.replace(/\.ST$/i, "")}</span>
+            <button
+              onClick={() => setShowChart((v) => !v)}
+              title="Visa/dölj kursdiagram med Bollinger Bands"
+              className={`p-1 rounded transition-colors ${showChart ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+            >
+              <CandlestickIcon className="w-3.5 h-3.5" />
+            </button>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap justify-end">
             {/* Earnings warning badge */}
@@ -678,6 +688,20 @@ function CandidateRow({
         </div>
       </div>
 
+    </div>
+
+    {/* Expandable candlestick + Bollinger chart */}
+    {showChart && (
+      <div className="border-t border-border/50 px-4 pb-4 pt-3 bg-muted/20">
+        <CandlestickChart
+          ticker={candidate.ticker}
+          entryPrice={candidate.entryPrice}
+          stopPrice={candidate.stopPrice}
+          targetPrice={candidate.targetPrice}
+          height={320}
+        />
+      </div>
+    )}
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { TrendingUp, TrendingDown, CalendarDays, AlertTriangle, RefreshCw, Info } from "lucide-react";
+import { useState } from "react";
+import { TrendingUp, TrendingDown, CalendarDays, AlertTriangle, RefreshCw, Info, CandlestickChart as CandlestickIcon, ArrowUpDown } from "lucide-react";
 import { formatNumber, formatPercent } from "../lib/utils";
+import { CandlestickChart } from "../components/CandlestickChart";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -56,14 +58,38 @@ function useEarningsScreener() {
   });
 }
 
+type SortBy = "days" | "score" | "consensus";
+
+function sortStocks(stocks: EarningsStock[], sortBy: SortBy): EarningsStock[] {
+  return [...stocks].sort((a, b) => {
+    if (sortBy === "days") {
+      const dA = a.earningsInDays ?? 99;
+      const dB = b.earningsInDays ?? 99;
+      if (dA < 0 && dB >= 0) return 1;
+      if (dB < 0 && dA >= 0) return -1;
+      if (dA < 0 && dB < 0) return dB - dA;
+      return dA - dB;
+    }
+    if (sortBy === "score") {
+      return (b.compositeScore ?? -1) - (a.compositeScore ?? -1);
+    }
+    // consensus: strong_buy(1) → strong_sell(5) ascending
+    const cm = (s: EarningsStock) => s.recommendationMean ?? 99;
+    return cm(a) - cm(b);
+  });
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export function Earnings() {
   const { data, isLoading, isError, refetch, isFetching } = useEarningsScreener();
+  const [sortBy, setSortBy] = useState<SortBy>("days");
+
+  const sorted = data ? sortStocks(data.stocks, sortBy) : [];
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Header */}
-      <header className="flex justify-between items-end">
+      <header className="flex justify-between items-end gap-4 flex-wrap">
         <div>
           <h2 className="text-3xl font-bold tracking-tight flex items-center gap-3">
             <CalendarDays className="h-7 w-7 text-muted-foreground" />
@@ -73,14 +99,33 @@ export function Earnings() {
             OMXS30 + EdgeAI US-aktier med rapport inom ±7 dagar. Historisk data — ingen teknisk signal.
           </p>
         </div>
-        <button
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-md border border-border bg-card hover:bg-muted transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
-          Uppdatera
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Sort controls */}
+          <div className="flex items-center gap-1 border border-border rounded-md bg-card p-1">
+            <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground mx-1" />
+            {(["days", "score", "consensus"] as SortBy[]).map((s) => (
+              <button
+                key={s}
+                onClick={() => setSortBy(s)}
+                className={`px-2.5 py-1 text-xs rounded transition-colors ${
+                  sortBy === s
+                    ? "bg-primary text-primary-foreground font-semibold"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+              >
+                {s === "days" ? "Datum" : s === "score" ? "Score" : "Konsensus"}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-md border border-border bg-card hover:bg-muted transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+            Uppdatera
+          </button>
+        </div>
       </header>
 
       {/* Disclaimer */}
@@ -119,12 +164,12 @@ export function Earnings() {
         </div>
       )}
 
-      {data && data.stocks.length > 0 && (
+      {data && sorted.length > 0 && (
         <div className="space-y-4">
           <p className="text-xs text-muted-foreground">
-            {data.stocks.length} bolag hittade · uppdaterad {new Date(data.generatedAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
+            {sorted.length} bolag hittade · uppdaterad {new Date(data.generatedAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
           </p>
-          {data.stocks.map((stock) => (
+          {sorted.map((stock) => (
             <EarningsCard key={stock.yahooTicker} stock={stock} />
           ))}
         </div>
@@ -135,6 +180,7 @@ export function Earnings() {
 
 // ── Card ──────────────────────────────────────────────────────────────────────
 function EarningsCard({ stock }: { stock: EarningsStock }) {
+  const [showChart, setShowChart] = useState(false);
   const isToday = stock.earningsInDays === 0;
   const isTomorrow = stock.earningsInDays === 1;
   const isPast = (stock.earningsInDays ?? 1) < 0;
@@ -190,6 +236,13 @@ function EarningsCard({ stock }: { stock: EarningsStock }) {
                 Undvik ny position
               </span>
             )}
+            <button
+              onClick={() => setShowChart((v) => !v)}
+              title="Visa/dölj kursdiagram med Bollinger Bands"
+              className={`p-1 rounded transition-colors ${showChart ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+            >
+              <CandlestickIcon className="h-3.5 w-3.5" />
+            </button>
           </div>
           <div className="text-sm text-muted-foreground">{stock.display}</div>
         </div>
@@ -315,6 +368,13 @@ function EarningsCard({ stock }: { stock: EarningsStock }) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Candlestick + Bollinger chart */}
+      {showChart && (
+        <div className="border-t border-border/60 mt-3 pt-3">
+          <CandlestickChart ticker={stock.yahooTicker} height={300} />
         </div>
       )}
     </div>
