@@ -1,9 +1,11 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { LineChart, LayoutDashboard, History, FileDown, Activity, ShieldAlert, CalendarDays } from "lucide-react";
+import { LineChart, LayoutDashboard, History, FileDown, Activity, ShieldAlert, CalendarDays, LogOut } from "lucide-react";
+import { useAuth } from "@workspace/replit-auth-web";
 
 export function Shell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
+  const { user, logout } = useAuth();
 
   const navItems = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -18,9 +20,12 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="min-h-screen flex flex-col md:flex-row bg-background">
       {/* Sidebar */}
       <aside className="w-full md:w-64 border-b md:border-b-0 md:border-r border-border bg-card flex flex-col">
-        <div className="h-16 flex items-center px-6 border-b border-border">
-          <LineChart className="w-6 h-6 mr-3 text-primary" />
-          <h1 className="font-bold text-lg tracking-tight uppercase">OMXS30 CORE</h1>
+        <div className="h-16 flex items-center px-5 border-b border-border gap-3">
+          <LineChart className="w-5 h-5 shrink-0 text-primary" />
+          <div className="min-w-0">
+            <h1 className="font-bold text-sm tracking-tight leading-tight">AG Investment Capital</h1>
+            <p className="text-[10px] text-muted-foreground tracking-wide uppercase">Private Dashboard</p>
+          </div>
         </div>
         
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
@@ -44,7 +49,31 @@ export function Shell({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        <div className="p-4 border-t border-border">
+        <div className="p-4 border-t border-border space-y-3">
+          {/* User + logout */}
+          {user && (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                {user.profileImageUrl ? (
+                  <img src={user.profileImageUrl} alt="" className="w-6 h-6 rounded-full shrink-0" />
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-primary/20 shrink-0 flex items-center justify-center text-[10px] font-bold text-primary">
+                    {(user.firstName?.[0] ?? user.email?.[0] ?? "?").toUpperCase()}
+                  </div>
+                )}
+                <span className="text-xs text-muted-foreground truncate">
+                  {user.firstName ?? user.email ?? "User"}
+                </span>
+              </div>
+              <button
+                onClick={logout}
+                title="Log out"
+                className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           <div className="text-xs text-muted-foreground font-mono">
             System: ONLINE
             <br />

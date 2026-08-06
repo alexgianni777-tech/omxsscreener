@@ -75,6 +75,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
-    "lightweight-charts": "^5.2.0"
+    "lightweight-charts": "^5.2.0",
+    "@workspace/replit-auth-web": "workspace:*"
   }
 }

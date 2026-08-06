@@ -5,6 +5,48 @@
  * OMXS30 Screener API
  * OpenAPI spec version: 0.1.0
  */
+export interface AuthUser {
+  id: string;
+  /** @nullable */
+  email: string | null;
+  /** @nullable */
+  firstName: string | null;
+  /** @nullable */
+  lastName: string | null;
+  /** @nullable */
+  profileImageUrl: string | null;
+}
+
+export interface AuthUserEnvelope {
+  user: AuthUser | null;
+}
+
+export interface MobileTokenExchangeRequest {
+  /** @minLength 1 */
+  code: string;
+  /** @minLength 1 */
+  code_verifier: string;
+  /** @minLength 1 */
+  redirect_uri: string;
+  /** @minLength 1 */
+  state: string;
+  /** @minLength 1 */
+  nonce?: string;
+}
+
+export interface MobileTokenExchangeSuccess {
+  token: string;
+}
+
+export const LogoutSuccessValue = {
+  success: true,
+} as const;
+export type LogoutSuccess = typeof LogoutSuccessValue;
+
+export interface ErrorEnvelope {
+  error: string;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -16,6 +58,42 @@ export interface ErrorResponse {
 export interface SessionImport {
   /** The raw text output from the screener */
   rawText: string;
+  /** If true, replace the existing session for this date while preserving logged outcomes */
+  force?: boolean;
+}
+
+export type AffectedOutcomeCategory = typeof AffectedOutcomeCategory[keyof typeof AffectedOutcomeCategory];
+
+
+export const AffectedOutcomeCategory = {
+  MOMENTUM: 'MOMENTUM',
+  SQUEEZE: 'SQUEEZE',
+  STUDS: 'STUDS',
+  WEAKEST: 'WEAKEST',
+} as const;
+
+export type AffectedOutcomeOutcome = typeof AffectedOutcomeOutcome[keyof typeof AffectedOutcomeOutcome];
+
+
+export const AffectedOutcomeOutcome = {
+  WIN: 'WIN',
+  LOSS: 'LOSS',
+  SKIP: 'SKIP',
+} as const;
+
+export interface AffectedOutcome {
+  ticker: string;
+  category: AffectedOutcomeCategory;
+  outcome: AffectedOutcomeOutcome;
+  /** @nullable */
+  exitPrice?: number | null;
+}
+
+export interface ImportConflict {
+  error: string;
+  sessionId: number;
+  date: string;
+  affectedOutcomes: AffectedOutcome[];
 }
 
 export interface MarketWeather {
@@ -175,16 +253,6 @@ export interface QuoteResult {
      * @nullable
      */
   marketState?: string | null;
-  /**
-   * Next earnings date as ISO date string (YYYY-MM-DD), if known.
-   * @nullable
-   */
-  earningsDate?: string | null;
-  /**
-   * Calendar days from today until next earnings. Negative = already reported.
-   * @nullable
-   */
-  earningsInDays?: number | null;
   /** @nullable */
   error?: string | null;
 }
@@ -243,6 +311,11 @@ export interface DashboardSummary {
   equityCurve: EquityCurvePoint[];
 }
 
+/**
+ * Opaque session token — Bearer <sid>.
+ */
+export type AuthorizationSessionHeaderParameter = string;
+
 export type ListCandidatesParams = {
 category?: ListCandidatesCategory;
 outcome?: ListCandidatesOutcome;
@@ -282,5 +355,19 @@ export type GetQuotesParams = {
  * Comma-separated list of screener tickers (e.g. SSAB-B,ERIC-B)
  */
 tickers: string;
+};
+
+export type BeginBrowserLoginParams = {
+returnTo?: string;
+};
+
+export type HandleBrowserLoginCallbackParams = {
+code?: string;
+state?: string;
+iss?: string;
+};
+
+export type LogoutBrowserSessionParams = {
+returnTo?: string;
 };
 

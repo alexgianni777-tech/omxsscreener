@@ -6,6 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './affectedOutcome';
+export * from './affectedOutcomeCategory';
+export * from './affectedOutcomeOutcome';
+export * from './authorizationSessionHeaderParameter';
+export * from './authUser';
+export * from './authUserEnvelope';
+export * from './beginBrowserLoginParams';
 export * from './candidate';
 export * from './candidateCategory';
 export * from './candidateDirection';
@@ -18,14 +25,21 @@ export * from './categoryStatsCategory';
 export * from './dashboardSummary';
 export * from './equityCurvePoint';
 export * from './equityCurvePointOutcome';
+export * from './errorEnvelope';
 export * from './errorResponse';
 export * from './getQuotesParams';
+export * from './handleBrowserLoginCallbackParams';
 export * from './healthStatus';
+export * from './importConflict';
 export * from './listCandidatesCategory';
 export * from './listCandidatesDirection';
 export * from './listCandidatesOutcome';
 export * from './listCandidatesParams';
+export * from './logoutBrowserSessionParams';
+export * from './logoutSuccess';
 export * from './marketWeather';
+export * from './mobileTokenExchangeRequest';
+export * from './mobileTokenExchangeSuccess';
 export * from './quoteResult';
 export * from './sessionDetail';
 export * from './sessionImport';

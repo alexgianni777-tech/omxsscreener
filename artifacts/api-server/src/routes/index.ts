@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import authRouter from "./auth";
 import screenerRouter from "./screener";
 import candidatesRouter from "./candidates";
 import dashboardRouter from "./dashboard";
@@ -14,6 +15,7 @@ import priceChartRouter from "./priceChart";
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(authRouter);
 router.use(screenerRouter);
 router.use(candidatesRouter);
 router.use(dashboardRouter);
