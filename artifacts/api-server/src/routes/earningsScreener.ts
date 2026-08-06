@@ -171,11 +171,11 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
     return;
   }
 
-  // 4. Fetch quoteSummary (earningsHistory + earningsTrend) — concurrency 4
+  // 4. Fetch quoteSummary (earningsHistory + earningsTrend + financialData) — concurrency 4
   const summaryResults = await withConcurrency(
     relevant.map((stock) => async () => {
       const s = await yf.quoteSummary(stock.yahoo, {
-        modules: ["earningsHistory", "earningsTrend"],
+        modules: ["earningsHistory", "earningsTrend", "financialData"],
       });
       return { ticker: stock.yahoo, summary: s };
     }),
@@ -272,6 +272,42 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
     const revDown = currentTrend?.epsRevisions?.downLast30days?.raw ?? 0;
     const nextEpsEstimate = currentTrend?.earningsEstimate?.avg?.raw ?? null;
 
+    // financialData — analyst consensus + price target
+    const fd = (summary as any)?.financialData ?? {};
+    const recommendationKey: string | null = fd.recommendationKey ?? null; // "strong_buy" | "buy" | "hold" | "sell" | "strong_sell"
+    const recommendationMean: number | null = fd.recommendationMean?.raw ?? null; // 1.0–5.0
+    const numberOfAnalystOpinions: number | null = fd.numberOfAnalystOpinions?.raw ?? null;
+    const targetMeanPrice: number | null = fd.targetMeanPrice?.raw ?? null;
+    const targetLowPrice: number | null = fd.targetLowPrice?.raw ?? null;
+    const targetHighPrice: number | null = fd.targetHighPrice?.raw ?? null;
+    const upsidePct: number | null =
+      stock.livePrice && targetMeanPrice
+        ? Number((((targetMeanPrice - stock.livePrice) / stock.livePrice) * 100).toFixed(1))
+        : null;
+
+    // ── Composite score (0–1) ────────────────────────────────────────────────
+    // Weights: beat-rate 30%, avg EPS surprise 25%, dag+1 return 20%, consensus 25%
+    let score = 0;
+    let scoreComponents = 0;
+    if (beatRate != null) { score += beatRate * 0.30; scoreComponents += 0.30; }
+    if (avgSurprisePct != null) {
+      // Normalize: -20% → 0, +20% → 1
+      score += Math.min(Math.max((avgSurprisePct + 20) / 40, 0), 1) * 0.25;
+      scoreComponents += 0.25;
+    }
+    if (avgDayPlusOneReturn != null) {
+      // Normalize: -5% → 0, +5% → 1
+      score += Math.min(Math.max((avgDayPlusOneReturn + 5) / 10, 0), 1) * 0.20;
+      scoreComponents += 0.20;
+    }
+    if (recommendationMean != null) {
+      // Invert: 1 (strong buy) → 1.0, 5 (strong sell) → 0.0
+      score += ((5 - recommendationMean) / 4) * 0.25;
+      scoreComponents += 0.25;
+    }
+    // Re-normalize to available components so partial data isn't penalized
+    const compositeScore = scoreComponents > 0 ? Number((score / scoreComponents).toFixed(3)) : null;
+
     return {
       ticker: stock.yahoo.replace(/\.ST$/i, ""),
       yahooTicker: stock.yahoo,
@@ -289,11 +325,35 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
       avgDayPlusOneReturn,
       revisionUpCount: revUp,
       revisionDownCount: revDown,
+      recommendationKey,
+      recommendationMean,
+      numberOfAnalystOpinions,
+      targetMeanPrice,
+      targetLowPrice,
+      targetHighPrice,
+      upsidePct,
+      compositeScore,
       historicalEarnings: historicalEarnings.slice(0, 4), // last 4 quarters
     };
   });
 
-  res.json({ stocks, generatedAt: new Date().toISOString() });
+  // Sort: upcoming first by days, but within same urgency band sort by compositeScore desc
+  const sorted = stocks.sort((a, b) => {
+    const dA = a.earningsInDays ?? 99;
+    const dB = b.earningsInDays ?? 99;
+    // Past reports last
+    if (dA < 0 && dB >= 0) return 1;
+    if (dB < 0 && dA >= 0) return -1;
+    if (dA < 0 && dB < 0) return dB - dA; // most recent first
+    // Upcoming: sort by score within same day bucket
+    const sameDayBucket = dA === dB;
+    if (sameDayBucket || Math.abs(dA - dB) <= 2) {
+      return (b.compositeScore ?? 0) - (a.compositeScore ?? 0);
+    }
+    return dA - dB;
+  });
+
+  res.json({ stocks: sorted, generatedAt: new Date().toISOString() });
 });
 
 export default router;

@@ -28,6 +28,14 @@ interface EarningsStock {
   avgDayPlusOneReturn: number | null;
   revisionUpCount: number;
   revisionDownCount: number;
+  recommendationKey: string | null;
+  recommendationMean: number | null;
+  numberOfAnalystOpinions: number | null;
+  targetMeanPrice: number | null;
+  targetLowPrice: number | null;
+  targetHighPrice: number | null;
+  upsidePct: number | null;
+  compositeScore: number | null;
   historicalEarnings: HistoricalEarning[];
 }
 interface EarningsResponse {
@@ -166,25 +174,26 @@ function EarningsCard({ stock }: { stock: EarningsStock }) {
   return (
     <div className={`bg-card border rounded-lg shadow-sm p-5 ${urgencyClass}`}>
       {/* Top row */}
-      <div className="flex justify-between items-start mb-4">
-        <div className="flex items-center gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-xl">{stock.ticker}</span>
-              <span className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono text-muted-foreground">
-                {stock.market}
+      <div className="flex justify-between items-start mb-3">
+        <div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-xl">{stock.ticker}</span>
+            <span className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono text-muted-foreground">
+              {stock.market}
+            </span>
+            {stock.recommendationKey && (
+              <Consensusbadge rkey={stock.recommendationKey} nAnalysts={stock.numberOfAnalystOpinions} />
+            )}
+            {(isToday || isTomorrow) && (
+              <span className="flex items-center gap-1 text-xs font-bold text-orange-500">
+                <AlertTriangle className="h-3 w-3" />
+                Undvik ny position
               </span>
-              {(isToday || isTomorrow) && (
-                <span className="flex items-center gap-1 text-xs font-bold text-orange-500">
-                  <AlertTriangle className="h-3 w-3" />
-                  Undvik ny position
-                </span>
-              )}
-            </div>
-            <div className="text-sm text-muted-foreground">{stock.display}</div>
+            )}
           </div>
+          <div className="text-sm text-muted-foreground">{stock.display}</div>
         </div>
-        <div className="text-right">
+        <div className="text-right shrink-0 ml-3">
           <div className={`text-xs font-bold px-2 py-1 rounded ${
             isPast ? "bg-muted text-muted-foreground" :
             isToday ? "bg-destructive/15 text-destructive" :
@@ -196,11 +205,55 @@ function EarningsCard({ stock }: { stock: EarningsStock }) {
           {stock.earningsDate && (
             <div className="text-xs text-muted-foreground mt-1">{stock.earningsDate}</div>
           )}
+          {stock.compositeScore != null && (
+            <div className="text-xs text-muted-foreground mt-1">
+              Score: <span className={`font-mono font-bold ${stock.compositeScore >= 0.65 ? "text-success" : stock.compositeScore >= 0.45 ? "text-amber-600" : "text-muted-foreground"}`}>
+                {Math.round(stock.compositeScore * 100)}
+              </span>/100
+            </div>
+          )}
         </div>
       </div>
 
+      {/* Live price + price target row */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm mb-3">
+        {stock.livePrice != null && (
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-xs">Pris</span>
+            <span className="font-mono font-bold">{formatNumber(stock.livePrice)}</span>
+            {stock.changePct != null && (
+              <span className={`text-xs font-mono ${stock.changePct >= 0 ? "text-success" : "text-destructive"}`}>
+                {stock.changePct >= 0 ? "+" : ""}{formatNumber(stock.changePct, 2)}%
+              </span>
+            )}
+          </div>
+        )}
+        {stock.targetMeanPrice != null && (
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-xs">Kursmål</span>
+            <span className="font-mono font-medium">{formatNumber(stock.targetMeanPrice)}</span>
+            {stock.targetLowPrice != null && stock.targetHighPrice != null && (
+              <span className="text-xs text-muted-foreground font-mono">
+                ({formatNumber(stock.targetLowPrice)}–{formatNumber(stock.targetHighPrice)})
+              </span>
+            )}
+            {stock.upsidePct != null && (
+              <span className={`text-xs font-mono font-bold ${stock.upsidePct >= 0 ? "text-success" : "text-destructive"}`}>
+                {stock.upsidePct >= 0 ? "+" : ""}{stock.upsidePct}%
+              </span>
+            )}
+          </div>
+        )}
+        {stock.nextEpsEstimate != null && (
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-xs">EPS-estimat</span>
+            <span className="font-mono font-medium">{formatNumber(stock.nextEpsEstimate, 2)}</span>
+          </div>
+        )}
+      </div>
+
       {/* Metrics grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
         <Metric
           label="Beat-rate"
           value={stock.beatRate != null ? formatPercent(stock.beatRate) : "–"}
@@ -220,9 +273,9 @@ function EarningsCard({ stock }: { stock: EarningsStock }) {
           valueClass={d1Color}
         />
         <Metric
-          label="Analytikerrevisioner"
+          label="Rev. 30 dagar"
           value={`↑${stock.revisionUpCount} ↓${stock.revisionDownCount}`}
-          sub="senaste 30 dagar"
+          sub="analytikerrevisioner"
           valueClass={
             stock.revisionUpCount > stock.revisionDownCount
               ? "text-success"
@@ -231,27 +284,6 @@ function EarningsCard({ stock }: { stock: EarningsStock }) {
               : "text-muted-foreground"
           }
         />
-      </div>
-
-      {/* Live price + next estimate */}
-      <div className="flex items-center gap-6 text-sm mb-3">
-        {stock.livePrice != null && (
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground text-xs">Pris</span>
-            <span className="font-mono font-bold">{formatNumber(stock.livePrice)}</span>
-            {stock.changePct != null && (
-              <span className={`text-xs font-mono ${stock.changePct >= 0 ? "text-success" : "text-destructive"}`}>
-                {stock.changePct >= 0 ? "+" : ""}{formatNumber(stock.changePct, 2)}%
-              </span>
-            )}
-          </div>
-        )}
-        {stock.nextEpsEstimate != null && (
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground text-xs">Nästa EPS-estimat</span>
-            <span className="font-mono font-medium">{formatNumber(stock.nextEpsEstimate, 2)}</span>
-          </div>
-        )}
       </div>
 
       {/* Historical earnings mini-table */}
@@ -296,5 +328,26 @@ function Metric({ label, value, sub, valueClass = "" }: { label: string; value: 
       <div className={`text-lg font-bold font-mono ${valueClass}`}>{value}</div>
       <div className="text-[10px] text-muted-foreground">{sub}</div>
     </div>
+  );
+}
+
+// ── Analyst consensus pill ────────────────────────────────────────────────────
+const CONSENSUS_CONFIG: Record<string, { label: string; cls: string }> = {
+  strong_buy:  { label: "STRONG BUY",  cls: "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30" },
+  buy:         { label: "BUY",         cls: "bg-green-500/15 text-green-700 dark:text-green-400 border border-green-500/30" },
+  hold:        { label: "HOLD",        cls: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30" },
+  sell:        { label: "SELL",        cls: "bg-red-500/15 text-red-700 dark:text-red-400 border border-red-500/30" },
+  strong_sell: { label: "STRONG SELL", cls: "bg-red-600/20 text-red-700 dark:text-red-400 border border-red-600/40" },
+  underperform:{ label: "UNDERPERFORM",cls: "bg-red-500/15 text-red-700 dark:text-red-400 border border-red-500/30" },
+  outperform:  { label: "OUTPERFORM",  cls: "bg-green-500/15 text-green-700 dark:text-green-400 border border-green-500/30" },
+};
+
+function Consensusbadge({ rkey, nAnalysts }: { rkey: string; nAnalysts: number | null }) {
+  const cfg = CONSENSUS_CONFIG[rkey.toLowerCase()] ?? { label: rkey.replace(/_/g, " ").toUpperCase(), cls: "bg-muted text-muted-foreground border border-border" };
+  return (
+    <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded ${cfg.cls}`}>
+      {cfg.label}
+      {nAnalysts != null && <span className="font-normal opacity-70">({nAnalysts})</span>}
+    </span>
   );
 }
