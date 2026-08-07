@@ -126,15 +126,24 @@ async function runImport(date: string): Promise<void> {
 
   const edgeData: any = await resp.json();
 
-  // Guard: only import if EdgeAI has generated today's data.
-  // If generatedAt is from yesterday the file hasn't refreshed yet — retry next tick.
+  // Guard: skip only if EdgeAI data is older than 7 days (clearly stale / off-season).
+  // A few days' lag is normal over weekends — stale picks are better than no picks.
   const generatedDate = edgeData.generatedAt ? edgeData.generatedAt.slice(0, 10) : null;
-  if (generatedDate && generatedDate < date) {
-    logger.info(
-      { date, generatedAt: edgeData.generatedAt },
-      "[scheduler] EdgeAI data not yet refreshed for today — will retry",
-    );
-    return;
+  if (generatedDate) {
+    const ageDays = (new Date(date).getTime() - new Date(generatedDate).getTime()) / 86_400_000;
+    if (ageDays > 7) {
+      logger.info(
+        { date, generatedAt: edgeData.generatedAt, ageDays },
+        "[scheduler] EdgeAI data too old (>7 days) — skipping",
+      );
+      return;
+    }
+    if (ageDays > 0) {
+      logger.info(
+        { date, generatedAt: edgeData.generatedAt, ageDays },
+        "[scheduler] EdgeAI data is a few days old — importing anyway",
+      );
+    }
   }
 
   const se = edgeData?.markets?.SE;
