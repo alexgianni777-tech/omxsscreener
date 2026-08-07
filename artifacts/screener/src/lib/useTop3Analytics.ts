@@ -8,6 +8,7 @@ export interface Top3Pick {
   edgeScore: number;
   outcome: string;
   r: number | null;
+  earningsWarning: boolean;
 }
 
 export interface Top3Session {

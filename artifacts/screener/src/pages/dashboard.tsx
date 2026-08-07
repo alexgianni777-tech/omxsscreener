@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import {
   ArrowUpRight, ArrowDownRight, Target, Activity, CheckCircle2,
   Clock, Zap, TrendingUp, TrendingDown, BarChart2, Sigma, Trophy,
+  AlertTriangle,
 } from "lucide-react";
 import { formatNumber, formatPercent } from "../lib/utils";
 import {
@@ -10,6 +11,7 @@ import {
   ResponsiveContainer, ReferenceLine, TooltipProps,
 } from "recharts";
 import { useTop3Analytics, type Top3Session } from "../lib/useTop3Analytics";
+import { useState, useMemo } from "react";
 
 export function Dashboard() {
   const { data: summary, isLoading, isError } = useGetDashboardSummary();
@@ -325,8 +327,8 @@ function EquityCurveTooltip({ active, payload }: TooltipProps<number, string>) {
 function Top3Section() {
   const { data, isLoading } = useTop3Analytics();
 
-  const seSessions = data?.sessions.filter((s) => s.source !== "edgeai") ?? [];
-  const usSessions = data?.sessions.filter((s) => s.source === "edgeai") ?? [];
+  const seSessions = data?.sessions.filter((s) => (s as any).source !== "edgeai") ?? [];
+  const usSessions = data?.sessions.filter((s) => (s as any).source === "edgeai") ?? [];
 
   return (
     <div className="space-y-6">
@@ -381,10 +383,25 @@ function Top3MarketCard({
   isLoading: boolean;
   accentColor: string;
 }) {
-  const chartData = computeMarketChartData(sessions);
+  const [excludeEarnings, setExcludeEarnings] = useState(false);
+
+  const displaySessions = useMemo(() => {
+    if (!excludeEarnings) return sessions;
+    return sessions.map((s) => ({
+      ...s,
+      picks: s.picks.filter((p) => !p.earningsWarning),
+    }));
+  }, [sessions, excludeEarnings]);
+
+  const chartData = computeMarketChartData(displaySessions);
   const hasData = chartData.length > 1;
-  const stats = computeMarketStats(sessions);
+  const stats = computeMarketStats(displaySessions);
   const finalR = hasData ? chartData[chartData.length - 1].cumulativeR : null;
+
+  const earningsWarningCount = useMemo(
+    () => sessions.reduce((n, s) => n + s.picks.filter((p) => p.earningsWarning).length, 0),
+    [sessions],
+  );
 
   return (
     <div className="bg-card border border-border rounded-lg p-5 shadow-sm flex flex-col gap-4">
@@ -397,6 +414,26 @@ function Top3MarketCard({
           </span>
         )}
       </div>
+
+      {/* Earnings-filter toggle */}
+      {earningsWarningCount > 0 && (
+        <div className="flex items-center justify-between py-1.5 px-2 bg-amber-500/5 rounded-md border border-amber-500/20">
+          <div className="flex items-center gap-1.5 text-xs text-amber-500">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            <span>{earningsWarningCount} pick{earningsWarningCount !== 1 ? "s" : ""} med rapportvarning</span>
+          </div>
+          <button
+            onClick={() => setExcludeEarnings((v) => !v)}
+            className={`text-xs px-2 py-0.5 rounded border transition-colors font-medium ${
+              excludeEarnings
+                ? "bg-amber-500/15 border-amber-500/40 text-amber-500"
+                : "bg-muted border-border text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {excludeEarnings ? "Ren kurva" : "Exkludera"}
+          </button>
+        </div>
+      )}
 
       {/* Stat pills */}
       {stats.total > 0 && (
@@ -431,13 +468,13 @@ function Top3MarketCard({
             <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
             <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}R`} width={36} />
             <ReferenceLine y={0} stroke="currentColor" strokeOpacity={0.25} />
-            <Tooltip content={<Top3Tooltip sessions={sessions} />} />
+            <Tooltip content={<Top3Tooltip sessions={displaySessions} />} />
             <Line type="linear" dataKey="cumulativeR" strokeWidth={2} stroke={accentColor} dot={{ r: 3, fill: accentColor }} activeDot={{ r: 5 }} isAnimationActive />
           </LineChart>
         </ResponsiveContainer>
       )}
 
-      {/* Per-session picks table */}
+      {/* Per-session picks table — always shows raw sessions with warning badges */}
       {sessions.length > 0 && (
         <div className="border-t border-border pt-3 space-y-2">
           {sessions.map((s) => (
@@ -447,7 +484,10 @@ function Top3MarketCard({
                 {s.picks.map((p) => (
                   <span
                     key={p.ticker}
-                    className={`px-1.5 py-0.5 rounded font-mono font-medium ${
+                    title={p.earningsWarning ? "Rapportvarning — Regel 7 hade exkluderat denna" : undefined}
+                    className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded font-mono font-medium ${
+                      p.earningsWarning ? "ring-1 ring-amber-500/50" : ""
+                    } ${
                       p.outcome === "WIN"
                         ? "bg-success/15 text-success"
                         : p.outcome === "LOSS"
@@ -455,6 +495,9 @@ function Top3MarketCard({
                         : "bg-muted text-muted-foreground"
                     }`}
                   >
+                    {p.earningsWarning && (
+                      <AlertTriangle className="h-2.5 w-2.5 text-amber-500 shrink-0" />
+                    )}
                     {p.ticker.replace(/\.ST$/i, "")}
                     {p.r != null ? ` ${p.r >= 0 ? "+" : ""}${formatNumber(p.r, 1)}R` : ""}
                   </span>
@@ -513,7 +556,10 @@ function Top3Tooltip({
       <div className="font-semibold text-muted-foreground">{fullDate ?? d.date}</div>
       {session?.picks.map((p) => (
         <div key={p.ticker} className="flex justify-between gap-4">
-          <span className="font-mono">{p.ticker}</span>
+          <span className="font-mono flex items-center gap-1">
+            {p.earningsWarning && <AlertTriangle className="h-2.5 w-2.5 text-amber-500" />}
+            {p.ticker}
+          </span>
           <span
             className={
               p.outcome === "WIN"

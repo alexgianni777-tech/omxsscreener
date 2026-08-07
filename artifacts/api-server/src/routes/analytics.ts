@@ -5,6 +5,12 @@
  * For every session, picks the 3 candidates with the highest edge score
  * (winRate × expectancyR), then tracks their logged outcomes as R-multiples.
  * PENDING outcomes are excluded from running totals.
+ *
+ * Manual top-3 overrides (isTop3Pick === true) take precedence over auto-rank.
+ * Each pick includes `earningsWarning: true` when the stock had an earnings
+ * report within 0–5 calendar days of the session date (Rule 7 exclusion zone).
+ * The `earningsInDays` value is stored at import time, so it reflects the
+ * earnings calendar that existed when the session was imported.
  */
 import { Router, type IRouter } from "express";
 import { asc } from "drizzle-orm";
@@ -47,8 +53,9 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
     );
 
     // Prefer manually starred picks; fall back to auto-rank by edge score
-    const manualPicks = candidates.filter((c) => (c as any).isTop3Pick === true);
+    const manualPicks = candidates.filter((c) => c.isTop3Pick === true);
     const top3 = manualPicks.length > 0 ? manualPicks.slice(0, 3) : sorted.slice(0, 3);
+
     let sessionR = 0;
     let sessionHasResolved = false;
 
@@ -73,6 +80,11 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
         cumulativeR += r;
       }
 
+      // earningsWarning: true when earningsInDays (stored at import time) is
+      // within the 0–5 day Rule 7 exclusion window.
+      const eid = c.earningsInDays;
+      const earningsWarning = eid != null && eid >= 0 && eid <= 5;
+
       return {
         ticker: c.ticker,
         direction: c.direction,
@@ -81,6 +93,7 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
         ),
         outcome: c.outcome,
         r,
+        earningsWarning,
       };
     });
 

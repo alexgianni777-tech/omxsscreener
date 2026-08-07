@@ -20,6 +20,7 @@ export const candidatesTable = pgTable("candidates", {
   volMultiplier: real("vol_multiplier").notNull(),
   distFrom20dH: real("dist_from_20d_h").notNull(),
   gapWarning: real("gap_warning"),
+  earningsInDays: integer("earnings_in_days"),
   direction: text("direction", { enum: ["LONG", "SHORT"] }).notNull(),
   entryPrice: real("entry_price").notNull(),
   stopPrice: real("stop_price").notNull(),

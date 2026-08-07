@@ -13,12 +13,26 @@ import {
   ReimportSessionResponse,
 } from "@workspace/api-zod";
 import { parseScreenerText, ScreenerParseError } from "../lib/screenerParser";
+import YahooFinance from "yahoo-finance2";
+import { resolveYahooTicker } from "../lib/omxs30TickerMap";
 
 const router: IRouter = Router();
 
 // POST /screener/sessions/import
 router.post("/screener/sessions/import", async (req, res): Promise<void> => {
-  const parsed = ImportSessionBody.safeParse(req.body);
+  const parsed = GetSessionResponse.parse({
+    id: session.id,
+    date: session.date,
+    marketWeather: {
+      omxsValue: session.omxsValue,
+      perf5d: session.perf5d,
+      perf1m: session.perf1m,
+      perf3m: session.perf3m,
+      rsi: session.marketRsi,
+      trendLabel: session.trendLabel,
+    },
+    candidates: candidates.map(mapCandidate),
+  });
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
@@ -36,10 +50,13 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
   }
 
   // Check for duplicate date
-  const existing = await db
-    .select({ id: screenerSessionsTable.id })
-    .from(screenerSessionsTable)
-    .where(eq(screenerSessionsTable.date, session.date));
+    const existing = await db
+      .select({ id: candidatesTable.id })
+      .from(candidatesTable)
+      .where(and(
+        eq(candidatesTable.sessionId, candidate.sessionId),
+        eq(candidatesTable.isTop3Pick as any, true),
+      ));
 
   const { force } = parsed.data;
 
@@ -71,6 +88,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
   const buildCandidateRow = (
     sessionId: number,
     c: (typeof session.candidates)[number],
+    earningsInDays: number | null,
     preserved?: { outcome: string; exitPrice: number | null; outcomeNotes: string | null },
   ) => ({
     sessionId,
@@ -86,6 +104,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     volMultiplier: c.volMultiplier,
     distFrom20dH: c.distFrom20dH,
     gapWarning: c.gapWarning ?? undefined,
+    earningsInDays: earningsInDays ?? undefined,
     direction: c.direction,
     entryPrice: c.entryPrice,
     stopPrice: c.stopPrice,
@@ -97,20 +116,17 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     outcomeNotes: preserved?.outcomeNotes ?? null,
   });
 
-  // ---------- force re-import: preserve outcomes, replace everything else ----------
-  if (existing.length > 0 && force) {
+  const earningsBatch = await fetchEarningsBatch(
+    session.candidates.map((c) => c.ticker),
+    session.date,
+  );
     const existingId = existing[0].id;
 
     // Snapshot existing outcomes before deleting
-    const existingCandidates = await db
-      .select({
-        ticker: candidatesTable.ticker,
-        outcome: candidatesTable.outcome,
-        exitPrice: candidatesTable.exitPrice,
-        outcomeNotes: candidatesTable.outcomeNotes,
-      })
-      .from(candidatesTable)
-      .where(eq(candidatesTable.sessionId, existingId));
+  const existingCandidates = await db
+    .select()
+    .from(candidatesTable)
+    .where(eq(candidatesTable.sessionId, params.data.id));
 
     const outcomeByTicker = new Map(
       existingCandidates
@@ -121,42 +137,47 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     // Delete old candidates then update session metadata
     await db.delete(candidatesTable).where(eq(candidatesTable.sessionId, existingId));
 
-    const [updatedSession] = await db
-      .update(screenerSessionsTable)
-      .set({
-        omxsValue: session.marketWeather.omxsValue,
-        perf5d: session.marketWeather.perf5d,
-        perf1m: session.marketWeather.perf1m,
-        perf3m: session.marketWeather.perf3m,
-        marketRsi: session.marketWeather.rsi,
-        trendLabel: session.marketWeather.trendLabel,
-        rawText: parsed.data.rawText,
-      })
-      .where(eq(screenerSessionsTable.id, existingId))
-      .returning();
+  const [updatedSession] = await db
+    .update(screenerSessionsTable)
+    .set({
+      omxsValue: parsedSession.marketWeather.omxsValue,
+      perf5d: parsedSession.marketWeather.perf5d,
+      perf1m: parsedSession.marketWeather.perf1m,
+      perf3m: parsedSession.marketWeather.perf3m,
+      marketRsi: parsedSession.marketWeather.rsi,
+      trendLabel: parsedSession.marketWeather.trendLabel,
+      rawText: bodyParsed.data.rawText,
+    })
+    .where(eq(screenerSessionsTable.id, params.data.id))
+    .returning();
 
     const updatedCandidates = await db
       .insert(candidatesTable)
       .values(
         session.candidates.map((c) =>
-          buildCandidateRow(updatedSession.id, c, outcomeByTicker.get(c.ticker)),
+          buildCandidateRow(
+            updatedSession.id,
+            c,
+            earningsBatch.get(c.ticker) ?? null,
+            outcomeByTicker.get(c.ticker),
+          ),
         ),
       )
       .returning();
 
-    const response = ImportSessionResponse.parse({
-      id: updatedSession.id,
-      date: updatedSession.date,
-      marketWeather: {
-        omxsValue: updatedSession.omxsValue,
-        perf5d: updatedSession.perf5d,
-        perf1m: updatedSession.perf1m,
-        perf3m: updatedSession.perf3m,
-        rsi: updatedSession.marketRsi,
-        trendLabel: updatedSession.trendLabel,
-      },
-      candidates: updatedCandidates.map(mapCandidate),
-    });
+  const response = ImportSessionResponse.parse({
+    id: insertedSession.id,
+    date: insertedSession.date,
+    marketWeather: {
+      omxsValue: insertedSession.omxsValue,
+      perf5d: insertedSession.perf5d,
+      perf1m: insertedSession.perf1m,
+      perf3m: insertedSession.perf3m,
+      rsi: insertedSession.marketRsi,
+      trendLabel: insertedSession.trendLabel,
+    },
+    candidates: insertedCandidates.map(mapCandidate),
+  });
 
     res.status(200).json(response);
     return;
@@ -179,7 +200,11 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
 
   const insertedCandidates = await db
     .insert(candidatesTable)
-    .values(session.candidates.map((c) => buildCandidateRow(insertedSession.id, c)))
+    .values(
+      session.candidates.map((c) =>
+        buildCandidateRow(insertedSession.id, c, earningsBatch.get(c.ticker) ?? null),
+      ),
+    )
     .returning();
 
   const response = ImportSessionResponse.parse({
@@ -201,7 +226,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
 
 // PUT /screener/sessions/:id/reimport
 router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> => {
-  const params = ReimportSessionParams.safeParse(req.params);
+  const params = DeleteSessionParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
@@ -301,32 +326,24 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
 
   for (const c of parsedSession.candidates) {
     const key = `${c.category}:${c.ticker}`;
-    const existing = existingMap.get(key);
+    const existing = await db
+      .select({ id: candidatesTable.id })
+      .from(candidatesTable)
+      .where(and(
+        eq(candidatesTable.sessionId, candidate.sessionId),
+        eq(candidatesTable.isTop3Pick as any, true),
+      ));
+    if (existing.length >= 3 && !existing.some((p) => p.id === id)) {
+      res.status(409).json({ error: "Max 3 picks per session — ta bort en stjärna först" });
+      return;
+    }
+  }
 
-    if (existing) {
-      // Update price/signal fields but preserve outcome, exitPrice, outcomeNotes
-      const [updated] = await db
-        .update(candidatesTable)
-        .set({
-          rank: c.rank,
-          price: c.price,
-          rs3m: c.rs3m,
-          perf1m: c.perf1m,
-          rsi: c.rsi,
-          pctB: c.pctB,
-          atr: c.atr,
-          volMultiplier: c.volMultiplier,
-          distFrom20dH: c.distFrom20dH,
-          gapWarning: c.gapWarning ?? null,
-          direction: c.direction,
-          entryPrice: c.entryPrice,
-          stopPrice: c.stopPrice,
-          targetPrice: c.targetPrice,
-          rr: c.rr,
-          oneR: c.oneR,
-        })
-        .where(eq(candidatesTable.id, existing.id))
-        .returning();
+  const [updated] = await db
+    .update(candidatesTable)
+    .set({ isTop3Pick } as any)
+    .where(eq(candidatesTable.id, id))
+    .returning();
       resultCandidates.push(updated);
     } else {
       // New candidate: insert as PENDING
@@ -452,7 +469,7 @@ router.get("/screener/sessions", async (req, res): Promise<void> => {
 
 // GET /screener/sessions/:id
 router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
-  const params = GetSessionParams.safeParse(req.params);
+  const params = DeleteSessionParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
@@ -613,3 +630,35 @@ router.patch("/screener/candidates/:id/top3pick", async (req, res): Promise<void
 });
 
 export default router;
+
+const _yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
+
+/** Fetch earningsInDays for all unique tickers in parallel, keyed by ticker. */
+async function fetchEarningsBatch(
+  tickers: string[],
+  sessionDate: string,
+): Promise<Map<string, number | null>> {
+  const unique = [...new Set(tickers)];
+  const results = await Promise.all(
+    unique.map(async (t) => [t, await fetchEarningsInDaysAt(t, sessionDate)] as const),
+  );
+  return new Map(results);
+}
+
+/** Fetch earningsInDays for a ticker at a given session date (YYYY-MM-DD).
+ *  Returns null on any error. */
+async function fetchEarningsInDaysAt(ticker: string, sessionDate: string): Promise<number | null> {
+  try {
+    const quote = await _yf.quote(resolveYahooTicker(ticker));
+    const earningsTs: Date | null = (quote as any).earningsTimestamp ?? null;
+    if (!earningsTs || !(earningsTs instanceof Date)) return null;
+    const ms = earningsTs.getTime();
+    if (!ms || isNaN(ms)) return null;
+    const earningsDateStr = earningsTs.toISOString().slice(0, 10);
+    return Math.round(
+      (new Date(earningsDateStr).getTime() - new Date(sessionDate).getTime()) / 86_400_000,
+    );
+  } catch {
+    return null;
+  }
+}
