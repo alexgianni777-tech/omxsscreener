@@ -97,8 +97,8 @@ router.get("/survival", async (_req, res): Promise<void> => {
 
 // PATCH /survival/config
 router.patch("/survival/config", async (req, res): Promise<void> => {
-  const { startCapital, goalCapital } = req.body ?? {};
-  const patch: Partial<{ startCapital: number; goalCapital: number; updatedAt: Date }> = {};
+  const { startCapital, goalCapital, currentCapital, riskPct } = req.body ?? {};
+  const patch: Partial<{ startCapital: number; goalCapital: number; currentCapital: number | null; riskPct: number; updatedAt: Date }> = {};
   if (startCapital !== undefined) {
     if (typeof startCapital !== "number" || startCapital <= 0) {
       res.status(400).json({ error: "startCapital must be a positive number" });
@@ -106,13 +106,12 @@ router.patch("/survival/config", async (req, res): Promise<void> => {
     }
     patch.startCapital = startCapital;
   }
-  const { currentCapital } = req.body ?? {};
   if (currentCapital !== undefined) {
     if (currentCapital !== null && (typeof currentCapital !== "number" || !isFinite(currentCapital) || currentCapital < 0)) {
       res.status(400).json({ error: "currentCapital must be a non-negative number or null" });
       return;
     }
-    (patch as any).currentCapital = currentCapital;
+    patch.currentCapital = currentCapital;
   }
   if (goalCapital !== undefined) {
     if (typeof goalCapital !== "number" || goalCapital <= 0) {
@@ -125,6 +124,13 @@ router.patch("/survival/config", async (req, res): Promise<void> => {
       return;
     }
     patch.goalCapital = goalCapital;
+  }
+  if (riskPct !== undefined) {
+    if (typeof riskPct !== "number" || !isFinite(riskPct) || riskPct <= 0 || riskPct > 100) {
+      res.status(400).json({ error: "riskPct must be a number between 0 and 100" });
+      return;
+    }
+    patch.riskPct = riskPct;
   }
   patch.updatedAt = new Date();
   const config = await getOrCreateConfig();

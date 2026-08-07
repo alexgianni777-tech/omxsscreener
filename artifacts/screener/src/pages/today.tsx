@@ -55,7 +55,7 @@ type Session = {
 };
 
 type ChallengeData = {
-  config: { startCapital: number; goalCapital: number; currentCapital: number | null };
+  config: { startCapital: number; goalCapital: number; currentCapital: number | null; riskPct: number };
   stats: { equity: number; totalTrades: number; wins: number; losses: number };
 };
 
@@ -70,19 +70,20 @@ export function Today() {
   const [logging, setLogging] = useState<number | null>(null); // candidate id
   const [submitting, setSubmitting] = useState(false);
 
-  // risk % stored in localStorage
-  const [riskPct, setRiskPct] = useState<number>(() => {
-    const v = parseFloat(localStorage.getItem("challenge_risk_pct") ?? "2");
-    return isNaN(v) ? 2 : v;
-  });
+  // risk % stored on server (survival_config.risk_pct)
+  const [riskPct, setRiskPct] = useState<number>(2);
   const [editingRisk, setEditingRisk] = useState(false);
-  const [riskInput, setRiskInput] = useState(String(riskPct));
+  const [riskInput, setRiskInput] = useState("2");
 
-  const saveRisk = () => {
+  const saveRisk = async () => {
     const v = parseFloat(riskInput);
     if (!isNaN(v) && v > 0 && v <= 100) {
       setRiskPct(v);
-      localStorage.setItem("challenge_risk_pct", String(v));
+      await fetch(api("/survival/config"), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ riskPct: v }),
+      });
     }
     setEditingRisk(false);
   };
@@ -100,7 +101,14 @@ export function Today() {
         setSession(detail);
       }
 
-      if (challengeRes) setChallenge(challengeRes);
+      if (challengeRes) {
+        setChallenge(challengeRes);
+        const serverRisk = challengeRes.config?.riskPct;
+        if (typeof serverRisk === "number" && serverRisk > 0) {
+          setRiskPct(serverRisk);
+          setRiskInput(String(serverRisk));
+        }
+      }
     } finally {
       setLoading(false);
     }

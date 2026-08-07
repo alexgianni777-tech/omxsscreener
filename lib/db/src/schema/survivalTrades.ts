@@ -5,6 +5,7 @@ export const survivalConfigTable = pgTable("survival_config", {
   startCapital: real("start_capital").notNull().default(5000),
   goalCapital: real("goal_capital").notNull().default(1000000),
   currentCapital: real("current_capital"),   // manually-entered actual account balance
+  riskPct: real("risk_pct").notNull().default(2),  // % of account risked per trade
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -21,16 +22,5 @@ export const survivalTradesTable = pgTable("survival_trades", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const openPositionsTable = pgTable("open_positions", {
-  id: serial("id").primaryKey(),
-  ticker: text("ticker").notNull(),
-  direction: text("direction", { enum: ["LONG", "SHORT"] }).notNull(),
-  entryPrice: real("entry_price").notNull(),
-  shares: real("shares").notNull(),
-  stopPrice: real("stop_price"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
 export type SurvivalConfig = typeof survivalConfigTable.$inferSelect;
 export type SurvivalTrade = typeof survivalTradesTable.$inferSelect;
-export type OpenPosition = typeof openPositionsTable.$inferSelect;

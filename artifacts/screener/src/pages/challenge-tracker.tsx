@@ -151,6 +151,7 @@ export function ChallengeTracker() {
   const [editStart, setEditStart] = useState("");
   const [editGoal, setEditGoal] = useState("");
   const [editCurrent, setEditCurrent] = useState("");
+  const [editRisk, setEditRisk] = useState("2");
 
   // open positions (DB-backed)
   const [positions, setPositions] = useState<OpenPosition[]>([]);
@@ -173,6 +174,7 @@ export function ChallengeTracker() {
       setEditStart(String(d.config.startCapital));
       setEditGoal(String(d.config.goalCapital));
       setEditCurrent(d.config.currentCapital != null ? String(d.config.currentCapital) : "");
+      setEditRisk(String((d.config as any).riskPct ?? 2));
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -187,6 +189,8 @@ export function ChallengeTracker() {
     if (editStart) body.startCapital = Number(editStart);
     if (editGoal) body.goalCapital = Math.max(Number(editGoal), Number(editStart) * 2);
     body.currentCapital = editCurrent !== "" ? Number(editCurrent) : null;
+    const riskVal = parseFloat(editRisk);
+    if (!isNaN(riskVal) && riskVal > 0 && riskVal <= 100) body.riskPct = riskVal;
     await fetch(api("/survival/config"), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -303,11 +307,12 @@ export function ChallengeTracker() {
         </div>
 
         {/* Config inputs */}
-        <div className="grid grid-cols-3 gap-2 text-xs">
+        <div className="grid grid-cols-4 gap-2 text-xs">
           {[
             { label: "Start kr", val: editStart, set: setEditStart },
             { label: "Aktuellt kr", val: editCurrent, set: setEditCurrent, highlight: true },
             { label: "Mål kr", val: editGoal, set: setEditGoal },
+            { label: "Risk %/trade", val: editRisk, set: setEditRisk },
           ].map(({ label, val, set, highlight }) => (
             <div key={label}>
               <div className="text-muted-foreground mb-1">{label}</div>
