@@ -1,7 +1,7 @@
 import { useGetSession, getGetSessionQueryKey, useGetQuotes, Candidate, CandidateOutcomeProperty, useUpdateCandidateOutcome, QuoteResult } from "@workspace/api-client-react";
 import { useParams, Link } from "wouter";
 import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
-import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity, AlertTriangle, Clock, Newspaper, ExternalLink, CandlestickChart as CandlestickIcon } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity, AlertTriangle, Clock, Newspaper, ExternalLink, CandlestickChart as CandlestickIcon, Star } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { CandlestickChart } from "../components/CandlestickChart";
@@ -89,6 +89,38 @@ export function SessionDetail() {
   const { marketWeather, candidates } = session;
   const isEdgeAI = (session as any).source === "edgeai";
   const categories = ["MOMENTUM", "SQUEEZE", "STUDS", "WEAKEST"] as const;
+
+  // ── Top 3 picks ──────────────────────────────────────────────────────────────
+  const [pickedIds, setPickedIds] = useState<Set<number>>(() => {
+    const s = new Set<number>();
+    session?.candidates.forEach((c: any) => { if (c.isTop3Pick) s.add(c.id); });
+    return s;
+  });
+  useEffect(() => {
+    const s = new Set<number>();
+    session?.candidates.forEach((c: any) => { if (c.isTop3Pick) s.add(c.id); });
+    setPickedIds(s);
+  }, [session?.id]);
+
+  const togglePick = async (candidateId: number, current: boolean) => {
+    const next = !current;
+    if (next && pickedIds.size >= 3) return;
+    setPickedIds((prev) => { const s = new Set(prev); next ? s.add(candidateId) : s.delete(candidateId); return s; });
+    await fetch(`/api/screener/candidates/${candidateId}/top3pick`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isTop3Pick: next }),
+    });
+  };
+
+  // ── Market state (from first available quote) ─────────────────────────────
+  const anyQuote = quotes?.[0];
+  const marketState = anyQuote?.marketState ?? null;
+  const marketStateLabel =
+    marketState === "REGULAR" ? { text: "🟢 Börsen öppen", cls: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" } :
+    marketState === "PRE"     ? { text: "🟡 Förbörs", cls: "text-amber-400 bg-amber-500/10 border-amber-500/20" } :
+    marketState === "POST"    ? { text: "🟡 Efterbörs", cls: "text-amber-400 bg-amber-500/10 border-amber-500/20" } :
+    marketState != null       ? { text: "⚫ Stängd", cls: "text-muted-foreground bg-muted border-border" } : null;
 
   // ── Signal age ──────────────────────────────────────────────────────────────
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -183,6 +215,26 @@ export function SessionDetail() {
         </div>
       )}
 
+      {/* ── Live price source + market state ── */}
+      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1.5">
+          <Activity className="w-3 h-3" />
+          Priser: Yahoo Finance · uppdateras var 60:e sekund
+        </div>
+        {marketStateLabel && (
+          <span className={`px-2 py-0.5 rounded border font-medium text-[11px] ${marketStateLabel.cls}`}>
+            {marketStateLabel.text}
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-1.5 font-medium">
+          <Star className={`w-3.5 h-3.5 ${pickedIds.size > 0 ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`} />
+          <span className={pickedIds.size > 0 ? "text-amber-400" : ""}>
+            Top 3: {pickedIds.size}/3 markerade
+          </span>
+          {pickedIds.size === 0 && <span className="text-muted-foreground/60">— klicka ⭐ på kandidater</span>}
+        </div>
+      </div>
+
       {/* EdgeAI Panel — shown when session was imported from EdgeAI */}
       {isEdgeAI && (
         <EdgeAIPanel session={session as any} />
@@ -219,6 +271,9 @@ export function SessionDetail() {
                     daysOld={daysOld}
                     isEdgeAI={isEdgeAI}
                     rank={idx + 1}
+                    isPicked={pickedIds.has(candidate.id)}
+                    pickedCount={pickedIds.size}
+                    onTogglePick={togglePick}
                   />
                 ))}
               </div>
@@ -405,7 +460,7 @@ function NewsPanel({ news, loading }: { news: NewsItem[]; loading: boolean }) {
 
 // ── Candidate row ─────────────────────────────────────────────────────────────
 function CandidateRow({
-  candidate, sessionId, quote, daysOld, isEdgeAI, rank,
+  candidate, sessionId, quote, daysOld, isEdgeAI, rank, isPicked, pickedCount, onTogglePick,
 }: {
   candidate: Candidate;
   sessionId: number;
@@ -413,6 +468,9 @@ function CandidateRow({
   daysOld: number;
   isEdgeAI: boolean;
   rank: number;
+  isPicked: boolean;
+  pickedCount: number;
+  onTogglePick: (id: number, current: boolean) => void;
 }) {
   const updateOutcome = useUpdateCandidateOutcome();
   const queryClient = useQueryClient();
@@ -505,6 +563,20 @@ function CandidateRow({
               className={`p-1 rounded transition-colors ${showChart ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
             >
               <CandlestickIcon className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => onTogglePick(candidate.id, isPicked)}
+              disabled={!isPicked && pickedCount >= 3}
+              title={isPicked ? "Ta bort från Top 3" : pickedCount >= 3 ? "Max 3 picks — ta bort en först" : "Lägg till i Top 3"}
+              className={`p-1 rounded transition-colors ${
+                isPicked
+                  ? "text-amber-400 hover:text-amber-300"
+                  : pickedCount >= 3
+                  ? "text-muted-foreground/30 cursor-not-allowed"
+                  : "text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10"
+              }`}
+            >
+              <Star className={`w-3.5 h-3.5 ${isPicked ? "fill-amber-400" : ""}`} />
             </button>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap justify-end">

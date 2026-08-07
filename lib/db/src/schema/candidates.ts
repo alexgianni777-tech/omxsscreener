@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, real, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, real, boolean, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { screenerSessionsTable } from "./screenerSessions";
@@ -29,6 +29,7 @@ export const candidatesTable = pgTable("candidates", {
   outcome: text("outcome", { enum: ["WIN", "LOSS", "SKIP", "PENDING"] }).notNull().default("PENDING"),
   exitPrice: real("exit_price"),
   outcomeNotes: text("outcome_notes"),
+  isTop3Pick: boolean("is_top3_pick").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

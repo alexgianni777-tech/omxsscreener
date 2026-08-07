@@ -46,7 +46,9 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
       (a, b) => (b.perf1m ?? 0) * (b.rsi ?? 0) - (a.perf1m ?? 0) * (a.rsi ?? 0),
     );
 
-    const top3 = sorted.slice(0, 3);
+    // Prefer manually starred picks; fall back to auto-rank by edge score
+    const manualPicks = candidates.filter((c) => (c as any).isTop3Pick === true);
+    const top3 = manualPicks.length > 0 ? manualPicks.slice(0, 3) : sorted.slice(0, 3);
     let sessionR = 0;
     let sessionHasResolved = false;
 

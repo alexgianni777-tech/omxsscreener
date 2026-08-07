@@ -573,4 +573,43 @@ function mapCandidate(c: {
   };
 }
 
+// PATCH /screener/candidates/:id/top3pick — toggle manual Top 3 star (max 3 per session)
+router.patch("/screener/candidates/:id/top3pick", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const { isTop3Pick } = req.body ?? {};
+  if (typeof isTop3Pick !== "boolean") {
+    res.status(400).json({ error: "isTop3Pick must be boolean" });
+    return;
+  }
+
+  // Check existing candidate + session
+  const [candidate] = await db.select().from(candidatesTable).where(eq(candidatesTable.id, id)).limit(1);
+  if (!candidate) { res.status(404).json({ error: "Candidate not found" }); return; }
+
+  if (isTop3Pick) {
+    // Enforce max 3 per session
+    const existing = await db
+      .select({ id: candidatesTable.id })
+      .from(candidatesTable)
+      .where(and(
+        eq(candidatesTable.sessionId, candidate.sessionId),
+        eq(candidatesTable.isTop3Pick as any, true),
+      ));
+    if (existing.length >= 3 && !existing.some((p) => p.id === id)) {
+      res.status(409).json({ error: "Max 3 picks per session — ta bort en stjärna först" });
+      return;
+    }
+  }
+
+  const [updated] = await db
+    .update(candidatesTable)
+    .set({ isTop3Pick } as any)
+    .where(eq(candidatesTable.id, id))
+    .returning();
+
+  res.json(updated);
+});
+
 export default router;
