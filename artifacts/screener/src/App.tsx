@@ -7,7 +7,7 @@ import { Sessions } from './pages/sessions';
 import { SessionDetail } from './pages/session-detail';
 import { Import } from './pages/import';
 import { Candidates } from './pages/candidates';
-import { Survival } from './pages/survival';
+import { ChallengeTracker } from './pages/challenge-tracker';
 import { Earnings } from './pages/earnings';
 import { Loader2, Lock } from 'lucide-react';
 
@@ -71,7 +71,7 @@ function LoginGate() {
         <Route path="/sessions/:id" component={SessionDetail} />
         <Route path="/import" component={Import} />
         <Route path="/candidates" component={Candidates} />
-        <Route path="/survival" component={Survival} />
+        <Route path="/survival" component={ChallengeTracker} />
         <Route path="/earnings" component={Earnings} />
         <Route component={NotFound} />
       </Switch>

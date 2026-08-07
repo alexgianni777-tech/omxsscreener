@@ -106,6 +106,14 @@ router.patch("/survival/config", async (req, res): Promise<void> => {
     }
     patch.startCapital = startCapital;
   }
+  const { currentCapital } = req.body ?? {};
+  if (currentCapital !== undefined) {
+    if (currentCapital !== null && (typeof currentCapital !== "number" || !isFinite(currentCapital) || currentCapital < 0)) {
+      res.status(400).json({ error: "currentCapital must be a non-negative number or null" });
+      return;
+    }
+    (patch as any).currentCapital = currentCapital;
+  }
   if (goalCapital !== undefined) {
     if (typeof goalCapital !== "number" || goalCapital <= 0) {
       res.status(400).json({ error: "goalCapital must be a positive number" });

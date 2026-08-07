@@ -4,6 +4,7 @@ export const survivalConfigTable = pgTable("survival_config", {
   id: serial("id").primaryKey(),
   startCapital: real("start_capital").notNull().default(5000),
   goalCapital: real("goal_capital").notNull().default(1000000),
+  currentCapital: real("current_capital"),   // manually-entered actual account balance
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

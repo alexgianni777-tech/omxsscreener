@@ -113,6 +113,11 @@ function computeDayPlusOneReturn(
 
 // ── Main route ────────────────────────────────────────────────────────────────
 router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
+  // Serve from cache if still fresh
+  if (cache && Date.now() < cache.expiresAt) {
+    res.json(cache.data);
+    return;
+  }
   // 1. Get US tickers from latest EdgeAI session
   const omxsYahooSet = new Set(OMXS30_TICKERS.map((t) => t.yahoo));
   let usTickers: { yahoo: string; display: string }[] = [];
@@ -353,7 +358,9 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
     return dA - dB;
   });
 
-  res.json({ stocks: sorted, generatedAt: new Date().toISOString() });
+  const payload = { stocks: sorted, generatedAt: new Date().toISOString() };
+  cache = { data: payload, expiresAt: Date.now() + CACHE_TTL_MS };
+  res.json(payload);
 });
 
 export default router;
