@@ -159,14 +159,14 @@ async function runImport(date: string): Promise<void> {
         perf1m: mw.perf1m,
         perf3m: mw.perf3m,
         marketRsi: mw.marketRsi,
-        trendLabel: se.regime?.label ?? "n/a",
+        trendLabel: se?.regime?.label ?? "n/a",
         rawText: `EdgeAI auto-import — generatedAt ${edgeData.generatedAt}`,
         source: "edgeai",
-        edgeRegime: JSON.stringify(se.regime ?? {}),
-        edgeExpectancy: se.edge?.expectancyR ?? null,
-        edgeWinRate: se.edge?.winRate ?? null,
-        edgePF: se.edge?.profitFactor ?? null,
-        edgeN: se.edge?.n ?? null,
+        edgeRegime: JSON.stringify(se?.regime ?? {}),
+        edgeExpectancy: se?.edge?.expectancyR ?? null,
+        edgeWinRate: se?.edge?.winRate ?? null,
+        edgePF: se?.edge?.profitFactor ?? null,
+        edgeN: se?.edge?.n ?? null,
       })
       .returning();
 
@@ -182,6 +182,8 @@ async function runImport(date: string): Promise<void> {
     throw new Error(`DB insert failed: ${err.message}`);
   }
 }
+
+
 
 async function tick() {
   const now = new Date();

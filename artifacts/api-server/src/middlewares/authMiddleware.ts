@@ -66,20 +66,25 @@ export async function authMiddleware(
     return;
   }
 
-  const session = await getSession(sid);
-  if (!session?.user?.id) {
-    await clearSession(res, sid);
-    next();
-    return;
+  try {
+    const session = await getSession(sid);
+    if (!session?.user?.id) {
+      await clearSession(res, sid);
+      next();
+      return;
+    }
+
+    const refreshed = await refreshIfExpired(sid, session);
+    if (!refreshed) {
+      await clearSession(res, sid);
+      next();
+      return;
+    }
+
+    req.user = refreshed.user;
+  } catch {
+    // DB/session error — treat as unauthenticated, don't crash the request
   }
 
-  const refreshed = await refreshIfExpired(sid, session);
-  if (!refreshed) {
-    await clearSession(res, sid);
-    next();
-    return;
-  }
-
-  req.user = refreshed.user;
   next();
 }

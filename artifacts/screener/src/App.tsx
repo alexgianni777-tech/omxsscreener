@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Route, Switch, Router as WouterRouter } from 'wouter';
-import { useAuth } from '@workspace/replit-auth-web';
+import { AuthProvider, useAuthContext } from './lib/auth-context';
 import { Shell } from './components/layout';
 import { Dashboard } from './pages/dashboard';
 import { Sessions } from './pages/sessions';
@@ -31,7 +31,7 @@ function NotFound() {
 }
 
 function LoginGate() {
-  const { isLoading, isAuthenticated, login } = useAuth();
+  const { isLoading, isAuthenticated, login } = useAuthContext();
 
   if (isLoading) {
     return (
@@ -45,10 +45,8 @@ function LoginGate() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-6 text-center max-w-sm px-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-              <Lock className="h-5 w-5 text-primary" />
-            </div>
+          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+            <Lock className="h-5 w-5 text-primary" />
           </div>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">AG Investment Capital</h1>
@@ -85,7 +83,9 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-        <LoginGate />
+        <AuthProvider>
+          <LoginGate />
+        </AuthProvider>
       </WouterRouter>
     </QueryClientProvider>
   );

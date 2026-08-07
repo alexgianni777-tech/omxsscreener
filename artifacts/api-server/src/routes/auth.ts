@@ -131,9 +131,15 @@ router.get('/auth/user', (req: Request, res: Response) => {
 });
 
 router.get('/login', async (req: Request, res: Response) => {
-  const config = await getOidcConfig();
-  const callbackUrl = `${getOrigin(req)}/api/callback`;
+  let config: Awaited<ReturnType<typeof getOidcConfig>>;
+  try {
+    config = await getOidcConfig();
+  } catch {
+    res.status(503).send('Authentication service unavailable. Please try again.');
+    return;
+  }
 
+  const callbackUrl = `${getOrigin(req)}/api/callback`;
   const returnTo = getSafeReturnTo(req.query.returnTo);
 
   const state = oidc.randomState();
@@ -162,7 +168,14 @@ router.get('/login', async (req: Request, res: Response) => {
 // Query params are not validated because the OIDC provider may include
 // parameters not expressed in the schema.
 router.get('/callback', async (req: Request, res: Response) => {
-  const config = await getOidcConfig();
+  let config: Awaited<ReturnType<typeof getOidcConfig>>;
+  try {
+    config = await getOidcConfig();
+  } catch {
+    res.redirect('/api/login');
+    return;
+  }
+
   const callbackUrl = `${getOrigin(req)}/api/callback`;
 
   const codeVerifier = req.cookies?.code_verifier;
@@ -204,7 +217,13 @@ router.get('/callback', async (req: Request, res: Response) => {
     return;
   }
 
-  const dbUser = await upsertUser(claims as unknown as Record<string, unknown>);
+  let dbUser: Awaited<ReturnType<typeof upsertUser>>;
+  try {
+    dbUser = await upsertUser(claims as unknown as Record<string, unknown>);
+  } catch {
+    res.redirect('/api/login');
+    return;
+  }
 
   const now = Math.floor(Date.now() / 1000);
   const sessionData: SessionData = {
