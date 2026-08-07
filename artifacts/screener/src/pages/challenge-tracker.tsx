@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
-import { Trash2, Plus, TrendingUp, TrendingDown, Trophy, AlertTriangle, Zap, BookOpen } from "lucide-react";
+import { Trash2, Plus, TrendingUp, TrendingDown, Trophy, AlertTriangle, Zap, BookOpen, RefreshCw } from "lucide-react";
+
+type PositionQuote = { livePrice: number | null; changePct: number | null; error: string | null };
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
@@ -157,12 +159,35 @@ export function ChallengeTracker() {
   const [positions, setPositions] = useState<OpenPosition[]>([]);
   const [posForm, setPosForm] = useState({ ticker: "", direction: "LONG" as "LONG" | "SHORT", entryPrice: "", shares: "", stopPrice: "" });
   const [addingPos, setAddingPos] = useState(false);
+  const [posQuotes, setPosQuotes] = useState<Record<string, PositionQuote>>({});
+  const [fetchingQuotes, setFetchingQuotes] = useState(false);
 
   const loadPositions = async () => {
     try {
       const r = await fetch(api("/survival/positions"));
-      if (r.ok) setPositions(await r.json());
+      if (r.ok) {
+        const rows: OpenPosition[] = await r.json();
+        setPositions(rows);
+        if (rows.length > 0) fetchPositionQuotes(rows);
+      }
     } catch { /* non-fatal */ }
+  };
+
+  const fetchPositionQuotes = async (rows?: OpenPosition[]) => {
+    const list = rows ?? positions;
+    if (list.length === 0 || fetchingQuotes) return;
+    setFetchingQuotes(true);
+    try {
+      const tickers = list.map(p => p.ticker).join(",");
+      const res = await fetch(api(`/screener/quotes?tickers=${encodeURIComponent(tickers)}`));
+      if (!res.ok) return;
+      const data = await res.json();
+      const map: Record<string, PositionQuote> = {};
+      for (const q of data) map[q.ticker] = { livePrice: q.livePrice, changePct: q.changePct, error: q.error };
+      setPosQuotes(map);
+    } finally {
+      setFetchingQuotes(false);
+    }
   };
 
   const load = async () => {
@@ -356,12 +381,24 @@ export function ChallengeTracker() {
           <span className="text-xs uppercase tracking-widest text-muted-foreground">
             === 1 · ÖPPNA POSITIONER ({positions.length}) ===
           </span>
-          <button
-            onClick={() => setAddingPos((v) => !v)}
-            className="text-xs text-primary hover:text-primary/80 flex items-center gap-1 transition-colors"
-          >
-            <Plus className="w-3 h-3" /> Lägg till
-          </button>
+          <div className="flex items-center gap-3">
+            {positions.length > 0 && (
+              <button
+                onClick={() => fetchPositionQuotes()}
+                disabled={fetchingQuotes}
+                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3 h-3 ${fetchingQuotes ? "animate-spin" : ""}`} />
+                {fetchingQuotes ? "…" : "Uppdatera"}
+              </button>
+            )}
+            <button
+              onClick={() => setAddingPos((v) => !v)}
+              className="text-xs text-primary hover:text-primary/80 flex items-center gap-1 transition-colors"
+            >
+              <Plus className="w-3 h-3" /> Lägg till
+            </button>
+          </div>
         </div>
 
         {positions.length === 0 && !addingPos && (
@@ -372,25 +409,60 @@ export function ChallengeTracker() {
 
         {positions.map((p) => {
           const riskKr = p.stopPrice != null ? Math.abs(p.entryPrice - p.stopPrice) * p.shares : null;
+          const q = posQuotes[p.ticker];
+          const livePrice = q?.livePrice ?? null;
+          const unrealizedKr = livePrice != null
+            ? (p.direction === "LONG" ? livePrice - p.entryPrice : p.entryPrice - livePrice) * p.shares
+            : null;
+          const stopDistPct = livePrice != null && p.stopPrice != null
+            ? ((livePrice - p.stopPrice) / livePrice) * 100 * (p.direction === "LONG" ? 1 : -1)
+            : null;
+
           return (
-            <div key={p.id} className="flex items-center justify-between px-4 py-2.5 border-b border-border/50 last:border-0 hover:bg-muted/20 text-sm">
-              <div className="flex items-center gap-3">
-                <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${p.direction === "LONG" ? "text-emerald-400 bg-emerald-500/10" : "text-red-400 bg-red-500/10"}`}>
-                  {p.direction}
-                </span>
-                <span className="font-bold">{p.ticker}</span>
-                <span className="text-muted-foreground text-xs">
-                  entry {fmt(p.entryPrice, 2)} · {p.shares} st
-                  {p.stopPrice != null && ` · stop ${fmt(p.stopPrice, 2)}`}
-                </span>
+            <div key={p.id} className="px-4 py-3 border-b border-border/50 last:border-0 hover:bg-muted/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs px-1.5 py-0.5 rounded font-bold ${p.direction === "LONG" ? "text-emerald-400 bg-emerald-500/10" : "text-red-400 bg-red-500/10"}`}>
+                    {p.direction}
+                  </span>
+                  <span className="font-bold text-sm">{p.ticker}</span>
+                  {livePrice != null && (
+                    <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
+                      unrealizedKr != null && unrealizedKr >= 0
+                        ? "text-emerald-400 bg-emerald-500/10"
+                        : "text-red-400 bg-red-500/10"
+                    }`}>
+                      {fmt(livePrice, 2)}
+                      {q?.changePct != null && (
+                        <span className="ml-1 opacity-70">
+                          {q.changePct >= 0 ? "+" : ""}{q.changePct.toFixed(1)}%
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  {unrealizedKr != null && (
+                    <span className={`text-sm font-bold font-mono ${unrealizedKr >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                      {sgn(Math.round(unrealizedKr))} kr
+                    </span>
+                  )}
+                  <button onClick={() => removePosition(p.id)} className="text-muted-foreground hover:text-red-400 transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                {riskKr != null && (
-                  <span className="text-xs text-muted-foreground">1R = {fmt(riskKr, 0)} kr</span>
+              <div className="mt-1 flex items-center gap-3 text-[10px] text-muted-foreground/60 font-mono">
+                <span>entry {fmt(p.entryPrice, 2)}</span>
+                <span>·</span>
+                <span>{p.shares} st</span>
+                {p.stopPrice != null && <><span>·</span><span>stop {fmt(p.stopPrice, 2)}</span></>}
+                {riskKr != null && <><span>·</span><span>1R = {fmt(riskKr, 0)} kr</span></>}
+                {stopDistPct != null && (
+                  <span className={stopDistPct < 1.5 ? "text-amber-400 font-bold" : ""}>
+                    · {stopDistPct > 0 ? "+" : ""}{stopDistPct.toFixed(1)}% till stop
+                  </span>
                 )}
-                <button onClick={() => removePosition(p.id)} className="text-muted-foreground hover:text-red-400 transition-colors">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
               </div>
             </div>
           );
