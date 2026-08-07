@@ -20,19 +20,7 @@ const router: IRouter = Router();
 
 // POST /screener/sessions/import
 router.post("/screener/sessions/import", async (req, res): Promise<void> => {
-  const parsed = GetSessionResponse.parse({
-    id: session.id,
-    date: session.date,
-    marketWeather: {
-      omxsValue: session.omxsValue,
-      perf5d: session.perf5d,
-      perf1m: session.perf1m,
-      perf3m: session.perf3m,
-      rsi: session.marketRsi,
-      trendLabel: session.trendLabel,
-    },
-    candidates: candidates.map(mapCandidate),
-  });
+  const parsed = ImportSessionBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
@@ -50,13 +38,10 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
   }
 
   // Check for duplicate date
-    const existing = await db
-      .select({ id: candidatesTable.id })
-      .from(candidatesTable)
-      .where(and(
-        eq(candidatesTable.sessionId, candidate.sessionId),
-        eq(candidatesTable.isTop3Pick as any, true),
-      ));
+  const existing = await db
+    .select({ id: screenerSessionsTable.id })
+    .from(screenerSessionsTable)
+    .where(eq(screenerSessionsTable.date, session.date));
 
   const { force } = parsed.data;
 
@@ -120,13 +105,21 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     session.candidates.map((c) => c.ticker),
     session.date,
   );
+
+  // ---------- force re-import: preserve outcomes, replace everything else ----------
+  if (existing.length > 0 && force) {
     const existingId = existing[0].id;
 
     // Snapshot existing outcomes before deleting
-  const existingCandidates = await db
-    .select()
-    .from(candidatesTable)
-    .where(eq(candidatesTable.sessionId, params.data.id));
+    const existingCandidates = await db
+      .select({
+        ticker: candidatesTable.ticker,
+        outcome: candidatesTable.outcome,
+        exitPrice: candidatesTable.exitPrice,
+        outcomeNotes: candidatesTable.outcomeNotes,
+      })
+      .from(candidatesTable)
+      .where(eq(candidatesTable.sessionId, existingId));
 
     const outcomeByTicker = new Map(
       existingCandidates
@@ -137,47 +130,42 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     // Delete old candidates then update session metadata
     await db.delete(candidatesTable).where(eq(candidatesTable.sessionId, existingId));
 
-  const [updatedSession] = await db
-    .update(screenerSessionsTable)
-    .set({
-      omxsValue: parsedSession.marketWeather.omxsValue,
-      perf5d: parsedSession.marketWeather.perf5d,
-      perf1m: parsedSession.marketWeather.perf1m,
-      perf3m: parsedSession.marketWeather.perf3m,
-      marketRsi: parsedSession.marketWeather.rsi,
-      trendLabel: parsedSession.marketWeather.trendLabel,
-      rawText: bodyParsed.data.rawText,
-    })
-    .where(eq(screenerSessionsTable.id, params.data.id))
-    .returning();
+    const [updatedSession] = await db
+      .update(screenerSessionsTable)
+      .set({
+        omxsValue: session.marketWeather.omxsValue,
+        perf5d: session.marketWeather.perf5d,
+        perf1m: session.marketWeather.perf1m,
+        perf3m: session.marketWeather.perf3m,
+        marketRsi: session.marketWeather.rsi,
+        trendLabel: session.marketWeather.trendLabel,
+        rawText: parsed.data.rawText,
+      })
+      .where(eq(screenerSessionsTable.id, existingId))
+      .returning();
 
     const updatedCandidates = await db
       .insert(candidatesTable)
       .values(
         session.candidates.map((c) =>
-          buildCandidateRow(
-            updatedSession.id,
-            c,
-            earningsBatch.get(c.ticker) ?? null,
-            outcomeByTicker.get(c.ticker),
-          ),
+          buildCandidateRow(updatedSession.id, c, earningsBatch.get(c.ticker) ?? null, outcomeByTicker.get(c.ticker)),
         ),
       )
       .returning();
 
-  const response = ImportSessionResponse.parse({
-    id: insertedSession.id,
-    date: insertedSession.date,
-    marketWeather: {
-      omxsValue: insertedSession.omxsValue,
-      perf5d: insertedSession.perf5d,
-      perf1m: insertedSession.perf1m,
-      perf3m: insertedSession.perf3m,
-      rsi: insertedSession.marketRsi,
-      trendLabel: insertedSession.trendLabel,
-    },
-    candidates: insertedCandidates.map(mapCandidate),
-  });
+    const response = ImportSessionResponse.parse({
+      id: updatedSession.id,
+      date: updatedSession.date,
+      marketWeather: {
+        omxsValue: updatedSession.omxsValue,
+        perf5d: updatedSession.perf5d,
+        perf1m: updatedSession.perf1m,
+        perf3m: updatedSession.perf3m,
+        rsi: updatedSession.marketRsi,
+        trendLabel: updatedSession.trendLabel,
+      },
+      candidates: updatedCandidates.map(mapCandidate),
+    });
 
     res.status(200).json(response);
     return;
@@ -226,7 +214,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
 
 // PUT /screener/sessions/:id/reimport
 router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> => {
-  const params = DeleteSessionParams.safeParse(req.params);
+  const params = ReimportSessionParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
@@ -326,24 +314,32 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
 
   for (const c of parsedSession.candidates) {
     const key = `${c.category}:${c.ticker}`;
-    const existing = await db
-      .select({ id: candidatesTable.id })
-      .from(candidatesTable)
-      .where(and(
-        eq(candidatesTable.sessionId, candidate.sessionId),
-        eq(candidatesTable.isTop3Pick as any, true),
-      ));
-    if (existing.length >= 3 && !existing.some((p) => p.id === id)) {
-      res.status(409).json({ error: "Max 3 picks per session — ta bort en stjärna först" });
-      return;
-    }
-  }
+    const existing = existingMap.get(key);
 
-  const [updated] = await db
-    .update(candidatesTable)
-    .set({ isTop3Pick } as any)
-    .where(eq(candidatesTable.id, id))
-    .returning();
+    if (existing) {
+      // Update price/signal fields but preserve outcome, exitPrice, outcomeNotes
+      const [updated] = await db
+        .update(candidatesTable)
+        .set({
+          rank: c.rank,
+          price: c.price,
+          rs3m: c.rs3m,
+          perf1m: c.perf1m,
+          rsi: c.rsi,
+          pctB: c.pctB,
+          atr: c.atr,
+          volMultiplier: c.volMultiplier,
+          distFrom20dH: c.distFrom20dH,
+          gapWarning: c.gapWarning ?? null,
+          direction: c.direction,
+          entryPrice: c.entryPrice,
+          stopPrice: c.stopPrice,
+          targetPrice: c.targetPrice,
+          rr: c.rr,
+          oneR: c.oneR,
+        })
+        .where(eq(candidatesTable.id, existing.id))
+        .returning();
       resultCandidates.push(updated);
     } else {
       // New candidate: insert as PENDING
@@ -469,7 +465,7 @@ router.get("/screener/sessions", async (req, res): Promise<void> => {
 
 // GET /screener/sessions/:id
 router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
-  const params = DeleteSessionParams.safeParse(req.params);
+  const params = GetSessionParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
