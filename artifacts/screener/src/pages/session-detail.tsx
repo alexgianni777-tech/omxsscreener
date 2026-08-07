@@ -74,31 +74,12 @@ export function SessionDetail() {
   const quoteMap: Record<string, QuoteResult> = {};
   quotes?.forEach((q) => { quoteMap[q.ticker] = q; });
 
-  if (isLoading) {
-    return <div className="animate-pulse space-y-8">
-      <div className="h-8 w-24 bg-muted rounded"></div>
-      <div className="h-32 bg-muted rounded-lg"></div>
-      <div className="h-64 bg-muted rounded-lg"></div>
-    </div>;
-  }
-
-  if (isError || !session) {
-    return <div className="p-6 bg-destructive/10 text-destructive rounded-lg border border-destructive/20">Failed to load session details.</div>;
-  }
-
-  const { marketWeather, candidates } = session;
-  const isEdgeAI = (session as any).source === "edgeai";
-  const categories = ["MOMENTUM", "SQUEEZE", "STUDS", "WEAKEST"] as const;
-
-  // ── Top 3 picks ──────────────────────────────────────────────────────────────
-  const [pickedIds, setPickedIds] = useState<Set<number>>(() => {
-    const s = new Set<number>();
-    session?.candidates.forEach((c: any) => { if (c.isTop3Pick) s.add(c.id); });
-    return s;
-  });
+  // ── Top 3 picks — hooks MUST be declared before any conditional return ────────
+  const [pickedIds, setPickedIds] = useState<Set<number>>(new Set<number>());
   useEffect(() => {
+    if (!session) return;
     const s = new Set<number>();
-    session?.candidates.forEach((c: any) => { if (c.isTop3Pick) s.add(c.id); });
+    session.candidates.forEach((c: any) => { if (c.isTop3Pick) s.add(c.id); });
     setPickedIds(s);
   }, [session?.id]);
 
@@ -112,6 +93,29 @@ export function SessionDetail() {
       body: JSON.stringify({ isTop3Pick: next }),
     });
   };
+
+  // ── Early returns (after all hooks) ──────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <div className="animate-pulse space-y-8">
+        <div className="h-8 w-24 bg-muted rounded"></div>
+        <div className="h-32 bg-muted rounded-lg"></div>
+        <div className="h-64 bg-muted rounded-lg"></div>
+      </div>
+    );
+  }
+
+  if (isError || !session) {
+    return (
+      <div className="p-6 bg-destructive/10 text-destructive rounded-lg border border-destructive/20">
+        Failed to load session details.
+      </div>
+    );
+  }
+
+  const { marketWeather, candidates } = session;
+  const isEdgeAI = (session as any).source === "edgeai";
+  const categories = ["MOMENTUM", "SQUEEZE", "STUDS", "WEAKEST"] as const;
 
   // ── Market state (from first available quote) ─────────────────────────────
   const anyQuote = quotes?.[0];
