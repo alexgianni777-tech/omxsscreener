@@ -14,10 +14,14 @@
 import { Router, type IRouter } from "express";
 import YahooFinance from "yahoo-finance2";
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
+
+// ── Simple in-memory cache (10 min TTL) ──────────────────────────────────────
+let cache: { data: unknown; expiresAt: number } | null = null;
+const CACHE_TTL_MS = 10 * 60 * 1000;
 
 // ── OMXS30 universe ──────────────────────────────────────────────────────────
 const OMXS30_TICKERS: { yahoo: string; display: string }[] = [
