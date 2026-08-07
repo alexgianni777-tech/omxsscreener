@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Route, Switch, Router as WouterRouter } from 'wouter';
 import { AuthProvider, useAuthContext } from './lib/auth-context';
 import { Shell } from './components/layout';
+import { Today } from './pages/today';
 import { Dashboard } from './pages/dashboard';
 import { Sessions } from './pages/sessions';
 import { SessionDetail } from './pages/session-detail';
@@ -66,7 +67,8 @@ function LoginGate() {
   return (
     <Shell>
       <Switch>
-        <Route path="/" component={Dashboard} />
+        <Route path="/" component={Today} />
+        <Route path="/dashboard" component={Dashboard} />
         <Route path="/sessions" component={Sessions} />
         <Route path="/sessions/:id" component={SessionDetail} />
         <Route path="/import" component={Import} />

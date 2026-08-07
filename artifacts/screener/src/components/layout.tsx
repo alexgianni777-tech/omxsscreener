@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { LineChart, LayoutDashboard, History, FileDown, Activity, Swords, CalendarDays, LogOut } from "lucide-react";
+import { LineChart, Sunrise, LayoutDashboard, History, FileDown, Activity, Swords, CalendarDays, LogOut } from "lucide-react";
 import { useAuthContext } from "../lib/auth-context";
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -8,11 +8,12 @@ export function Shell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuthContext();
 
   const navItems = [
-    { href: "/", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/", label: "Idag", icon: Sunrise },
+    { href: "/survival", label: "Challenge Tracker", icon: Swords },
     { href: "/sessions", label: "Sessions", icon: History },
+    { href: "/dashboard", label: "Statistik", icon: LayoutDashboard },
     { href: "/candidates", label: "Candidates", icon: Activity },
     { href: "/import", label: "Import Data", icon: FileDown },
-    { href: "/survival", label: "Challenge Tracker", icon: Swords },
     { href: "/earnings", label: "Rapporter", icon: CalendarDays },
   ];
 
