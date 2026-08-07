@@ -55,6 +55,11 @@ export interface ErrorResponse {
   error: string;
 }
 
+export interface SessionConflictError {
+  error: string;
+  /** ID of the existing session for this date */
+  existingSessionId: number;
+}
 export interface SessionImport {
   /** The raw text output from the screener */
   rawText: string;
@@ -370,4 +375,3 @@ iss?: string;
 export type LogoutBrowserSessionParams = {
 returnTo?: string;
 };
-

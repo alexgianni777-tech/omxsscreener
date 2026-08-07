@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, ne, sql } from "drizzle-orm";
+import { eq, ne, sql, and, inArray } from "drizzle-orm";
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import {
   ImportSessionBody,
@@ -8,6 +8,9 @@ import {
   GetSessionParams,
   GetSessionResponse,
   DeleteSessionParams,
+  ReimportSessionParams,
+  ReimportSessionBody,
+  ReimportSessionResponse,
 } from "@workspace/api-zod";
 import { parseScreenerText, ScreenerParseError } from "../lib/screenerParser";
 
@@ -42,7 +45,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
 
   if (existing.length > 0 && !force) {
     // Return 409 with details about any logged outcomes so the UI can show
-    // exactly what would be preserved on a force re-import (#9 / #10).
+    // exactly what would be preserved on a force re-import.
     const existingId = existing[0].id;
     const affectedOutcomes = await db
       .select({
@@ -52,9 +55,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
         exitPrice: candidatesTable.exitPrice,
       })
       .from(candidatesTable)
-      .where(
-        eq(candidatesTable.sessionId, existingId),
-      )
+      .where(eq(candidatesTable.sessionId, existingId))
       .then((rows) => rows.filter((r) => r.outcome !== "PENDING"));
 
     res.status(409).json({
@@ -196,6 +197,196 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
   });
 
   res.status(201).json(response);
+});
+
+// PUT /screener/sessions/:id/reimport
+router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> => {
+  const params = ReimportSessionParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const bodyParsed = ReimportSessionBody.safeParse(req.body);
+  if (!bodyParsed.success) {
+    res.status(400).json({ error: bodyParsed.error.message });
+    return;
+  }
+
+  // Load the existing session
+  const [existingSession] = await db
+    .select()
+    .from(screenerSessionsTable)
+    .where(eq(screenerSessionsTable.id, params.data.id));
+
+  if (!existingSession) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  // Parse the new raw text
+  let parsedSession;
+  try {
+    parsedSession = parseScreenerText(bodyParsed.data.rawText);
+  } catch (err) {
+    if (err instanceof ScreenerParseError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
+
+  // Verify the date matches
+  if (parsedSession.date !== existingSession.date) {
+    res
+      .status(400)
+      .json({
+        error: `Date mismatch: imported text has date ${parsedSession.date}, but session has date ${existingSession.date}`,
+      });
+    return;
+  }
+
+  // Update session metadata
+  const [updatedSession] = await db
+    .update(screenerSessionsTable)
+    .set({
+      omxsValue: parsedSession.marketWeather.omxsValue,
+      perf5d: parsedSession.marketWeather.perf5d,
+      perf1m: parsedSession.marketWeather.perf1m,
+      perf3m: parsedSession.marketWeather.perf3m,
+      marketRsi: parsedSession.marketWeather.rsi,
+      trendLabel: parsedSession.marketWeather.trendLabel,
+      rawText: bodyParsed.data.rawText,
+    })
+    .where(eq(screenerSessionsTable.id, params.data.id))
+    .returning();
+
+  // Load all existing candidates for this session
+  const existingCandidates = await db
+    .select()
+    .from(candidatesTable)
+    .where(eq(candidatesTable.sessionId, params.data.id));
+
+  // Build a lookup map: "CATEGORY:TICKER" -> existing candidate
+  const existingMap = new Map(
+    existingCandidates.map((c) => [`${c.category}:${c.ticker}`, c])
+  );
+
+  // Build a set of keys present in the new import
+  const newKeys = new Set(
+    parsedSession.candidates.map((c) => `${c.category}:${c.ticker}`)
+  );
+
+  // Determine which existing PENDING candidates are no longer in the new import → delete them
+  const toDelete = existingCandidates.filter(
+    (c) => c.outcome === "PENDING" && !newKeys.has(`${c.category}:${c.ticker}`)
+  );
+
+  if (toDelete.length > 0) {
+    await db
+      .delete(candidatesTable)
+      .where(
+        and(
+          eq(candidatesTable.sessionId, params.data.id),
+          inArray(
+            candidatesTable.id,
+            toDelete.map((c) => c.id)
+          )
+        )
+      );
+  }
+
+  // Upsert each candidate from the new import
+  const resultCandidates: (typeof candidatesTable.$inferSelect)[] = [];
+
+  for (const c of parsedSession.candidates) {
+    const key = `${c.category}:${c.ticker}`;
+    const existing = existingMap.get(key);
+
+    if (existing) {
+      // Update price/signal fields but preserve outcome, exitPrice, outcomeNotes
+      const [updated] = await db
+        .update(candidatesTable)
+        .set({
+          rank: c.rank,
+          price: c.price,
+          rs3m: c.rs3m,
+          perf1m: c.perf1m,
+          rsi: c.rsi,
+          pctB: c.pctB,
+          atr: c.atr,
+          volMultiplier: c.volMultiplier,
+          distFrom20dH: c.distFrom20dH,
+          gapWarning: c.gapWarning ?? null,
+          direction: c.direction,
+          entryPrice: c.entryPrice,
+          stopPrice: c.stopPrice,
+          targetPrice: c.targetPrice,
+          rr: c.rr,
+          oneR: c.oneR,
+        })
+        .where(eq(candidatesTable.id, existing.id))
+        .returning();
+      resultCandidates.push(updated);
+    } else {
+      // New candidate: insert as PENDING
+      const [inserted] = await db
+        .insert(candidatesTable)
+        .values({
+          sessionId: params.data.id,
+          category: c.category,
+          rank: c.rank,
+          ticker: c.ticker,
+          price: c.price,
+          rs3m: c.rs3m,
+          perf1m: c.perf1m,
+          rsi: c.rsi,
+          pctB: c.pctB,
+          atr: c.atr,
+          volMultiplier: c.volMultiplier,
+          distFrom20dH: c.distFrom20dH,
+          gapWarning: c.gapWarning ?? undefined,
+          direction: c.direction,
+          entryPrice: c.entryPrice,
+          stopPrice: c.stopPrice,
+          targetPrice: c.targetPrice,
+          rr: c.rr,
+          oneR: c.oneR,
+          outcome: "PENDING" as const,
+        })
+        .returning();
+      resultCandidates.push(inserted);
+    }
+  }
+
+  // Also retain WIN/LOSS/SKIP candidates that were not in the new import
+  const retainedTracked = existingCandidates.filter(
+    (c) => c.outcome !== "PENDING" && !newKeys.has(`${c.category}:${c.ticker}`)
+  );
+  resultCandidates.push(...retainedTracked);
+
+  // Sort by category, then rank
+  resultCandidates.sort((a, b) =>
+    a.category !== b.category
+      ? a.category.localeCompare(b.category)
+      : a.rank - b.rank
+  );
+
+  res.json(
+    ReimportSessionResponse.parse({
+      id: updatedSession.id,
+      date: updatedSession.date,
+      marketWeather: {
+        omxsValue: updatedSession.omxsValue,
+        perf5d: updatedSession.perf5d,
+        perf1m: updatedSession.perf1m,
+        perf3m: updatedSession.perf3m,
+        rsi: updatedSession.marketRsi,
+        trendLabel: updatedSession.trendLabel,
+      },
+      candidates: resultCandidates.map(mapCandidate),
+    })
+  );
 });
 
 // GET /screener/sessions

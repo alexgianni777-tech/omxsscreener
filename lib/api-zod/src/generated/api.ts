@@ -86,7 +86,12 @@ export const ListSessionsResponseItem = zod.object({
 })
 export const ListSessionsResponse = zod.array(ListSessionsResponseItem)
 
-
+/**
+ * @summary Re-import raw screener text into an existing session, preserving logged outcomes
+ */
+export const ReimportSessionParams = zod.object({
+  "id": zod.coerce.number()
+})
 /**
  * @summary Get a session with all its candidates
  */
@@ -336,11 +341,6 @@ export const LogoutBrowserSessionResponse = zod.void()
  */
 
 
-
-
-
-
-
 export const ExchangeMobileAuthorizationCodeBody = zod.object({
   "code": zod.string().min(1),
   "code_verifier": zod.string().min(1),
@@ -366,3 +366,44 @@ export const LogoutMobileSessionResponse = zod.object({
 })
 
 
+export const ReimportSessionBody = zod.object({
+  "rawText": zod.string().describe('The raw text output from the screener')
+})
+
+export const ReimportSessionResponse = zod.object({
+  "id": zod.number(),
+  "date": zod.string().describe('YYYY-MM-DD'),
+  "marketWeather": zod.object({
+  "omxsValue": zod.number(),
+  "perf5d": zod.number(),
+  "perf1m": zod.number(),
+  "perf3m": zod.number(),
+  "rsi": zod.number(),
+  "trendLabel": zod.string()
+}),
+  "candidates": zod.array(zod.object({
+  "id": zod.number(),
+  "sessionId": zod.number(),
+  "category": zod.enum(['MOMENTUM', 'SQUEEZE', 'STUDS', 'WEAKEST']),
+  "rank": zod.number(),
+  "ticker": zod.string(),
+  "price": zod.number(),
+  "rs3m": zod.number(),
+  "perf1m": zod.number(),
+  "rsi": zod.number(),
+  "pctB": zod.number(),
+  "atr": zod.number(),
+  "volMultiplier": zod.number(),
+  "distFrom20dH": zod.number(),
+  "gapWarning": zod.number().nullish(),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "entryPrice": zod.number(),
+  "stopPrice": zod.number(),
+  "targetPrice": zod.number(),
+  "rr": zod.number(),
+  "oneR": zod.number(),
+  "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
+  "exitPrice": zod.number().nullish(),
+  "outcomeNotes": zod.string().nullish()
+}))
+})

@@ -50,6 +50,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SessionDetail"
+        "200":
+          description: Session updated (force re-import)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionDetail"
         "400":
           description: Parse error
           content:
@@ -77,6 +83,43 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/SessionSummary"
+
+  /screener/sessions/{id}/reimport:
+    put:
+      operationId: reimportSession
+      tags: [sessions]
+      summary: Re-import raw screener text into an existing session, preserving logged outcomes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionImport"
+      responses:
+        "200":
+          description: Session updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionDetail"
+        "400":
+          description: Parse error or date mismatch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /screener/sessions/{id}:
     get:
@@ -436,6 +479,16 @@ components:
       properties:
         error:
           type: string
+
+    SessionConflictError:
+      type: object
+      required: [error, existingSessionId]
+      properties:
+        error:
+          type: string
+        existingSessionId:
+          type: number
+          description: ID of the existing session for this date
 
     SessionImport:
       type: object
