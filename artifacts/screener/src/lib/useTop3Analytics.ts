@@ -13,6 +13,7 @@ export interface Top3Pick {
 export interface Top3Session {
   date: string;
   sessionId: number;
+  source: string | null;
   picks: Top3Pick[];
   sessionR: number | null;
   cumulativeR: number;

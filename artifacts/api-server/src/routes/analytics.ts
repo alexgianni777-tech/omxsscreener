@@ -14,7 +14,7 @@ const router: IRouter = Router();
 
 router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
   const sessions = await db
-    .select({ id: screenerSessionsTable.id, date: screenerSessionsTable.date })
+    .select({ id: screenerSessionsTable.id, date: screenerSessionsTable.date, source: screenerSessionsTable.source })
     .from(screenerSessionsTable)
     .orderBy(asc(screenerSessionsTable.date));
 
@@ -87,6 +87,7 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
     return {
       date: session.date,
       sessionId: session.id,
+      source: session.source ?? null,
       picks,
       sessionR: sessionHasResolved ? sessionR : null,
       cumulativeR,

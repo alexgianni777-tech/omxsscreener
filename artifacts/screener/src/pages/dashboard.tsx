@@ -325,146 +325,148 @@ function EquityCurveTooltip({ active, payload }: TooltipProps<number, string>) {
 function Top3Section() {
   const { data, isLoading } = useTop3Analytics();
 
-  const chartData: { date: string; cumulativeR: number }[] = data
-    ? [
-        { date: "Start", cumulativeR: 0 },
-        ...data.sessions
-          .filter((s) => s.sessionR !== null)
-          .map((s) => ({ date: s.date.slice(5), cumulativeR: s.cumulativeR })),
-      ]
-    : [];
+  const seSessions = data?.sessions.filter((s) => s.source !== "edgeai") ?? [];
+  const usSessions = data?.sessions.filter((s) => s.source === "edgeai") ?? [];
 
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-2 border-b border-border pb-2">
+        <Trophy className="h-5 w-5 text-muted-foreground" />
+        <h3 className="text-lg font-semibold">Top 3 picks — hypotetisk avkastning</h3>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Top3MarketCard label="🇸🇪 Sverige (OMXS30)" sessions={seSessions} isLoading={isLoading} accentColor="hsl(var(--primary))" />
+        <Top3MarketCard label="🇺🇸 USA" sessions={usSessions} isLoading={isLoading} accentColor="hsl(var(--success, 142 71% 45%))" />
+      </div>
+    </div>
+  );
+}
+
+function computeMarketChartData(sessions: Top3Session[]) {
+  let cum = 0;
+  const points: { date: string; cumulativeR: number }[] = [{ date: "Start", cumulativeR: 0 }];
+  for (const s of sessions) {
+    if (s.sessionR !== null) {
+      cum += s.sessionR;
+      points.push({ date: s.date.slice(5), cumulativeR: cum });
+    }
+  }
+  return points;
+}
+
+function computeMarketStats(sessions: Top3Session[]) {
+  let wins = 0, losses = 0, totalR = 0;
+  for (const s of sessions) {
+    for (const p of s.picks) {
+      if (p.outcome === "WIN") { wins++; totalR += (p.r ?? 0); }
+      else if (p.outcome === "LOSS") { losses++; totalR += (p.r ?? 0); }
+    }
+  }
+  const total = wins + losses;
+  return {
+    wins, losses, total,
+    winRate: total > 0 ? wins / total : null,
+    totalR,
+    avgR: total > 0 ? totalR / total : null,
+    completedSessions: sessions.filter((s) => s.sessionR !== null).length,
+    totalSessions: sessions.length,
+  };
+}
+
+function Top3MarketCard({
+  label, sessions, isLoading, accentColor,
+}: {
+  label: string;
+  sessions: Top3Session[];
+  isLoading: boolean;
+  accentColor: string;
+}) {
+  const chartData = computeMarketChartData(sessions);
   const hasData = chartData.length > 1;
-  const stats = data?.stats;
+  const stats = computeMarketStats(sessions);
   const finalR = hasData ? chartData[chartData.length - 1].cumulativeR : null;
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4 border-b border-border pb-2">
-        <div className="flex items-center gap-2">
-          <Trophy className="h-5 w-5 text-muted-foreground" />
-          <h3 className="text-lg font-semibold">Top 3 per dag — hypotetisk avkastning</h3>
-        </div>
+    <div className="bg-card border border-border rounded-lg p-5 shadow-sm flex flex-col gap-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <span className="font-semibold text-sm">{label}</span>
         {finalR != null && (
-          <span
-            className={`text-sm font-mono font-bold ${
-              finalR >= 0 ? "text-success" : "text-destructive"
-            }`}
-          >
-            {finalR >= 0 ? "+" : ""}
-            {formatNumber(finalR, 2)}R totalt
+          <span className={`font-mono font-bold text-sm ${finalR >= 0 ? "text-success" : "text-destructive"}`}>
+            {finalR >= 0 ? "+" : ""}{formatNumber(finalR, 2)}R
           </span>
         )}
       </div>
 
       {/* Stat pills */}
-      {stats && stats.totalTrades > 0 && (
-        <div className="flex flex-wrap gap-3 mb-4">
-          <Pill
-            label="Trades"
-            value={`${stats.wins}V / ${stats.losses}F`}
-          />
+      {stats.total > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <Pill label="Trades" value={`${stats.wins}V / ${stats.losses}F`} />
           <Pill
             label="Hitrate"
             value={stats.winRate != null ? formatPercent(stats.winRate) : "–"}
             color={stats.winRate != null ? (stats.winRate >= 0.5 ? "success" : "destructive") : ""}
           />
           <Pill
-            label="Snitt-R/trade"
-            value={
-              stats.avgRPerTrade != null
-                ? `${stats.avgRPerTrade >= 0 ? "+" : ""}${formatNumber(stats.avgRPerTrade, 2)}R`
-                : "–"
-            }
-            color={stats.avgRPerTrade != null ? (stats.avgRPerTrade > 0 ? "success" : "destructive") : ""}
+            label="Snitt-R"
+            value={stats.avgR != null ? `${stats.avgR >= 0 ? "+" : ""}${formatNumber(stats.avgR, 2)}R` : "–"}
+            color={stats.avgR != null ? (stats.avgR > 0 ? "success" : "destructive") : ""}
           />
-          <Pill
-            label="Sessioner"
-            value={`${stats.completedSessions}/${stats.totalSessions}`}
-          />
+          <Pill label="Sessioner" value={`${stats.completedSessions}/${stats.totalSessions}`} />
         </div>
       )}
 
+      {/* Chart or empty state */}
       {isLoading ? (
-        <div className="h-48 bg-muted rounded-lg animate-pulse" />
+        <div className="h-40 bg-muted rounded animate-pulse" />
       ) : !hasData ? (
-        <div className="flex flex-col items-center justify-center h-48 bg-card border border-border rounded-lg text-muted-foreground gap-2">
-          <Trophy className="h-8 w-8 opacity-30" />
-          <p className="text-sm">Logga utfall på kandidater för att se Top 3-kurvan.</p>
-          <p className="text-xs opacity-60">Rangordningen baseras på edge-score (WIN% × E[R]).</p>
+        <div className="flex flex-col items-center justify-center h-40 text-muted-foreground gap-2">
+          <Trophy className="h-6 w-6 opacity-30" />
+          <p className="text-xs">Logga utfall för att se kurvan.</p>
         </div>
       ) : (
-        <div className="bg-card border border-border rounded-lg p-4 shadow-sm">
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart
-              data={chartData}
-              margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(v) => `${v}R`}
-                width={40}
-              />
-              <ReferenceLine y={0} stroke="currentColor" strokeOpacity={0.25} />
-              <Tooltip content={<Top3Tooltip sessions={data?.sessions ?? []} />} />
-              <Line
-                type="linear"
-                dataKey="cumulativeR"
-                strokeWidth={2}
-                stroke="hsl(var(--primary))"
-                dot={{ r: 4, fill: "hsl(var(--primary))" }}
-                activeDot={{ r: 6 }}
-                isAnimationActive={true}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+        <ResponsiveContainer width="100%" height={160}>
+          <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+            <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+            <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}R`} width={36} />
+            <ReferenceLine y={0} stroke="currentColor" strokeOpacity={0.25} />
+            <Tooltip content={<Top3Tooltip sessions={sessions} />} />
+            <Line type="linear" dataKey="cumulativeR" strokeWidth={2} stroke={accentColor} dot={{ r: 3, fill: accentColor }} activeDot={{ r: 5 }} isAnimationActive />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
 
-          {/* Per-session breakdown table */}
-          <div className="mt-4 border-t border-border pt-3 space-y-2">
-            {data!.sessions
-              .filter((s) => s.sessionR !== null)
-              .map((s) => (
-                <div key={s.date} className="flex items-center gap-3 text-xs">
-                  <span className="text-muted-foreground w-14 shrink-0">{s.date.slice(5)}</span>
-                  <div className="flex gap-1.5 flex-1 flex-wrap">
-                    {s.picks.map((p) => (
-                      <span
-                        key={p.ticker}
-                        className={`px-1.5 py-0.5 rounded font-mono font-medium ${
-                          p.outcome === "WIN"
-                            ? "bg-success/15 text-success"
-                            : p.outcome === "LOSS"
-                            ? "bg-destructive/15 text-destructive"
-                            : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {p.ticker}
-                        {p.r != null
-                          ? ` ${p.r >= 0 ? "+" : ""}${formatNumber(p.r, 1)}R`
-                          : ""}
-                      </span>
-                    ))}
-                  </div>
+      {/* Per-session picks table */}
+      {sessions.length > 0 && (
+        <div className="border-t border-border pt-3 space-y-2">
+          {sessions.map((s) => (
+            <div key={s.date} className="flex items-start gap-2 text-xs">
+              <span className="text-muted-foreground w-12 shrink-0 pt-0.5">{s.date.slice(5)}</span>
+              <div className="flex gap-1 flex-1 flex-wrap">
+                {s.picks.map((p) => (
                   <span
-                    className={`font-mono font-bold shrink-0 ${
-                      s.sessionR! >= 0 ? "text-success" : "text-destructive"
+                    key={p.ticker}
+                    className={`px-1.5 py-0.5 rounded font-mono font-medium ${
+                      p.outcome === "WIN"
+                        ? "bg-success/15 text-success"
+                        : p.outcome === "LOSS"
+                        ? "bg-destructive/15 text-destructive"
+                        : "bg-muted text-muted-foreground"
                     }`}
                   >
-                    {s.sessionR! >= 0 ? "+" : ""}
-                    {formatNumber(s.sessionR!, 1)}R
+                    {p.ticker.replace(/\.ST$/i, "")}
+                    {p.r != null ? ` ${p.r >= 0 ? "+" : ""}${formatNumber(p.r, 1)}R` : ""}
                   </span>
-                </div>
-              ))}
-          </div>
+                ))}
+              </div>
+              {s.sessionR !== null && (
+                <span className={`font-mono font-bold shrink-0 ${s.sessionR >= 0 ? "text-success" : "text-destructive"}`}>
+                  {s.sessionR >= 0 ? "+" : ""}{formatNumber(s.sessionR, 1)}R
+                </span>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

@@ -1,38 +1,10 @@
 import { useGetSession, getGetSessionQueryKey, useGetQuotes, Candidate, CandidateOutcomeProperty, useUpdateCandidateOutcome, QuoteResult } from "@workspace/api-client-react";
 import { useParams, Link } from "wouter";
 import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
-import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity, AlertTriangle, Clock, Newspaper, ExternalLink, CandlestickChart as CandlestickIcon, Star } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity, AlertTriangle, Clock, ExternalLink, CandlestickChart as CandlestickIcon, Star } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { CandlestickChart } from "../components/CandlestickChart";
-
-// ── News types & hook ─────────────────────────────────────────────────────────
-interface NewsItem {
-  uuid: string;
-  title: string;
-  publisher: string;
-  link: string;
-  publishedAt: number;
-}
-
-function useSessionNews(tickers: string[]) {
-  const [news, setNews] = useState<NewsItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const key = tickers.slice().sort().join(",");
-
-  useEffect(() => {
-    if (!key) return;
-    setLoading(true);
-    fetch(`/api/screener/news?tickers=${encodeURIComponent(key)}`)
-      .then((r) => r.json())
-      .then((data: NewsItem[]) => setNews(Array.isArray(data) ? data : []))
-      .catch(() => setNews([]))
-      .finally(() => setLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
-
-  return { news, loading };
-}
 
 // ── Edge score helpers ────────────────────────────────────────────────────────
 // For EdgeAI sessions: rsi field stores expectancyR × 100; perf1m stores winRate.
@@ -49,14 +21,6 @@ function edgeScoreColor(score: number): string {
   return "text-destructive border-destructive/30 bg-destructive/10";
 }
 
-function formatTimeAgo(unixSec: number): string {
-  const diffMs = Date.now() - unixSec * 1000;
-  const h = Math.floor(diffMs / 3_600_000);
-  if (h < 1) return "< 1h";
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 export function SessionDetail() {
   const params = useParams();
@@ -69,8 +33,6 @@ export function SessionDetail() {
     { tickers: tickersParam },
     { query: { enabled: tickers.length > 0, refetchInterval: 60_000 } }
   );
-  const { news, loading: newsLoading } = useSessionNews(tickers);
-
   const quoteMap: Record<string, QuoteResult> = {};
   quotes?.forEach((q) => { quoteMap[q.ticker] = q; });
 
@@ -286,8 +248,6 @@ export function SessionDetail() {
         })}
       </div>
 
-      {/* ── Latest News ── */}
-      <NewsPanel news={news} loading={newsLoading} />
     </div>
   );
 }
@@ -396,72 +356,6 @@ function WeatherMetric({ label, value, isPercent }: { label: string, value: numb
   );
 }
 
-// ── News panel ────────────────────────────────────────────────────────────────
-function NewsPanel({ news, loading }: { news: NewsItem[]; loading: boolean }) {
-  const [expanded, setExpanded] = useState(false);
-
-  if (loading) {
-    return (
-      <div className="bg-card border border-border rounded-lg p-5 shadow-sm">
-        <div className="flex items-center gap-2 mb-3">
-          <Newspaper className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-semibold text-muted-foreground">Senaste nyheter</span>
-        </div>
-        <div className="space-y-2">
-          {[1,2,3].map(i => <div key={i} className="h-10 bg-muted rounded animate-pulse" />)}
-        </div>
-      </div>
-    );
-  }
-
-  if (news.length === 0) return null;
-
-  const visible = expanded ? news : news.slice(0, 5);
-
-  return (
-    <div className="bg-card border border-border rounded-lg p-5 shadow-sm">
-      <div className="flex items-center gap-2 mb-4">
-        <Newspaper className="w-4 h-4 text-muted-foreground" />
-        <span className="text-sm font-semibold">Senaste nyheter</span>
-        <span className="ml-auto text-xs text-muted-foreground">{news.length} artiklar</span>
-      </div>
-
-      <div className="space-y-1">
-        {visible.map((item) => (
-          <a
-            key={item.uuid}
-            href={item.link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-start gap-3 p-2.5 rounded-md hover:bg-muted/60 transition-colors group"
-          >
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium leading-snug group-hover:text-primary transition-colors line-clamp-2">
-                {item.title}
-              </div>
-              <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground">
-                <span>{item.publisher}</span>
-                <span>·</span>
-                <span>{formatTimeAgo(item.publishedAt)}</span>
-              </div>
-            </div>
-            <ExternalLink className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          </a>
-        ))}
-      </div>
-
-      {news.length > 5 && (
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="mt-3 text-xs text-muted-foreground hover:text-foreground transition-colors w-full text-center py-1"
-        >
-          {expanded ? "Visa färre" : `Visa ${news.length - 5} till`}
-        </button>
-      )}
-    </div>
-  );
-}
-
 // ── Candidate row ─────────────────────────────────────────────────────────────
 function CandidateRow({
   candidate, sessionId, quote, daysOld, isEdgeAI, rank, isPicked, pickedCount, onTogglePick,
@@ -547,7 +441,11 @@ function CandidateRow({
   // EdgeAI per-candidate edge score
   const score = edgeScore(candidate);
   const expectancyR = candidate.rsi / 100;
-  const winRatePct = Math.round(candidate.perf1m * 100);
+  // perf1m is stored as decimal (0–1) in EdgeAI sessions OR as integer percent (e.g. 49)
+  // depending on how the import was done. Guard against showing 4900 % instead of 49 %.
+  const winRatePct = candidate.perf1m > 1
+    ? Math.round(candidate.perf1m)           // already an integer percent
+    : Math.round(candidate.perf1m * 100);    // decimal 0–1
   const sampleN = candidate.pctB;
   const barsAgo = Math.round(candidate.distFrom20dH);
 
