@@ -8,7 +8,7 @@
  */
 import { Router, type IRouter } from "express";
 import { eq, asc } from "drizzle-orm";
-import { db, survivalConfigTable, survivalTradesTable } from "@workspace/db";
+import { db, survivalConfigTable, survivalTradesTable, openPositionsTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -181,6 +181,54 @@ router.delete("/survival/trades/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Trade not found" });
     return;
   }
+  res.sendStatus(204);
+});
+
+// ─── Open Positions ──────────────────────────────────────────────────────────
+
+// GET /survival/positions
+router.get("/survival/positions", async (_req, res): Promise<void> => {
+  const rows = await db
+    .select()
+    .from(openPositionsTable)
+    .orderBy(asc(openPositionsTable.createdAt));
+  res.json(rows);
+});
+
+// POST /survival/positions
+router.post("/survival/positions", async (req, res): Promise<void> => {
+  const { ticker, direction, entryPrice, shares, stopPrice } = req.body ?? {};
+  if (
+    typeof ticker !== "string" || !ticker.trim() ||
+    !["LONG", "SHORT"].includes(direction) ||
+    typeof entryPrice !== "number" || !isFinite(entryPrice) || entryPrice <= 0 ||
+    typeof shares !== "number" || !isFinite(shares) || shares <= 0
+  ) {
+    res.status(400).json({ error: "Invalid position payload" });
+    return;
+  }
+  const [pos] = await db
+    .insert(openPositionsTable)
+    .values({
+      ticker: ticker.trim().toUpperCase(),
+      direction,
+      entryPrice,
+      shares,
+      stopPrice: typeof stopPrice === "number" && isFinite(stopPrice) && stopPrice > 0 ? stopPrice : null,
+    })
+    .returning();
+  res.status(201).json(pos);
+});
+
+// DELETE /survival/positions/:id
+router.delete("/survival/positions/:id", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [deleted] = await db
+    .delete(openPositionsTable)
+    .where(eq(openPositionsTable.id, id))
+    .returning();
+  if (!deleted) { res.status(404).json({ error: "Position not found" }); return; }
   res.sendStatus(204);
 });
 

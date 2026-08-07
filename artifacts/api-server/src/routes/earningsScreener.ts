@@ -14,7 +14,7 @@
 import { Router, type IRouter } from "express";
 import YahooFinance from "yahoo-finance2";
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
-import { desc, eq } from "drizzle-orm";
+import { desc } from "drizzle-orm";
 
 const router: IRouter = Router();
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
@@ -122,10 +122,10 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
   const omxsYahooSet = new Set(OMXS30_TICKERS.map((t) => t.yahoo));
   let usTickers: { yahoo: string; display: string }[] = [];
   try {
+    // Use the most recent session regardless of source (edgeai, telegram, or manual)
     const [latestSession] = await db
       .select({ id: screenerSessionsTable.id })
       .from(screenerSessionsTable)
-      .where(eq(screenerSessionsTable.source as any, "edgeai"))
       .orderBy(desc(screenerSessionsTable.date))
       .limit(1);
 

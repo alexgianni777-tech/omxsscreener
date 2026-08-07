@@ -22,6 +22,25 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
+// GET /api/telegram-import/status — shows pipeline health without exposing secret
+router.get("/telegram-import/status", async (_req, res: Response): Promise<void> => {
+  const { db, screenerSessionsTable } = await import("@workspace/db");
+  const { desc } = await import("drizzle-orm");
+  const secretConfigured = !!process.env.TELEGRAM_IMPORT_SECRET;
+  const [latest] = await db
+    .select({ date: screenerSessionsTable.date, source: screenerSessionsTable.source, createdAt: screenerSessionsTable.createdAt })
+    .from(screenerSessionsTable)
+    .orderBy(desc(screenerSessionsTable.createdAt))
+    .limit(1);
+  res.json({
+    secretConfigured,
+    latestSession: latest ?? null,
+    note: secretConfigured
+      ? "Token configured — ensure DASHBOARD_IMPORT_SECRET in GitHub matches TELEGRAM_IMPORT_SECRET in Replit"
+      : "TELEGRAM_IMPORT_SECRET not set — set it in Replit Secrets",
+  });
+});
+
 router.post("/telegram-import", async (req: Request, res: Response): Promise<void> => {
   // ── Auth ────────────────────────────────────────────────────────────────────
   const secret = process.env.TELEGRAM_IMPORT_SECRET;

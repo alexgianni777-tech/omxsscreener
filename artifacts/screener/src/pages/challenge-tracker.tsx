@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Trash2, Plus, TrendingUp, TrendingDown, Trophy, AlertTriangle, Zap, BookOpen } from "lucide-react";
 
 // ─── types ───────────────────────────────────────────────────────────────────
@@ -38,12 +38,13 @@ type SurvivalData = {
 };
 
 type OpenPosition = {
-  id: string;
+  id: number;       // DB id
   ticker: string;
   direction: "LONG" | "SHORT";
   entryPrice: number;
   shares: number;
   stopPrice: number | null;
+  createdAt: string;
 };
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -151,16 +152,16 @@ export function ChallengeTracker() {
   const [editGoal, setEditGoal] = useState("");
   const [editCurrent, setEditCurrent] = useState("");
 
-  // open positions (localStorage)
-  const [positions, setPositions] = useState<OpenPosition[]>(() => {
-    try { return JSON.parse(localStorage.getItem("ct_positions") ?? "[]"); } catch { return []; }
-  });
+  // open positions (DB-backed)
+  const [positions, setPositions] = useState<OpenPosition[]>([]);
   const [posForm, setPosForm] = useState({ ticker: "", direction: "LONG" as "LONG" | "SHORT", entryPrice: "", shares: "", stopPrice: "" });
   const [addingPos, setAddingPos] = useState(false);
 
-  const savePositions = (ps: OpenPosition[]) => {
-    setPositions(ps);
-    localStorage.setItem("ct_positions", JSON.stringify(ps));
+  const loadPositions = async () => {
+    try {
+      const r = await fetch(api("/survival/positions"));
+      if (r.ok) setPositions(await r.json());
+    } catch { /* non-fatal */ }
   };
 
   const load = async () => {
@@ -179,7 +180,7 @@ export function ChallengeTracker() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); loadPositions(); }, []);
 
   const saveConfig = async () => {
     const body: Record<string, number | null> = {};
@@ -219,19 +220,27 @@ export function ChallengeTracker() {
     load();
   };
 
-  const addPosition = () => {
+  const addPosition = async () => {
     if (!posForm.ticker || !posForm.entryPrice || !posForm.shares) return;
-    const p: OpenPosition = {
-      id: uid(),
-      ticker: posForm.ticker.toUpperCase(),
-      direction: posForm.direction,
-      entryPrice: Number(posForm.entryPrice),
-      shares: Number(posForm.shares),
-      stopPrice: posForm.stopPrice ? Number(posForm.stopPrice) : null,
-    };
-    savePositions([...positions, p]);
+    await fetch(api("/survival/positions"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ticker: posForm.ticker,
+        direction: posForm.direction,
+        entryPrice: Number(posForm.entryPrice),
+        shares: Number(posForm.shares),
+        stopPrice: posForm.stopPrice ? Number(posForm.stopPrice) : undefined,
+      }),
+    });
     setPosForm({ ticker: "", direction: "LONG", entryPrice: "", shares: "", stopPrice: "" });
     setAddingPos(false);
+    loadPositions();
+  };
+
+  const removePosition = async (id: number) => {
+    await fetch(api(`/survival/positions/${id}`), { method: "DELETE" });
+    loadPositions();
   };
 
   if (loading) return (
@@ -374,7 +383,7 @@ export function ChallengeTracker() {
                 {riskKr != null && (
                   <span className="text-xs text-muted-foreground">1R = {fmt(riskKr, 0)} kr</span>
                 )}
-                <button onClick={() => savePositions(positions.filter((x) => x.id !== p.id))} className="text-muted-foreground hover:text-red-400 transition-colors">
+                <button onClick={() => removePosition(p.id)} className="text-muted-foreground hover:text-red-400 transition-colors">
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
