@@ -59,12 +59,14 @@ type Candidate = {
   perf1m: number;
   rsi: number;
   outcome: string;
+  earningsInDays: number | null;
 };
 
 type Session = {
   id: number;
   date: string;
   source: string | null;
+  createdAt: string | null;
   candidates: Candidate[];
 };
 
@@ -358,13 +360,18 @@ export function Today() {
               </span>
               {session && !isToday && (
                 <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded font-medium">
-                  Nästa import ~17:30
+                  Väntar på ny signal
                 </span>
               )}
             </div>
             {session && (
-              <div className="text-xs text-muted-foreground mt-0.5">
-                {picks.some(p => p.isTop3Pick) ? "Dina ⭐ val" : "Auto-rank (topp 3 edge-score)"}
+              <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2">
+                <span>{picks.some(p => p.isTop3Pick) ? "Dina ⭐ val" : "Auto-rank (topp 3 edge-score)"}</span>
+                {session.createdAt && (
+                  <span className="opacity-60">
+                    · importerad {new Date(session.createdAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -393,7 +400,7 @@ export function Today() {
 
         {picks.length === 0 && !loading && (
           <div className="text-sm text-muted-foreground text-center py-12 border border-dashed border-border rounded-xl">
-            Inga picks idag. Data importeras automatiskt efter börsstängning (~17:30).
+            Inga picks idag ännu — kontrolleras automatiskt var 5:e minut från kl 10:00.
           </div>
         )}
 

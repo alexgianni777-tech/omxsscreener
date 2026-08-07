@@ -501,9 +501,10 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     candidates: candidates.map(mapCandidate),
   });
 
-  // Append EdgeAI metadata (not in Zod schema — passed through directly)
+  // Append fields not in Zod schema — passed through directly
   res.json({
     ...parsed,
+    createdAt: session.createdAt ?? null,
     source: session.source ?? null,
     edgeRegime: session.edgeRegime ? (() => { try { return JSON.parse(session.edgeRegime!); } catch { return null; } })() : null,
     edgeExpectancy: session.edgeExpectancy ?? null,
@@ -549,6 +550,7 @@ function mapCandidate(c: {
   volMultiplier: number;
   distFrom20dH: number;
   gapWarning: number | null;
+  earningsInDays: number | null;
   direction: string;
   entryPrice: number;
   stopPrice: number;
@@ -574,6 +576,7 @@ function mapCandidate(c: {
     volMultiplier: c.volMultiplier,
     distFrom20dH: c.distFrom20dH,
     gapWarning: c.gapWarning ?? null,
+    earningsInDays: c.earningsInDays ?? null,
     direction: c.direction,
     entryPrice: c.entryPrice,
     stopPrice: c.stopPrice,
