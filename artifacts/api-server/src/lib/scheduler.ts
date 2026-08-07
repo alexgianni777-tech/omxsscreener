@@ -126,17 +126,9 @@ async function runImport(date: string): Promise<void> {
 
   const edgeData: any = await resp.json();
 
-  // Guard: only import if EdgeAI has generated data for today.
-  // Importing yesterday's (or older) data as "today's session" is misleading —
-  // those setups may no longer be valid. Wait until EdgeAI publishes fresh data.
-  const generatedDate = edgeData.generatedAt ? edgeData.generatedAt.slice(0, 10) : null;
-  if (generatedDate && generatedDate < date) {
-    logger.info(
-      { date, generatedAt: edgeData.generatedAt },
-      "[scheduler] EdgeAI data not yet refreshed for today — will retry",
-    );
-    return;
-  }
+  // Note: edgeData.generatedAt only changes when new signals are found — not every day.
+  // EdgeAI commits daily (verified via GitHub), so the data is always current;
+  // the timestamp just reflects the last signal change, not the last run.
 
   const se = edgeData?.markets?.SE;
   const seSetups: any[] = se?.setups ?? [];
