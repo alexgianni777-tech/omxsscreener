@@ -16,12 +16,11 @@ const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] 
 const EDGEAI_URL = "https://alexgianni777-tech.github.io/edgeai/public/data.json";
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
-// Import window: OMXS30 closes 17:30 CET/CEST = 15:30 UTC (summer) and
-// US market open +2 h = 11:30 ET = 15:30 UTC (EDT, summer) — same moment.
-// In winter (CET/EST) both shift to ~16:30 UTC, but EdgeAI data is
-// generated in the morning so 15:30 UTC is always a safe lower bound.
-const EARLIEST_HOUR_UTC   = 15;
-const EARLIEST_MINUTE_UTC = 30;
+// Start checking from 08:00 UTC (10:00 CEST) — market has been open 1 h.
+// EdgeAI data is generated mid-morning; the scheduler retries every 5 min
+// and imports as soon as today's data is available (generatedAt check below).
+const EARLIEST_HOUR_UTC   = 8;
+const EARLIEST_MINUTE_UTC = 0;
 
 // In-memory status — reset on server restart
 export let schedulerStatus: {
@@ -126,6 +125,18 @@ async function runImport(date: string): Promise<void> {
   if (!resp.ok) throw new Error(`EdgeAI fetch HTTP ${resp.status}`);
 
   const edgeData: any = await resp.json();
+
+  // Guard: only import if EdgeAI has generated today's data.
+  // If generatedAt is from yesterday the file hasn't refreshed yet — retry next tick.
+  const generatedDate = edgeData.generatedAt ? edgeData.generatedAt.slice(0, 10) : null;
+  if (generatedDate && generatedDate < date) {
+    logger.info(
+      { date, generatedAt: edgeData.generatedAt },
+      "[scheduler] EdgeAI data not yet refreshed for today — will retry",
+    );
+    return;
+  }
+
   const se = edgeData?.markets?.SE;
   const seSetups: any[] = se?.setups ?? [];
   const usSetups: any[] = edgeData?.markets?.US?.setups ?? [];
@@ -218,6 +229,6 @@ export function startScheduler() {
   const nextCheck = new Date(Date.now() + CHECK_INTERVAL_MS);
   schedulerStatus.nextCheckAt = nextCheck.toISOString();
 
-  logger.info("[scheduler] Started — checking EdgeAI every 5 min on weekdays; imports after 15:30 UTC (≈ OMXS30 close / US open +2 h)");
+  logger.info("[scheduler] Started — checking EdgeAI every 5 min on weekdays from 08:00 UTC; imports as soon as today's data is available");
   return interval;
 }
