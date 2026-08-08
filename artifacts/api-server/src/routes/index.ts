@@ -12,6 +12,7 @@ import analyticsRouter from "./analytics";
 import earningsScreenerRouter from "./earningsScreener";
 import priceChartRouter from "./priceChart";
 import telegramImportRouter from "./telegramImport";
+import marketIntelRouter from "./marketIntel";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(newsRouter);
 router.use(analyticsRouter);
 router.use(earningsScreenerRouter);
 router.use(priceChartRouter);
+router.use(marketIntelRouter);
 
 export default router;

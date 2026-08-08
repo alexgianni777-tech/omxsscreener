@@ -8,7 +8,7 @@
  *    06:15 and no session exists, it imports immediately on the first tick.
  */
 import { db, screenerSessionsTable } from "@workspace/db";
-import { eq, inArray, and, gte, lte } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import YahooFinance from "yahoo-finance2";
 
@@ -28,13 +28,11 @@ export let schedulerStatus: {
   lastImported: string | null;
   lastError: string | null;
   nextCheckAt: string | null;
-  lastWeeklyDigest: string | null;
 } = {
   lastChecked: null,
   lastImported: null,
   lastError: null,
   nextCheckAt: null,
-  lastWeeklyDigest: null,
 };
 
 function isWeekday(d: Date): boolean {
@@ -114,107 +112,6 @@ function mapSetup(s: any, rankCounter: Record<string, number>) {
     oneR,
     outcome: "PENDING" as const,
   };
-}
-
-function getWeekNumber(date: Date): number {
-  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-}
-
-async function sendWeeklyDigest(now: Date): Promise<void> {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!botToken || !chatId) {
-    logger.info("[scheduler] Weekly digest skipped — TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set");
-    return;
-  }
-
-  const { candidatesTable } = await import("@workspace/db");
-
-  // Current week: Monday → today
-  const dayOfWeek = now.getUTCDay(); // 0=Sun, 1=Mon … 5=Fri
-  const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-  const monday = new Date(now);
-  monday.setUTCDate(now.getUTCDate() - mondayOffset);
-  const mondayStr = monday.toISOString().slice(0, 10);
-  const todayStr = now.toISOString().slice(0, 10);
-
-  const sessions = await db
-    .select({ id: screenerSessionsTable.id, date: screenerSessionsTable.date })
-    .from(screenerSessionsTable)
-    .where(and(gte(screenerSessionsTable.date, mondayStr), lte(screenerSessionsTable.date, todayStr)));
-
-  if (sessions.length === 0) {
-    logger.info({ week: mondayStr }, "[scheduler] Weekly digest — no sessions this week, skipping");
-    return;
-  }
-
-  const sessionIds = sessions.map((s) => s.id);
-  const candidates = await db
-    .select({
-      outcome: candidatesTable.outcome,
-      direction: candidatesTable.direction,
-      entryPrice: candidatesTable.entryPrice,
-      stopPrice: candidatesTable.stopPrice,
-      exitPrice: candidatesTable.exitPrice,
-    })
-    .from(candidatesTable)
-    .where(inArray(candidatesTable.sessionId, sessionIds));
-
-  let wins = 0;
-  let losses = 0;
-  let totalR = 0;
-
-  for (const c of candidates) {
-    if (c.outcome !== "WIN" && c.outcome !== "LOSS") continue;
-    if (c.outcome === "WIN") wins++;
-    else losses++;
-    if (c.exitPrice != null && c.entryPrice != null && c.stopPrice != null) {
-      const oneR = Math.abs(c.entryPrice - c.stopPrice);
-      if (oneR > 0) {
-        const r =
-          c.direction === "SHORT"
-            ? (c.entryPrice - c.exitPrice) / oneR
-            : (c.exitPrice - c.entryPrice) / oneR;
-        totalR += r;
-      }
-    }
-  }
-
-  const resolved = wins + losses;
-  const winRatePct = resolved > 0 ? Math.round((wins / resolved) * 100) : null;
-  const rStr = totalR >= 0 ? `+${totalR.toFixed(2)}R` : `${totalR.toFixed(2)}R`;
-  const weekNo = getWeekNumber(now);
-  const trendEmoji = totalR > 0 ? "📈" : totalR < 0 ? "📉" : "➡️";
-
-  const text = [
-    `${trendEmoji} *Veckosammanfattning v.${weekNo}*`,
-    ``,
-    `📅 ${mondayStr} → ${todayStr}`,
-    `📊 ${sessions.length} session${sessions.length !== 1 ? "er" : ""}`,
-    ``,
-    `✅ Vinster: ${wins}`,
-    `❌ Förluster: ${losses}`,
-    `🎯 Win rate: ${winRatePct != null ? `${winRatePct}%` : "–"}`,
-    `💰 Total R: ${rStr}`,
-  ].join("\n");
-
-  const resp = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown" }),
-    signal: AbortSignal.timeout(10_000),
-  });
-
-  if (!resp.ok) {
-    const body = await resp.text();
-    throw new Error(`Telegram API ${resp.status}: ${body}`);
-  }
-
-  logger.info({ weekNo, sessions: sessions.length, wins, losses, totalR: totalR.toFixed(2) }, "[scheduler] Weekly digest sent");
 }
 
 async function runImport(date: string): Promise<void> {
@@ -316,20 +213,6 @@ async function tick() {
     }
   }
 
-  // ── Weekly digest (Fridays after 16:30 UTC, once per week) ─────────────────
-  const isFriday = now.getUTCDay() === 5;
-  const pastDigestWindow = utcH > 16 || (utcH === 16 && utcM >= 30);
-  if (isFriday && pastDigestWindow) {
-    const weekKey = todayUtc(); // unique per Friday
-    if (schedulerStatus.lastWeeklyDigest !== weekKey) {
-      try {
-        await sendWeeklyDigest(now);
-        schedulerStatus.lastWeeklyDigest = weekKey;
-      } catch (err: any) {
-        logger.warn({ err: err.message }, "[scheduler] Weekly digest failed");
-      }
-    }
-  }
 }
 
 export function startScheduler() {

@@ -12,6 +12,7 @@ import {
   ComposedChart, Bar, Cell,
 } from "recharts";
 import { useTop3Analytics, type Top3Session } from "../lib/useTop3Analytics";
+import { useMarketIntel, type MarketIntelData } from "../lib/useMarketIntel";
 import { useState, useMemo } from "react";
 
 export function Dashboard() {
@@ -81,6 +82,12 @@ export function Dashboard() {
           Quick Import
         </Link>
       </header>
+
+      {/* Weekly Summary */}
+      <WeekSummarySection equityCurve={summary.equityCurve} />
+
+      {/* Market Intel */}
+      <MarketIntelSection />
 
       {/* Top Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -326,6 +333,239 @@ function EquityCurveTooltip({ active, payload }: TooltipProps<number, string>) {
   );
 }
 
+// ─── Week Summary ─────────────────────────────────────────────────────────────
+
+function getISOWeekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
+
+function WeekSummarySection({ equityCurve }: { equityCurve: EquityPoint[] }) {
+  const { weekNum, mondayStr, wins, losses, winRate, totalR, bestPick, trades } = useMemo(() => {
+    const now = new Date();
+    const day = now.getUTCDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + mondayOffset));
+    const mondayStr = monday.toISOString().slice(0, 10);
+    const weekNum = getISOWeekNumber(now);
+
+    const thisWeek = equityCurve.filter((t) => t.date >= mondayStr);
+    let wins = 0, losses = 0, totalR = 0;
+    let bestPick: { ticker: string; r: number } | null = null;
+    for (const t of thisWeek) {
+      if (t.outcome === "WIN") wins++;
+      else losses++;
+      totalR += t.r;
+      if (!bestPick || t.r > bestPick.r) bestPick = { ticker: t.ticker, r: t.r };
+    }
+    return {
+      weekNum,
+      mondayStr,
+      trades: thisWeek.length,
+      wins,
+      losses,
+      winRate: wins + losses > 0 ? wins / (wins + losses) : null,
+      totalR: Math.round(totalR * 100) / 100,
+      bestPick,
+    };
+  }, [equityCurve]);
+
+  const rColor = totalR > 0 ? "text-success" : totalR < 0 ? "text-destructive" : "text-muted-foreground";
+  const wrColor = winRate != null ? (winRate >= 0.5 ? "text-success" : "text-destructive") : "text-muted-foreground";
+
+  return (
+    <div className="bg-card border border-border rounded-xl p-5 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-base">Sammanfattning vecka {weekNum}</h3>
+        <span className="text-xs text-muted-foreground">{mondayStr} →</span>
+      </div>
+      {trades === 0 ? (
+        <p className="text-sm text-muted-foreground">Inga avslutade trades med exit-pris denna vecka.</p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="text-center">
+            <div className={`text-2xl font-bold font-mono ${rColor}`}>
+              {totalR >= 0 ? "+" : ""}{formatNumber(totalR, 2)}R
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">Total R</div>
+          </div>
+          <div className="text-center">
+            <div className={`text-2xl font-bold font-mono ${wrColor}`}>
+              {winRate != null ? formatPercent(winRate) : "–"}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">Win rate</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold font-mono">
+              <span className="text-success">{wins}V</span>
+              <span className="text-muted-foreground mx-1">/</span>
+              <span className="text-destructive">{losses}F</span>
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">Trades</div>
+          </div>
+          <div className="text-center">
+            {bestPick ? (
+              <>
+                <div className="text-2xl font-bold font-mono text-success">
+                  {bestPick.ticker.replace(/\.ST$/i, "")}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Bästa pick (+{formatNumber(bestPick.r, 2)}R)
+                </div>
+              </>
+            ) : (
+              <div className="text-2xl font-bold font-mono text-muted-foreground">–</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Market Intel ─────────────────────────────────────────────────────────────
+
+function fgColor(score: number): string {
+  if (score <= 25) return "#ef4444"; // extreme fear
+  if (score <= 45) return "#f97316"; // fear
+  if (score <= 55) return "#eab308"; // neutral
+  if (score <= 75) return "#84cc16"; // greed
+  return "#22c55e";                  // extreme greed
+}
+
+function fgLabel(rating: string): string {
+  const map: Record<string, string> = {
+    "Extreme Fear": "Extrem Rädsla",
+    "Fear": "Rädsla",
+    "Neutral": "Neutralt",
+    "Greed": "Girighet",
+    "Extreme Greed": "Extrem Girighet",
+  };
+  return map[rating] ?? rating;
+}
+
+function MarketIntelSection() {
+  const { data, isLoading } = useMarketIntel();
+
+  const peRows: { label: string; key: keyof MarketIntelData["pe"]; avg: number }[] = [
+    { label: "S&P 500 (SPY)", key: "sp500", avg: 17 },
+    { label: "Nasdaq 100 (QQQ)", key: "nasdaq", avg: 25 },
+    { label: "OMXS30", key: "omxs30", avg: 15 },
+  ];
+
+  return (
+    <div>
+      <h3 className="text-lg font-semibold mb-4 border-b border-border pb-2">Marknadsläge</h3>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Fear & Greed */}
+        <div className="bg-card border border-border rounded-lg p-5 shadow-sm">
+          <div className="text-sm font-medium text-muted-foreground mb-3">CNN Fear &amp; Greed Index</div>
+          {isLoading ? (
+            <div className="h-20 bg-muted animate-pulse rounded" />
+          ) : !data?.fearGreed ? (
+            <p className="text-sm text-muted-foreground">Kunde inte hämta data.</p>
+          ) : (
+            <>
+              <div className="flex items-center gap-4 mb-3">
+                <div
+                  className="text-4xl font-black font-mono"
+                  style={{ color: fgColor(data.fearGreed.score) }}
+                >
+                  {data.fearGreed.score}
+                </div>
+                <div>
+                  <div className="font-semibold" style={{ color: fgColor(data.fearGreed.score) }}>
+                    {fgLabel(data.fearGreed.rating)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">av 100</div>
+                </div>
+              </div>
+              {/* Progress bar */}
+              <div className="w-full h-2.5 bg-muted rounded-full overflow-hidden mb-3">
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${data.fearGreed.score}%`,
+                    backgroundColor: fgColor(data.fearGreed.score),
+                  }}
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                <div>
+                  <div className="text-muted-foreground">Igår</div>
+                  <div className="font-mono font-semibold">{data.fearGreed.previousClose}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">1 vecka</div>
+                  <div className="font-mono font-semibold">{data.fearGreed.previousWeek}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">1 månad</div>
+                  <div className="font-mono font-semibold">{data.fearGreed.previousMonth}</div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* P/E Ratios */}
+        <div className="bg-card border border-border rounded-lg p-5 shadow-sm">
+          <div className="text-sm font-medium text-muted-foreground mb-3">P/E-tal (aktuellt vs historiskt snitt)</div>
+          {isLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => <div key={i} className="h-10 bg-muted animate-pulse rounded" />)}
+            </div>
+          ) : !data ? (
+            <p className="text-sm text-muted-foreground">Kunde inte hämta data.</p>
+          ) : (
+            <div className="space-y-3">
+              {peRows.map(({ label, key, avg }) => {
+                const pe = data.pe[key];
+                const trailing = pe.trailing != null ? Math.round(pe.trailing * 10) / 10 : null;
+                const forward = pe.forward != null ? Math.round(pe.forward * 10) / 10 : null;
+                const vsAvg = trailing != null ? trailing - avg : null;
+                const color = vsAvg == null ? "" : vsAvg > 5 ? "text-destructive" : vsAvg < -2 ? "text-success" : "text-muted-foreground";
+                return (
+                  <div key={key} className="flex items-center justify-between">
+                    <span className="text-sm">{label}</span>
+                    <div className="flex items-center gap-3 text-right">
+                      <div>
+                        <div className={`font-mono font-bold text-sm ${color}`}>
+                          {trailing ?? "–"}
+                        </div>
+                        <div className="text-xs text-muted-foreground">trailing</div>
+                      </div>
+                      <div>
+                        <div className="font-mono text-sm text-muted-foreground">
+                          {forward ?? "–"}
+                        </div>
+                        <div className="text-xs text-muted-foreground">forward</div>
+                      </div>
+                      <div>
+                        <div className="font-mono text-xs text-muted-foreground">
+                          snitt ~{avg}
+                        </div>
+                        {vsAvg != null && (
+                          <div className={`text-xs font-semibold ${color}`}>
+                            {vsAvg > 0 ? "+" : ""}{vsAvg.toFixed(1)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Session R Curve ──────────────────────────────────────────────────────────
 
 interface EquityPoint {
@@ -459,8 +699,8 @@ function Top3Section() {
         <h3 className="text-lg font-semibold">Top 3 picks — hypotetisk avkastning</h3>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Top3MarketCard label="🇸🇪 Sverige (OMXS30)" sessions={seSessions} isLoading={isLoading} accentColor="hsl(var(--primary))" />
-        <Top3MarketCard label="🇺🇸 USA" sessions={usSessions} isLoading={isLoading} accentColor="hsl(var(--success, 142 71% 45%))" />
+        <Top3MarketCard label="📋 Manuella sessioner" sessions={seSessions} isLoading={isLoading} accentColor="hsl(var(--primary))" />
+        <Top3MarketCard label="⚡ EdgeAI (SE + US)" sessions={usSessions} isLoading={isLoading} accentColor="hsl(var(--success, 142 71% 45%))" />
       </div>
     </div>
   );
