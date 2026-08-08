@@ -9,6 +9,7 @@ import { formatNumber, formatPercent } from "../lib/utils";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, TooltipProps,
+  ComposedChart, Bar, Cell,
 } from "recharts";
 import { useTop3Analytics, type Top3Session } from "../lib/useTop3Analytics";
 import { useState, useMemo } from "react";
@@ -227,6 +228,9 @@ export function Dashboard() {
         )}
       </div>
 
+      {/* Session R Chart */}
+      <SessionRCurveSection equityCurve={summary.equityCurve} />
+
       {/* Top 3 Strategy */}
       <Top3Section />
 
@@ -316,6 +320,124 @@ function EquityCurveTooltip({ active, payload }: TooltipProps<number, string>) {
         <span className="font-mono font-semibold">
           {d.cumulativeR >= 0 ? "+" : ""}
           {Number(d.cumulativeR).toFixed(2)}R
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Session R Curve ──────────────────────────────────────────────────────────
+
+interface EquityPoint {
+  date: string;
+  r: number;
+  ticker: string;
+  outcome: "WIN" | "LOSS";
+  tradeIndex: number;
+  cumulativeR: number;
+}
+
+function buildSessionData(equityCurve: EquityPoint[]) {
+  const byDate: Record<string, number> = {};
+  const dateOrder: string[] = [];
+  for (const pt of equityCurve) {
+    if (!(pt.date in byDate)) {
+      byDate[pt.date] = 0;
+      dateOrder.push(pt.date);
+    }
+    byDate[pt.date] = Math.round((byDate[pt.date] + pt.r) * 1000) / 1000;
+  }
+  let cum = 0;
+  return dateOrder.map((date) => {
+    cum = Math.round((cum + byDate[date]) * 1000) / 1000;
+    return {
+      date: date.slice(5),
+      fullDate: date,
+      sessionR: Math.round(byDate[date] * 1000) / 1000,
+      cumulativeR: cum,
+    };
+  });
+}
+
+function SessionRCurveSection({ equityCurve }: { equityCurve: EquityPoint[] }) {
+  const sessionData = buildSessionData(equityCurve);
+  const hasData = sessionData.length > 0;
+  const finalR = hasData ? sessionData[sessionData.length - 1].cumulativeR : null;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 border-b border-border pb-2">
+        <h3 className="text-lg font-semibold">R per session</h3>
+        {finalR != null && (
+          <span className={`text-sm font-mono font-bold ${finalR >= 0 ? "text-success" : "text-destructive"}`}>
+            {finalR >= 0 ? "+" : ""}{formatNumber(finalR, 2)}R totalt
+          </span>
+        )}
+      </div>
+
+      {!hasData ? (
+        <div className="flex flex-col items-center justify-center h-48 bg-card border border-border rounded-lg text-muted-foreground gap-2">
+          <BarChart2 className="h-8 w-8 opacity-30" />
+          <p className="text-sm">Logga utfall med exit-pris för att se sessionsresultat.</p>
+        </div>
+      ) : (
+        <div className="bg-card border border-border rounded-lg p-4 shadow-sm">
+          <ResponsiveContainer width="100%" height={240}>
+            <ComposedChart data={sessionData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+              <XAxis dataKey="date" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+              <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}R`} width={40} />
+              <ReferenceLine y={0} stroke="currentColor" strokeOpacity={0.25} />
+              <Tooltip content={<SessionTooltip />} />
+              <Bar dataKey="sessionR" radius={[3, 3, 0, 0]} maxBarSize={40}>
+                {sessionData.map((entry, i) => (
+                  <Cell
+                    key={i}
+                    fill={
+                      entry.sessionR >= 0
+                        ? "hsl(142 71% 45%)"
+                        : "hsl(var(--destructive))"
+                    }
+                    fillOpacity={0.75}
+                  />
+                ))}
+              </Bar>
+              <Line
+                type="monotone"
+                dataKey="cumulativeR"
+                stroke="hsl(var(--primary))"
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+          <p className="text-xs text-muted-foreground mt-2 text-center">
+            Staplar = netto-R per dag · Linje = kumulativt
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SessionTooltip({ active, payload }: TooltipProps<number, string>) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload as { fullDate: string; sessionR: number; cumulativeR: number } | undefined;
+  if (!d) return null;
+  return (
+    <div className="bg-popover border border-border rounded-lg p-3 shadow-lg text-xs space-y-1 min-w-[160px]">
+      <div className="font-semibold text-muted-foreground">{d.fullDate}</div>
+      <div className="flex justify-between gap-4">
+        <span className="text-muted-foreground">Session</span>
+        <span className={`font-mono font-bold ${d.sessionR >= 0 ? "text-success" : "text-destructive"}`}>
+          {d.sessionR >= 0 ? "+" : ""}{formatNumber(d.sessionR, 2)}R
+        </span>
+      </div>
+      <div className="flex justify-between gap-4 border-t border-border pt-1">
+        <span className="text-muted-foreground">Kumulativt</span>
+        <span className="font-mono font-semibold">
+          {d.cumulativeR >= 0 ? "+" : ""}{formatNumber(d.cumulativeR, 2)}R
         </span>
       </div>
     </div>
