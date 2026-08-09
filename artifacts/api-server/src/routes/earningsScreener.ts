@@ -57,6 +57,13 @@ const OMXS30_TICKERS: { yahoo: string; display: string }[] = [
   { yahoo: "VOLV-B.ST",    display: "Volvo" },
 ];
 
+// ── Extra SE watchlist (mid/small-cap utanför OMXS30) ────────────────────────
+const SE_WATCHLIST_TICKERS: { yahoo: string; display: string }[] = [
+  { yahoo: "EMBRAC-B.ST", display: "Embracer" },
+  { yahoo: "RVRC.ST",     display: "Revolution Race" },
+  { yahoo: "BORG.ST",     display: "Björn Borg" },
+];
+
 // ── Permanent US large-cap universe ──────────────────────────────────────────
 const US_LARGE_CAP_TICKERS: { yahoo: string; display: string }[] = [
   // Magnificent 7
@@ -204,6 +211,7 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
 
   const universe: { yahoo: string; display: string; market: "SE" | "US" }[] = [
     ...OMXS30_TICKERS.map((t) => ({ ...t, market: "SE" as const })),
+    ...SE_WATCHLIST_TICKERS.map((t) => ({ ...t, market: "SE" as const })),
     ...allUsTickers.map((t) => ({ ...t, market: "US" as const })),
   ];
 
