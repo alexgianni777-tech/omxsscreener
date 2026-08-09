@@ -1,9 +1,9 @@
-import { useGetDashboardSummary } from "@workspace/api-client-react";
+import { useGetDashboardSummary, useListSessions } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import {
   ArrowUpRight, ArrowDownRight, Target, Activity, CheckCircle2,
   Clock, Zap, TrendingUp, TrendingDown, BarChart2, Sigma, Trophy,
-  AlertTriangle,
+  AlertTriangle, CalendarDays, Star,
 } from "lucide-react";
 import { formatNumber, formatPercent } from "../lib/utils";
 import {
@@ -82,6 +82,9 @@ export function Dashboard() {
           Quick Import
         </Link>
       </header>
+
+      {/* Today's Session */}
+      <TodaySessionPanel />
 
       {/* Weekly Summary */}
       <WeekSummarySection equityCurve={summary.equityCurve} />
@@ -328,6 +331,129 @@ function EquityCurveTooltip({ active, payload }: TooltipProps<number, string>) {
           {d.cumulativeR >= 0 ? "+" : ""}
           {Number(d.cumulativeR).toFixed(2)}R
         </span>
+      </div>
+    </div>
+  );
+}
+
+function TodaySessionPanel() {
+  const { data: sessions, isLoading } = useListSessions();
+  const { data: top3 } = useTop3Analytics();
+
+  // Use sv-SE locale so we get "YYYY-MM-DD" in the Swedish timezone
+  const todayStr = new Date().toLocaleDateString("sv-SE");
+  const latest = sessions?.[0]; // list is sorted DESC by date
+  const isToday = latest?.date === todayStr;
+
+  // Find top-3 picks for the latest session from the already-loaded analytics data
+  const top3Session = top3?.sessions.find((s) => s.sessionId === latest?.id);
+  const top3Count = top3Session?.picks.length ?? 0;
+
+  const trendLabel = latest?.marketWeather.trendLabel ?? "";
+  const trendUp = trendLabel.includes("BULL");
+  const trendDown = trendLabel.includes("BEAR");
+  const TrendIcon = trendUp ? TrendingUp : trendDown ? TrendingDown : BarChart2;
+  const trendColor = trendUp
+    ? "text-success"
+    : trendDown
+    ? "text-destructive"
+    : "text-muted-foreground";
+
+  // ── Loading skeleton ──────────────────────────────────────────────────────
+  if (isLoading) {
+    return <div className="h-20 bg-muted rounded-lg animate-pulse" />;
+  }
+
+  // ── No session yet today ──────────────────────────────────────────────────
+  if (!isToday) {
+    return (
+      <div className="bg-card border border-border rounded-lg p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-full bg-muted">
+            <CalendarDays className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">Dagens session</p>
+            <p className="text-sm font-semibold mt-0.5">
+              Ingen signal ännu idag — Telegram-import inväntas
+            </p>
+          </div>
+        </div>
+        {latest && (
+          <Link
+            href={`/sessions/${latest.id}`}
+            className="shrink-0 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Senaste: {latest.date}
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </Link>
+        )}
+      </div>
+    );
+  }
+
+  // ── Today's session exists ────────────────────────────────────────────────
+  const { marketWeather, totalCandidates, id } = latest;
+
+  return (
+    <div className="bg-card border border-primary/30 rounded-lg p-5 shadow-sm ring-1 ring-primary/10">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        {/* Left: date + market snapshot */}
+        <div className="flex items-start gap-4">
+          <div className="p-2 rounded-full bg-primary/10 shrink-0">
+            <CalendarDays className="h-5 w-5 text-primary" />
+          </div>
+          <div className="space-y-2">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Dagens session</p>
+              <p className="text-sm font-bold mt-0.5">{latest.date}</p>
+            </div>
+            <div className="flex flex-wrap gap-3 text-xs">
+              {/* OMXS30 value */}
+              <span className="flex items-center gap-1 bg-muted/60 rounded-md px-2.5 py-1 font-mono font-semibold">
+                OMXS30 {formatNumber(marketWeather.omxsValue, 1)}
+              </span>
+              {/* Trend */}
+              <span className={`flex items-center gap-1 bg-muted/60 rounded-md px-2.5 py-1 font-medium ${trendColor}`}>
+                <TrendIcon className="h-3.5 w-3.5" />
+                {trendLabel}
+              </span>
+              {/* Candidates */}
+              <span className="flex items-center gap-1 bg-muted/60 rounded-md px-2.5 py-1 text-muted-foreground">
+                <Target className="h-3.5 w-3.5" />
+                {totalCandidates} kandidater
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: top3 status + open button */}
+        <div className="flex items-center gap-3 sm:flex-col sm:items-end">
+          {/* Top 3 stars status */}
+          <div className="flex items-center gap-1.5 text-xs">
+            {[0, 1, 2].map((i) => (
+              <Star
+                key={i}
+                className={`h-4 w-4 ${
+                  i < top3Count
+                    ? "text-amber-400 fill-amber-400"
+                    : "text-muted-foreground/30"
+                }`}
+              />
+            ))}
+            <span className="ml-1 text-muted-foreground font-medium">
+              {top3Count}/3 picks satta
+            </span>
+          </div>
+          {/* Open session link */}
+          <Link
+            href={`/sessions/${id}`}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground text-xs font-semibold px-3 py-1.5 hover:bg-primary/90 transition-colors shadow-sm shrink-0"
+          >
+            Öppna session
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
       </div>
     </div>
   );
