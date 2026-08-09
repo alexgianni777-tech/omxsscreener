@@ -11,7 +11,7 @@ import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import {
   TrendingUp, TrendingDown, Trophy, ChevronRight,
-  Target, Settings2, CheckCircle2, XCircle, RefreshCw, Zap,
+  Target, Settings2, CheckCircle2, XCircle, RefreshCw, Zap, AlertTriangle,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -61,6 +61,7 @@ type Candidate = {
   outcome: string;
   earningsInDays: number | null;
   market: "SE" | "US" | null;
+  pctB: number; // EdgeAI sample size (number of historical observations)
 };
 
 type Session = {
@@ -68,6 +69,14 @@ type Session = {
   date: string;
   source: string | null;
   createdAt: string | null;
+  marketWeather: {
+    omxsValue: number;
+    perf5d: number;
+    perf1m: number;
+    perf3m: number;
+    rsi: number;
+    trendLabel: string;
+  } | null;
   candidates: Candidate[];
 };
 
@@ -408,6 +417,31 @@ export function Today() {
           </div>
         )}
 
+        {/* ── Regime filter warning ─────────────────────────────────────── */}
+        {picks.length > 0 && session?.marketWeather && (() => {
+          const { trendLabel, rsi } = session.marketWeather!;
+          const isRiskOff = /risk.?off|motvind|kontrak/i.test(trendLabel ?? "");
+          const isRsiHigh = rsi > 0 && rsi > 75;
+          const isRsiLow  = rsi > 0 && rsi < 25;
+          if (!isRiskOff && !isRsiHigh && !isRsiLow) return null;
+          return (
+            <div className={`flex items-start gap-2.5 px-4 py-3 rounded-xl text-sm mb-1 ${
+              isRiskOff
+                ? "bg-destructive/10 border border-destructive/20 text-destructive"
+                : "bg-amber-500/10 border border-amber-500/20 text-amber-500"
+            }`}>
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>
+                {isRiskOff
+                  ? `Marknaden signalerar ${trendLabel} — överväg att sitta still eller ta halv position.`
+                  : isRsiHigh
+                  ? `OMXS30 RSI ${rsi} — extremt overbought. Momentum kan reversera snart.`
+                  : `OMXS30 RSI ${rsi} — extremt oversold. Hög volatilitet, var extra försiktig med storlek.`}
+              </span>
+            </div>
+          );
+        })()}
+
         <div className="space-y-3">
           {picks.map((candidate, i) => {
             const prevMarket = i > 0 ? picks[i - 1].market : null;
@@ -490,7 +524,12 @@ export function Today() {
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">Pick #{i + 1} · R:R {candidate.rr.toFixed(1)}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-x-2">
+                      <span>Pick #{i + 1} · R:R {candidate.rr.toFixed(1)}</span>
+                      {candidate.perf1m > 0 && <span>WR {(candidate.perf1m * 100).toFixed(0)}%</span>}
+                      {candidate.rsi > 0 && <span>E {(candidate.rsi / 100).toFixed(2)}R</span>}
+                      {candidate.pctB > 0 && <span>{Math.round(candidate.pctB)} obs</span>}
+                    </div>
                   </div>
                 </div>
 

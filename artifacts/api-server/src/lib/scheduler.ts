@@ -84,15 +84,16 @@ function mapSetup(s: any, rankCounter: Record<string, number>) {
   const category = mapCategory(s.dir, s.setup ?? "");
   rankCounter[category] = (rankCounter[category] ?? 0) + 1;
   const direction = s.dir === "short" ? "SHORT" : "LONG";
-  const entry = Number(s.entry ?? 0);
-  const stop  = Number(s.stop  ?? 0);
-  const oneR  = Math.abs(entry - stop);
-  // Always target 1:2 R:R — override EdgeAI's target (which uses 1:1.5 for SE)
-  const RR = 2;
-  const targetPrice = direction === "LONG" ? entry + RR * oneR : entry - RR * oneR;
+  const entry      = Number(s.entry  ?? 0);
+  const stop       = Number(s.stop   ?? 0);
+  const oneR       = Math.abs(entry - stop);
+  // Use EdgeAI's own calibrated target — it reflects the system's actual back-tested level.
+  // Forcing a fixed R:R would reduce win rate below the system's calibration.
+  const targetPrice = Number(s.target ?? 0);
+  const rr          = Number(s.rr    ?? 0);
   // Strip .ST so resolveYahooTicker can re-add it correctly for SE stocks;
   // US tickers have no .ST so this is a no-op for them.
-  const ticker = String(s.ticker ?? "").replace(/\.ST$/i, "").toUpperCase();
+  const ticker  = String(s.ticker ?? "").replace(/\.ST$/i, "").toUpperCase();
   const barsAgo = Number(s.barsAgo ?? 0);
   return {
     category,
@@ -104,14 +105,14 @@ function mapSetup(s: any, rankCounter: Record<string, number>) {
     rsi: Number(s.edge?.expectancyR ?? 0) * 100,
     pctB: Number(s.edge?.sample ?? 0),
     atr: oneR,
-    volMultiplier: RR,
+    volMultiplier: rr,
     distFrom20dH: barsAgo,
     gapWarning: s.grade === "A" ? null : -1,
     direction,
     entryPrice: entry,
     stopPrice: stop,
     targetPrice,
-    rr: RR,
+    rr,
     oneR,
     outcome: "PENDING" as const,
   };

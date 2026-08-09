@@ -241,6 +241,9 @@ export function Dashboard() {
       {/* Session R Chart */}
       <SessionRCurveSection equityCurve={summary.equityCurve} />
 
+      {/* Rolling 20-trade expectancy */}
+      <RollingExpectancySection equityCurve={summary.equityCurve} />
+
       {/* Top 3 Strategy */}
       <Top3Section />
 
@@ -723,6 +726,69 @@ function buildSessionData(equityCurve: EquityPoint[]) {
       cumulativeR: cum,
     };
   });
+}
+
+// ─── Rolling 20-trade expectancy ──────────────────────────────────────────────
+
+function RollingExpectancySection({ equityCurve }: { equityCurve: EquityPoint[] }) {
+  const WINDOW = 20;
+  const recent = equityCurve.slice(-WINDOW);
+  const total  = recent.length;
+
+  if (total < 5) return null; // too few data points to show anything meaningful
+
+  const wins   = recent.filter(pt => pt.outcome === "WIN").length;
+  const losses = recent.filter(pt => pt.outcome === "LOSS").length;
+  const winRate = total > 0 ? wins / total : 0;
+
+  const avgWinR  = wins   > 0 ? recent.filter(pt => pt.outcome === "WIN" ).reduce((s, pt) => s + pt.r, 0) / wins   : 0;
+  const avgLossR = losses > 0 ? Math.abs(recent.filter(pt => pt.outcome === "LOSS").reduce((s, pt) => s + pt.r, 0) / losses) : 1;
+  const expectancy = winRate * avgWinR - (1 - winRate) * avgLossR;
+
+  const isPositive = expectancy > 0;
+  const label = total < WINDOW ? `Senaste ${total} trades` : `Senaste ${WINDOW} trades`;
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 border-b border-border pb-2 mb-4">
+        <Sigma className="h-4 w-4 text-muted-foreground" />
+        <h3 className="text-lg font-semibold">Rullande expectancy</h3>
+        <span className="text-xs text-muted-foreground ml-1">({label})</span>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-card border border-border rounded-lg p-4 text-center shadow-sm">
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Win rate</div>
+          <div className={`text-2xl font-bold ${winRate >= 0.5 ? "text-success" : "text-destructive"}`}>
+            {(winRate * 100).toFixed(0)}%
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-1">{wins}V / {losses}F</div>
+        </div>
+        <div className="bg-card border border-border rounded-lg p-4 text-center shadow-sm">
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Avg vinst</div>
+          <div className="text-2xl font-bold text-success">+{formatNumber(avgWinR, 2)}R</div>
+          <div className="text-[10px] text-muted-foreground mt-1">per vinnande trade</div>
+        </div>
+        <div className="bg-card border border-border rounded-lg p-4 text-center shadow-sm">
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Avg förlust</div>
+          <div className="text-2xl font-bold text-destructive">-{formatNumber(avgLossR, 2)}R</div>
+          <div className="text-[10px] text-muted-foreground mt-1">per förlorande trade</div>
+        </div>
+        <div className={`border rounded-lg p-4 text-center shadow-sm ${isPositive ? "bg-success/5 border-success/20" : "bg-destructive/5 border-destructive/20"}`}>
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Expectancy</div>
+          <div className={`text-2xl font-bold ${isPositive ? "text-success" : "text-destructive"}`}>
+            {isPositive ? "+" : ""}{formatNumber(expectancy, 2)}R
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-1">per trade i snitt</div>
+        </div>
+      </div>
+      {!isPositive && total >= 10 && (
+        <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1.5">
+          <AlertTriangle className="h-3 w-3 text-amber-500" />
+          Negativ expectancy — systemet tappar pengar per trade i snitt. Justera strategi eller vänta på fler observationer.
+        </p>
+      )}
+    </div>
+  );
 }
 
 function SessionRCurveSection({ equityCurve }: { equityCurve: EquityPoint[] }) {
