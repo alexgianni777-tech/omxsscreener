@@ -87,6 +87,9 @@ function mapSetup(s: any, rankCounter: Record<string, number>) {
   const entry = Number(s.entry ?? 0);
   const stop  = Number(s.stop  ?? 0);
   const oneR  = Math.abs(entry - stop);
+  // Always target 1:2 R:R — override EdgeAI's target (which uses 1:1.5 for SE)
+  const RR = 2;
+  const targetPrice = direction === "LONG" ? entry + RR * oneR : entry - RR * oneR;
   // Strip .ST so resolveYahooTicker can re-add it correctly for SE stocks;
   // US tickers have no .ST so this is a no-op for them.
   const ticker = String(s.ticker ?? "").replace(/\.ST$/i, "").toUpperCase();
@@ -101,14 +104,14 @@ function mapSetup(s: any, rankCounter: Record<string, number>) {
     rsi: Number(s.edge?.expectancyR ?? 0) * 100,
     pctB: Number(s.edge?.sample ?? 0),
     atr: oneR,
-    volMultiplier: Number(s.rr ?? 0),
+    volMultiplier: RR,
     distFrom20dH: barsAgo,
     gapWarning: s.grade === "A" ? null : -1,
     direction,
     entryPrice: entry,
     stopPrice: stop,
-    targetPrice: Number(s.target ?? 0),
-    rr: Number(s.rr ?? 0),
+    targetPrice,
+    rr: RR,
     oneR,
     outcome: "PENDING" as const,
   };
