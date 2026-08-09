@@ -57,6 +57,54 @@ const OMXS30_TICKERS: { yahoo: string; display: string }[] = [
   { yahoo: "VOLV-B.ST",    display: "Volvo" },
 ];
 
+// ── Permanent US large-cap universe ──────────────────────────────────────────
+const US_LARGE_CAP_TICKERS: { yahoo: string; display: string }[] = [
+  // Magnificent 7
+  { yahoo: "AAPL",  display: "Apple" },
+  { yahoo: "MSFT",  display: "Microsoft" },
+  { yahoo: "NVDA",  display: "Nvidia" },
+  { yahoo: "AMZN",  display: "Amazon" },
+  { yahoo: "GOOGL", display: "Alphabet" },
+  { yahoo: "META",  display: "Meta" },
+  { yahoo: "TSLA",  display: "Tesla" },
+  // Financials
+  { yahoo: "JPM",   display: "JPMorgan" },
+  { yahoo: "V",     display: "Visa" },
+  { yahoo: "MA",    display: "Mastercard" },
+  { yahoo: "BAC",   display: "Bank of America" },
+  { yahoo: "GS",    display: "Goldman Sachs" },
+  // Healthcare
+  { yahoo: "LLY",   display: "Eli Lilly" },
+  { yahoo: "UNH",   display: "UnitedHealth" },
+  { yahoo: "JNJ",   display: "Johnson & Johnson" },
+  { yahoo: "ABBV",  display: "AbbVie" },
+  { yahoo: "MRK",   display: "Merck" },
+  // Consumer
+  { yahoo: "WMT",   display: "Walmart" },
+  { yahoo: "HD",    display: "Home Depot" },
+  { yahoo: "COST",  display: "Costco" },
+  { yahoo: "MCD",   display: "McDonald's" },
+  { yahoo: "PG",    display: "Procter & Gamble" },
+  { yahoo: "KO",    display: "Coca-Cola" },
+  { yahoo: "PEP",   display: "PepsiCo" },
+  // Tech / Semis
+  { yahoo: "AVGO",  display: "Broadcom" },
+  { yahoo: "ORCL",  display: "Oracle" },
+  { yahoo: "CRM",   display: "Salesforce" },
+  { yahoo: "ADBE",  display: "Adobe" },
+  { yahoo: "NFLX",  display: "Netflix" },
+  { yahoo: "AMD",   display: "AMD" },
+  { yahoo: "QCOM",  display: "Qualcomm" },
+  { yahoo: "INTC",  display: "Intel" },
+  { yahoo: "MU",    display: "Micron" },
+  // Energy / Industrial
+  { yahoo: "XOM",   display: "ExxonMobil" },
+  { yahoo: "CVX",   display: "Chevron" },
+  { yahoo: "CAT",   display: "Caterpillar" },
+  { yahoo: "RTX",   display: "RTX" },
+  { yahoo: "HON",   display: "Honeywell" },
+];
+
 // ── Concurrency limiter ───────────────────────────────────────────────────────
 async function withConcurrency<T>(
   tasks: (() => Promise<T>)[],
@@ -149,9 +197,14 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
     // non-fatal — proceed with OMXS30 only
   }
 
+  // Merge permanent US large-caps with session picks (deduplicate by yahoo ticker)
+  const usTickerSet = new Set(US_LARGE_CAP_TICKERS.map((t) => t.yahoo.toUpperCase()));
+  const sessionOnlyTickers = usTickers.filter((t) => !usTickerSet.has(t.yahoo.toUpperCase()));
+  const allUsTickers = [...US_LARGE_CAP_TICKERS, ...sessionOnlyTickers];
+
   const universe: { yahoo: string; display: string; market: "SE" | "US" }[] = [
     ...OMXS30_TICKERS.map((t) => ({ ...t, market: "SE" as const })),
-    ...usTickers.map((t) => ({ ...t, market: "US" as const })),
+    ...allUsTickers.map((t) => ({ ...t, market: "US" as const })),
   ];
 
   // 2. Fetch quotes (earnings date) for all — concurrency 8

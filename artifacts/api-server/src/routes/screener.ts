@@ -551,6 +551,7 @@ function mapCandidate(c: {
   distFrom20dH: number;
   gapWarning: number | null;
   earningsInDays: number | null;
+  market: string | null;
   direction: string;
   entryPrice: number;
   stopPrice: number;
@@ -577,6 +578,7 @@ function mapCandidate(c: {
     distFrom20dH: c.distFrom20dH,
     gapWarning: c.gapWarning ?? null,
     earningsInDays: c.earningsInDays ?? null,
+    market: c.market ?? null,
     direction: c.direction,
     entryPrice: c.entryPrice,
     stopPrice: c.stopPrice,

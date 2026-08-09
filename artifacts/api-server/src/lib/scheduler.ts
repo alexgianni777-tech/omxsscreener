@@ -150,8 +150,11 @@ async function runImport(date: string): Promise<void> {
 
   const { candidatesTable } = await import("@workspace/db");
 
-  const rankCounter: Record<string, number> = {};
-  const mapped = allSetups.map((s) => mapSetup(s, rankCounter));
+  const rankCounterSE: Record<string, number> = {};
+  const rankCounterUS: Record<string, number> = {};
+  const seMapped = seSetups.map((s) => ({ ...mapSetup(s, rankCounterSE), market: "SE" as const }));
+  const usMapped = usSetups.map((s) => ({ ...mapSetup(s, rankCounterUS), market: "US" as const }));
+  const mapped = [...seMapped, ...usMapped];
 
   try {
     const [inserted] = await db

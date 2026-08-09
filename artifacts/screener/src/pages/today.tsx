@@ -60,6 +60,7 @@ type Candidate = {
   rsi: number;
   outcome: string;
   earningsInDays: number | null;
+  market: "SE" | "US" | null;
 };
 
 type Session = {
@@ -156,16 +157,19 @@ export function Today() {
     ? Math.min(100, ((account - startCapital) / (goalCapital - startCapital)) * 100)
     : 0;
 
-  // top 3 picks: prefer starred, fallback to edge-score rank (LONG first)
-  const picks: Candidate[] = session
-    ? (() => {
-        const starred = session.candidates.filter(c => c.isTop3Pick);
-        if (starred.length > 0) return starred.slice(0, 3);
-        return [...session.candidates]
-          .sort((a, b) => b.perf1m * b.rsi - a.perf1m * a.rsi)
-          .slice(0, 3);
-      })()
-    : [];
+  // top picks: prefer starred, fallback to edge-score rank — split by market if data exists
+  function selectPicks(cands: Candidate[], n = 3): Candidate[] {
+    const starred = cands.filter(c => c.isTop3Pick);
+    if (starred.length > 0) return starred.slice(0, n);
+    return [...cands].sort((a, b) => b.perf1m * b.rsi - a.perf1m * a.rsi).slice(0, n);
+  }
+
+  const allCandidates = session?.candidates ?? [];
+  const hasMarket = allCandidates.some(c => c.market != null);
+  const sePicks = hasMarket ? selectPicks(allCandidates.filter(c => c.market === "SE")) : [];
+  const usPicks = hasMarket ? selectPicks(allCandidates.filter(c => c.market === "US")) : [];
+  // flat array for rendering: SE first, then US; legacy fallback if no market data
+  const picks: Candidate[] = hasMarket ? [...sePicks, ...usPicks] : selectPicks(allCandidates);
 
   // risk amounts per pick
   const riskKr = account != null ? account * (riskPct / 100) : null;
@@ -406,6 +410,8 @@ export function Today() {
 
         <div className="space-y-3">
           {picks.map((candidate, i) => {
+            const prevMarket = i > 0 ? picks[i - 1].market : null;
+            const showHeader = hasMarket && candidate.market !== prevMarket;
             const isLong = candidate.direction === "LONG";
             const stopDist = ((candidate.entryPrice - candidate.stopPrice) / candidate.entryPrice) * 100 * (isLong ? 1 : -1);
             const targetDist = ((candidate.targetPrice - candidate.entryPrice) / candidate.entryPrice) * 100 * (isLong ? 1 : -1);
@@ -427,7 +433,13 @@ export function Today() {
             })() : null;
 
             return (
-              <div key={candidate.id}
+              <div key={candidate.id}>
+                {showHeader && (
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 pt-2 pb-2 flex items-center gap-1.5">
+                    {candidate.market === "SE" ? "🇸🇪 Sverige" : "🇺🇸 USA"}
+                  </div>
+                )}
+              <div
                 className={`bg-card border rounded-xl shadow-sm overflow-hidden transition-all ${
                   autoHit === "WIN"
                     ? "border-success ring-1 ring-success/30"
@@ -615,6 +627,7 @@ export function Today() {
                     </div>
                   )}
                 </div>
+              </div>
               </div>
             );
           })}
