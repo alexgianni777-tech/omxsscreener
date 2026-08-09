@@ -137,9 +137,12 @@ function parseCandidate(
   const direction = planMatch[1] as "LONG" | "SHORT";
   const entryPrice = parseFloat(planMatch[2]);
   const stopPrice = parseFloat(planMatch[3]);
-  const targetPrice = parseFloat(planMatch[4]);
-  const rr = parseFloat(planMatch[5]);
-  const oneR = parseFloat(planMatch[6]);
+  // Always enforce 1:2 R:R — the Telegram bot sends "mål +1%" (tiny target) which gives
+  // terrible R/R (0.25–0.5). Override by computing target as entry ± 2× stop-distance.
+  const oneR = Math.abs(entryPrice - stopPrice);
+  const RR = 2;
+  const targetPrice = direction === "LONG" ? entryPrice + RR * oneR : entryPrice - RR * oneR;
+  const rr = RR;
 
   return {
     category,
