@@ -70,6 +70,13 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
   }
 
   // ---------- helpers shared by both insert and force-update paths ----------
+  // Fetch live vol ratio (current / 10-day avg) from Yahoo Finance.
+  // Overrides the Telegram bot's broken "vol 0.0x" field when it fails.
+  const volMap = await enrichVolMultiplier(
+    session.candidates.map((c) => c.ticker),
+    _yf,
+  );
+
   const buildCandidateRow = (
     sessionId: number,
     c: (typeof session.candidates)[number],
@@ -86,7 +93,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     rsi: c.rsi,
     pctB: c.pctB,
     atr: c.atr,
-    volMultiplier: c.volMultiplier,
+    volMultiplier: volMap.get(c.ticker) ?? c.volMultiplier,
     distFrom20dH: c.distFrom20dH,
     gapWarning: c.gapWarning ?? undefined,
     earningsInDays: earningsInDays ?? undefined,
@@ -644,6 +651,46 @@ async function fetchEarningsBatch(
     unique.map(async (t) => [t, await fetchEarningsInDaysAt(t, sessionDate)] as const),
   );
   return new Map(results);
+}
+
+/**
+ * Fetch live volume ratio (regularMarketVolume / averageDailyVolume10Day) for
+ * a batch of screener tickers. Returns a map keyed by the original ticker string.
+ * Silently skips tickers where Yahoo Finance returns no data.
+ */
+/**
+ * Volume ratio strategy:
+ *  - If today's intraday volume is already ≥20% of the 10-day average (i.e. we're
+ *    well into the trading session), use realtime ratio: today / avg10d.
+ *  - Otherwise (early-morning imports, pre-market, etc.) fall back to the stable
+ *    recent-vs-historical ratio: avg10d / avg3m.  This tells the trader whether
+ *    recent activity is elevated or depressed compared to the 3-month baseline.
+ */
+async function enrichVolMultiplier(
+  tickers: string[],
+  yf: InstanceType<typeof YahooFinance>,
+): Promise<Map<string, number>> {
+  const volMap = new Map<string, number>();
+  await Promise.allSettled(
+    [...new Set(tickers)].map(async (ticker) => {
+      try {
+        const q = (await yf.quote(resolveYahooTicker(ticker), {}, { validateResult: false })) as any;
+        const vol:   number = q.regularMarketVolume        ?? 0;
+        const avg10d: number = q.averageDailyVolume10Day   ?? 0;
+        const avg3m:  number = q.averageDailyVolume3Month  ?? 0;
+        if (avg10d > 0 && vol / avg10d >= 0.2) {
+          // Intraday vol is meaningful — use live ratio
+          volMap.set(ticker, Math.round((vol / avg10d) * 10) / 10);
+        } else if (avg10d > 0 && avg3m > 0) {
+          // Early session or market closed — use 10d-vs-3m trend ratio
+          volMap.set(ticker, Math.round((avg10d / avg3m) * 10) / 10);
+        }
+      } catch {
+        // no vol data available — leave the parsed fallback in place
+      }
+    }),
+  );
+  return volMap;
 }
 
 /** Fetch earningsInDays for a ticker at a given session date (YYYY-MM-DD).

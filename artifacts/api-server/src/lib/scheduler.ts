@@ -11,6 +11,7 @@ import { db, screenerSessionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import YahooFinance from "yahoo-finance2";
+import { resolveYahooTicker } from "./omxs30TickerMap";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 const EDGEAI_URL = "https://alexgianni777-tech.github.io/edgeai/public/data.json";
@@ -105,7 +106,7 @@ function mapSetup(s: any, rankCounter: Record<string, number>) {
     rsi: Number(s.edge?.expectancyR ?? 0) * 100,
     pctB: Number(s.edge?.sample ?? 0),
     atr: oneR,
-    volMultiplier: rr,
+    volMultiplier: 0, // filled in by live fetch below
     distFrom20dH: barsAgo,
     gapWarning: s.grade === "A" ? null : -1,
     direction,
@@ -159,6 +160,25 @@ async function runImport(date: string): Promise<void> {
   const seMapped = seSetups.map((s) => ({ ...mapSetup(s, rankCounterSE), market: "SE" as const }));
   const usMapped = usSetups.map((s) => ({ ...mapSetup(s, rankCounterUS), market: "US" as const }));
   const mapped = [...seMapped, ...usMapped];
+
+  // Enrich volMultiplier from live Yahoo Finance data (concurrent, fail-safe).
+  // Uses intraday vol if ≥20% of daily avg (meaningful session), otherwise falls
+  // back to avg10d/avg3m trend ratio (stable at market open or for early imports).
+  await Promise.allSettled(
+    mapped.map(async (c) => {
+      try {
+        const q = (await yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false })) as any;
+        const vol:    number = q.regularMarketVolume       ?? 0;
+        const avg10d: number = q.averageDailyVolume10Day   ?? 0;
+        const avg3m:  number = q.averageDailyVolume3Month  ?? 0;
+        if (avg10d > 0 && vol / avg10d >= 0.2) {
+          c.volMultiplier = Math.round((vol / avg10d) * 10) / 10;
+        } else if (avg10d > 0 && avg3m > 0) {
+          c.volMultiplier = Math.round((avg10d / avg3m) * 10) / 10;
+        }
+      } catch { /* keep 0 */ }
+    }),
+  );
 
   try {
     const [inserted] = await db
