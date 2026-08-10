@@ -526,9 +526,9 @@ export function Today() {
                     </div>
                     <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-x-2">
                       <span>Pick #{i + 1} · R:R {candidate.rr.toFixed(1)}</span>
-                      {candidate.perf1m > 0 && <span>WR {(candidate.perf1m * 100).toFixed(0)}%</span>}
-                      {candidate.rsi > 0 && <span>E {(candidate.rsi / 100).toFixed(2)}R</span>}
-                      {candidate.pctB > 0 && <span>{Math.round(candidate.pctB)} obs</span>}
+                      {session.source === "edgeai" && candidate.perf1m > 0 && <span>WR {Math.round(candidate.perf1m)}%</span>}
+                      {session.source === "edgeai" && candidate.rsi > 0 && <span>E {(candidate.rsi / 100).toFixed(2)}R</span>}
+                      {session.source === "edgeai" && candidate.pctB > 0 && <span>{Math.round(candidate.pctB)} obs</span>}
                     </div>
                   </div>
                 </div>
