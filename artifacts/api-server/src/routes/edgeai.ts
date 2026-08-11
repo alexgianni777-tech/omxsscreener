@@ -8,6 +8,7 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import YahooFinance from "yahoo-finance2";
+import { resolveYahooTicker } from "../lib/omxs30TickerMap";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
@@ -65,6 +66,21 @@ router.post(
 
     // 2. Derive session date from generatedAt
     const sessionDate = (edgeData.generatedAt as string).slice(0, 10);
+
+    // 2a. Staleness guard — refuse if data is more than 4 calendar days old.
+    //     4 days covers Mon morning (Fri's data) plus holiday buffers.
+    //     Beyond that the setups are almost certainly no longer valid.
+    const dataAge = Math.floor(
+      (Date.now() - new Date(edgeData.generatedAt).getTime()) / 86_400_000,
+    );
+    if (dataAge > 4) {
+      res.status(422).json({
+        error: `EdgeAI data is ${dataAge} days old (generated ${sessionDate}) — too stale to import. Wait for EdgeAI to publish new signals.`,
+        generatedAt: edgeData.generatedAt,
+        staleDays: dataAge,
+      });
+      return;
+    }
 
     // 2b. Fetch real OMXS30 market weather from Yahoo Finance
     let omxsValue = 0, perf5d = 0, perf1m = 0, perf3m = 0, marketRsi = 0;
@@ -145,7 +161,7 @@ router.post(
         rsi: Number(s.edge?.expectancyR ?? 0) * 100, // store expectancyR × 100 for display
         pctB: Number(s.edge?.sample ?? 0),           // store N (sample size)
         atr: oneR,
-        volMultiplier: Number(s.rr ?? 0),  // store actual R/R from EdgeAI
+        volMultiplier: 0,  // filled in by live Yahoo Finance fetch below
         distFrom20dH: barsAgo,             // store signal age in trading days
         gapWarning: s.grade === "A" ? null : -1, // non-A grade as soft gap warning
         direction,
@@ -158,7 +174,25 @@ router.post(
       };
     });
 
-    // 5. Handle force re-import: preserve existing outcomes
+    // 5. Enrich volMultiplier from live Yahoo Finance — same strategy as scheduler.ts:
+    //    use intraday vol if ≥20% of daily avg, otherwise fall back to avg10d/avg3m trend ratio.
+    await Promise.allSettled(
+      mappedSetups.map(async (c) => {
+        try {
+          const q = (await yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false })) as any;
+          const vol:    number = q.regularMarketVolume       ?? 0;
+          const avg10d: number = q.averageDailyVolume10Day   ?? 0;
+          const avg3m:  number = q.averageDailyVolume3Month  ?? 0;
+          if (avg10d > 0 && vol / avg10d >= 0.2) {
+            c.volMultiplier = Math.round((vol / avg10d) * 10) / 10;
+          } else if (avg10d > 0 && avg3m > 0) {
+            c.volMultiplier = Math.round((avg10d / avg3m) * 10) / 10;
+          }
+        } catch { /* keep 0 */ }
+      }),
+    );
+
+    // 6. Handle force re-import: preserve existing outcomes
     let sessionId: number;
 
     if (existing.length > 0 && force) {
