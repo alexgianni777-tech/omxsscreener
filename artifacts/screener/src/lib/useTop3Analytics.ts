@@ -45,5 +45,6 @@ export function useTop3Analytics() {
       return res.json() as Promise<Top3Analytics>;
     },
     staleTime: 2 * 60_000,
+    refetchInterval: 5 * 60_000, // auto-refresh every 5 min to pick up new imports
   });
 }

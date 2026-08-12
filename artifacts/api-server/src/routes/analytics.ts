@@ -60,8 +60,8 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
     let sessionHasResolved = false;
 
     const picks = top3.map((c) => {
-      // R:R stored in volMultiplier; fall back to 1.5 if absent
-      const rr = (c.volMultiplier ?? 0) > 0 ? (c.volMultiplier as number) : 1.5;
+      // Use the dedicated rr column (volMultiplier now stores volume ratio, not R:R)
+      const rr = (c.rr ?? 0) > 0 ? (c.rr as number) : 1.5;
 
       let r: number | null = null;
       if (c.outcome === "WIN") {

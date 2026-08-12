@@ -150,7 +150,12 @@ export function Today() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    // Auto-refresh every 5 min so new screener imports appear without manual reload
+    const interval = setInterval(load, 5 * 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   // ── derived ───────────────────────────────────────────────────────────────
 
