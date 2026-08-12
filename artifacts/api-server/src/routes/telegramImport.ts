@@ -19,6 +19,35 @@ import { eq } from "drizzle-orm";
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import { parseScreenerText, ScreenerParseError } from "../lib/screenerParser";
 import { logger } from "../lib/logger";
+import YahooFinance from "yahoo-finance2";
+import { resolveYahooTicker } from "../lib/omxs30TickerMap";
+
+const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
+
+/**
+ * Enrich volMultiplier for each candidate via live Yahoo Finance data.
+ * Uses intraday vol when ≥20% of daily avg (meaningful session),
+ * otherwise falls back to avg10d/avg3m trend ratio (stable at open / pre-market).
+ */
+async function enrichVolMultiplier(
+  candidates: Array<{ ticker: string; volMultiplier: number }>,
+): Promise<void> {
+  await Promise.allSettled(
+    candidates.map(async (c) => {
+      try {
+        const q = (await yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false })) as any;
+        const vol:    number = q.regularMarketVolume       ?? 0;
+        const avg10d: number = q.averageDailyVolume10Day   ?? 0;
+        const avg3m:  number = q.averageDailyVolume3Month  ?? 0;
+        if (avg10d > 0 && vol / avg10d >= 0.2) {
+          c.volMultiplier = Math.round((vol / avg10d) * 10) / 10;
+        } else if (avg10d > 0 && avg3m > 0) {
+          c.volMultiplier = Math.round((avg10d / avg3m) * 10) / 10;
+        }
+      } catch { /* keep parsed fallback */ }
+    }),
+  );
+}
 
 const router: IRouter = Router();
 
@@ -76,6 +105,9 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
   }
 
   const { date, marketWeather, candidates } = session;
+
+  // Enrich vol from live Yahoo Finance — overrides the bot's parsed 0.0x values
+  await enrichVolMultiplier(candidates);
 
   const buildRow = (
     sessionId: number,
