@@ -133,11 +133,15 @@ router.post(
     }
 
     // 4. Map setups → candidates (SE + US combined), group by category for ranking
-    const usSetups: any[] = edgeData?.markets?.US?.setups ?? [];
-    const allSetups = [...setups, ...usSetups];
+    //    Tag each setup with its market BEFORE combining so the market column is populated.
+    const usRaw: any[] = edgeData?.markets?.US?.setups ?? [];
+    const taggedSetups = [
+      ...setups.map((s: any) => ({ ...s, _market: "SE" as const })),
+      ...usRaw.map((s: any) => ({ ...s, _market: "US" as const })),
+    ];
     const rankCounter: Record<string, number> = {};
 
-    const mappedSetups = allSetups.map((s: any) => {
+    const mappedSetups = taggedSetups.map((s: any) => {
       const category = mapSetupToCategory(s.dir, s.setup ?? "");
       rankCounter[category] = (rankCounter[category] ?? 0) + 1;
       const direction = s.dir === "short" ? "SHORT" : "LONG";
@@ -152,6 +156,7 @@ router.post(
       // barsAgo: how many bars (trading days) ago the signal was first triggered
       const barsAgo = Number(s.barsAgo ?? 0);
       return {
+        market: s._market,                 // "SE" or "US" — drives the market split in today.tsx
         category,
         rank: rankCounter[category],
         ticker,

@@ -28,7 +28,9 @@ function pct(n: number, dec = 1) {
 }
 
 function todayISO() {
-  return new Date().toLocaleDateString("sv-SE"); // "YYYY-MM-DD" in sv-SE locale
+  // Explicit YYYY-MM-DD in local time — toLocaleDateString output format varies by browser/OS
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function sessionLabel(date: string): string {
