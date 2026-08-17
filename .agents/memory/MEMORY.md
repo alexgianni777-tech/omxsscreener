@@ -1,0 +1,1 @@
+- [Screener Architecture](screener-architecture.md) — data flow, field semantics (volMultiplier≠R:R, market tagging), ATR-relative targets per bucket, RSI, backfill status
