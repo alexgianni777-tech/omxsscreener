@@ -151,7 +151,8 @@ router.post(
         ticker,
         price: entry,
         rs3m: Number(s.rs ?? 0),
-        perf1m: Number(s.edge?.winRate ?? 0), // store winRate here for per-candidate display
+        // Normalize to decimal 0–1 (EdgeAI may send integer % like 51)
+        perf1m: (() => { const wr = Number(s.edge?.winRate ?? 0); return wr > 1 ? wr / 100 : wr; })(), // store winRate here for per-candidate display
         rsi: Number(s.edge?.expectancyR ?? 0) * 100, // store expectancyR × 100 for display
         pctB: Number(s.edge?.sample ?? 0),           // store N (sample size)
         atr: oneR,
@@ -255,7 +256,10 @@ router.post(
           source: "edgeai",
           edgeRegime: JSON.stringify(se.regime ?? {}),
           edgeExpectancy: se.edge?.expectancyR ?? null,
-          edgeWinRate: se.edge?.winRate ?? null,
+          // Normalize to decimal 0–1 (EdgeAI may send integer % like 51)
+          edgeWinRate: se.edge?.winRate != null
+            ? (se.edge.winRate > 1 ? se.edge.winRate / 100 : se.edge.winRate)
+            : null,
           edgePF: se.edge?.profitFactor ?? null,
           edgeN: se.edge?.n ?? null,
         })

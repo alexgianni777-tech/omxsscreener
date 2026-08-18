@@ -11,7 +11,8 @@ import { CandlestickChart } from "../components/CandlestickChart";
 // compositeScore = winRate × expectancyR (Kelly-ish proxy).
 function edgeScore(c: Candidate): number {
   const expectancyR = c.rsi / 100; // stored as rsi×100
-  const winRate = c.perf1m;        // stored as decimal 0-1
+  // perf1m may be stored as integer % (49) or decimal (0.49) — normalize
+  const winRate = c.perf1m > 1 ? c.perf1m / 100 : c.perf1m;
   return winRate * expectancyR;
 }
 
