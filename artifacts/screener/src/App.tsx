@@ -86,16 +86,19 @@ function LoginGate() {
 
 // #39 — Redirect /sessions/today → latest session detail
 function TodaySessionRedirect() {
-  const { data: sessions } = useListSessions();
+  const { data: sessions, isLoading } = useListSessions();
   const [, navigate] = useLocation();
   useEffect(() => {
-    if (sessions?.[0]) navigate(`/sessions/${sessions[0].id}`, { replace: true });
+    if (!sessions) return; // still fetching
+    if (sessions[0]) navigate(`/sessions/${sessions[0].id}`, { replace: true });
+    else navigate("/sessions", { replace: true }); // no sessions at all
   }, [sessions]);
-  return (
+  if (isLoading || !sessions) return (
     <div className="flex items-center justify-center py-20 text-muted-foreground text-sm animate-pulse">
       Laddar senaste session…
     </div>
   );
+  return null;
 }
 
 function App() {

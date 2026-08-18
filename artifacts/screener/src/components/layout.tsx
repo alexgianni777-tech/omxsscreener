@@ -32,7 +32,12 @@ export function Shell({ children }: { children: ReactNode }) {
 
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
-            const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
+            const isActive =
+              location === item.href ||
+              (item.href !== "/" &&
+                location.startsWith(item.href) &&
+                // /sessions must not activate when location is /sessions/today (separate nav item)
+                !(item.href === "/sessions" && location.startsWith("/sessions/today")));
             return (
               <Link
                 key={item.href}

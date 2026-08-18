@@ -457,7 +457,7 @@ function CandidateRow({
   const nearStop = distFromStop != null && Math.abs(distFromStop) < 1.5;
   const entryDriftPct = distFromEntry != null ? Math.abs(distFromEntry) : 0;
   const entryStale = daysOld >= 1 && entryDriftPct > 2 && candidate.outcome === "PENDING";
-  const targetPct = candidate.entryPrice > 0
+  const targetPct = candidate.entryPrice > 0 && candidate.targetPrice > 0
     ? Math.abs((candidate.targetPrice - candidate.entryPrice) / candidate.entryPrice * 100)
     : 0;
   const isTargetFar = targetPct > 10;
