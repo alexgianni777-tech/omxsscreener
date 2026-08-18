@@ -582,6 +582,7 @@ function mapCandidate(c: {
   outcome: string;
   exitPrice: number | null;
   outcomeNotes: string | null;
+  isTop3Pick?: boolean | null;
 }) {
   return {
     id: c.id,
@@ -609,6 +610,7 @@ function mapCandidate(c: {
     outcome: c.outcome,
     exitPrice: c.exitPrice ?? null,
     outcomeNotes: c.outcomeNotes ?? null,
+    isTop3Pick: c.isTop3Pick ?? false,
   };
 }
 

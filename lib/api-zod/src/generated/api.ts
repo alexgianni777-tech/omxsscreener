@@ -125,6 +125,8 @@ export const GetSessionResponse = zod.object({
   "volMultiplier": zod.number(),
   "distFrom20dH": zod.number(),
   "gapWarning": zod.number().nullish(),
+  "earningsInDays": zod.number().nullish(),
+  "market": zod.enum(['SE', 'US']).nullish(),
   "direction": zod.enum(['LONG', 'SHORT']),
   "entryPrice": zod.number(),
   "stopPrice": zod.number(),
@@ -133,7 +135,8 @@ export const GetSessionResponse = zod.object({
   "oneR": zod.number(),
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
-  "outcomeNotes": zod.string().nullish()
+  "outcomeNotes": zod.string().nullish(),
+  "isTop3Pick": zod.boolean().optional()
 }))
 })
 
