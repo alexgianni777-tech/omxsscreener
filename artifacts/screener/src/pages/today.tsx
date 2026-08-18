@@ -174,10 +174,17 @@ export function Today() {
     : 0;
 
   // top picks: prefer starred, fallback to edge-score rank — split by market if data exists
+  // Deduplicates by ticker: if a stock appears in multiple setups, keep only the best-ranked.
   function selectPicks(cands: Candidate[], n = 3): Candidate[] {
     const starred = cands.filter(c => c.isTop3Pick);
-    if (starred.length > 0) return starred.slice(0, n);
-    return [...cands].sort((a, b) => b.perf1m * b.rsi - a.perf1m * a.rsi).slice(0, n);
+    const pool = starred.length > 0 ? starred : [...cands].sort((a, b) => b.perf1m * b.rsi - a.perf1m * a.rsi);
+    const seen = new Set<string>();
+    const unique: Candidate[] = [];
+    for (const c of pool) {
+      if (!seen.has(c.ticker)) { seen.add(c.ticker); unique.push(c); }
+      if (unique.length >= n) break;
+    }
+    return unique;
   }
 
   const allCandidates = session?.candidates ?? [];

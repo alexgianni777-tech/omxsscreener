@@ -39,7 +39,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
 
   // Check for duplicate date
   const existing = await db
-    .select({ id: screenerSessionsTable.id })
+    .select({ id: screenerSessionsTable.id, source: screenerSessionsTable.source })
     .from(screenerSessionsTable)
     .where(eq(screenerSessionsTable.date, session.date));
 
@@ -84,6 +84,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     preserved?: { outcome: string; exitPrice: number | null; outcomeNotes: string | null },
   ) => ({
     sessionId,
+    market: "SE" as const,   // screener text is always SE stocks
     category: c.category,
     rank: c.rank,
     ticker: c.ticker,
@@ -116,11 +117,13 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
   // ---------- force re-import: preserve outcomes, replace everything else ----------
   if (existing.length > 0 && force) {
     const existingId = existing[0].id;
+    const isEdgeAISession = existing[0].source === "edgeai";
 
     // Snapshot existing outcomes before deleting
     const existingCandidates = await db
       .select({
         ticker: candidatesTable.ticker,
+        market: candidatesTable.market,
         outcome: candidatesTable.outcome,
         exitPrice: candidatesTable.exitPrice,
         outcomeNotes: candidatesTable.outcomeNotes,
@@ -134,8 +137,19 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
         .map((c) => [c.ticker, { outcome: c.outcome, exitPrice: c.exitPrice, outcomeNotes: c.outcomeNotes }]),
     );
 
-    // Delete old candidates then update session metadata
-    await db.delete(candidatesTable).where(eq(candidatesTable.sessionId, existingId));
+    if (isEdgeAISession) {
+      // Merge mode: keep US candidates from EdgeAI, replace SE candidates with screener text.
+      // This lets both data sources coexist: EdgeAI US picks + OMXS30 screener SE picks.
+      await db.delete(candidatesTable).where(
+        and(
+          eq(candidatesTable.sessionId, existingId),
+          sql`(${candidatesTable.market} IS NULL OR ${candidatesTable.market} != 'US')`,
+        ),
+      );
+    } else {
+      // Full replace: delete all candidates for non-EdgeAI sessions
+      await db.delete(candidatesTable).where(eq(candidatesTable.sessionId, existingId));
+    }
 
     const [updatedSession] = await db
       .update(screenerSessionsTable)

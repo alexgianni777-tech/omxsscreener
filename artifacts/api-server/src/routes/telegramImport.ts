@@ -115,6 +115,7 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
     preserved?: { outcome: string; exitPrice: number | null; outcomeNotes: string | null },
   ) => ({
     sessionId,
+    market: "SE" as const,   // Telegram screener always imports SE stocks
     category: c.category,
     rank: c.rank,
     ticker: c.ticker,
