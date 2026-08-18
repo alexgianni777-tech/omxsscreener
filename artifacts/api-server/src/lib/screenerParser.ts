@@ -103,7 +103,7 @@ function parseCandidate(
   // Parse candidate data line
   // Pattern: "N. TICKER   PRICE | RS3m   X | 1m    X% | RSI   X | %B  X | ATR    X% | vol  Xx | ↔20dH   X%  [⚠ gap X%]"
   const dataMatch = candidateLine.match(
-    /\d+\.\s+(.+?)\s+([\d.]+)\s*\|\s*RS3m\s+([-\d.]+)\s*\|\s*1m\s+([-\d.]+)%\s*\|\s*RSI\s+([\d.]+)\s*\|\s*%B\s+([-\d.]+)\s*\|\s*ATR\s+([\d.]+)%\s*\|\s*vol\s+([\d.]+)x\s*\|\s*↔20dH\s+([-\d.]+)%/
+    /\d+\.\s+(.+?)\s+([\d.]+)\s*\|\s*RS3m\s+([-\d.]+)\s*\|\s*1m\s+([-\d.]+)%\s*\|\s*RSI\s+([\d.]+)\s*\|\s*%B\s+([-\d.]+)\s*\|\s*ATR\s+([\d.]+)%\s*\|\s*vol\s+([\d.]+)x\s*\|\s*\S*20dH\s+([-\d.]+)%/
   );
 
   if (!dataMatch) {
@@ -124,10 +124,11 @@ function parseCandidate(
   const gapMatch = candidateLine.match(/⚠\s*gap\s*([-+][\d.]+)%/);
   const gapWarning = gapMatch ? parseFloat(gapMatch[1]) : null;
 
-  // Parse plan line
-  // Pattern: "plan(LONG|SHORT): entry ~X · stop X ... · mål +1% X (R/R X) · 1R X"
+  // Parse plan line.
+  // Old format: "plan(LONG): entry ~X · stop X (1.2×ATR) · mål +1% X (R/R X) · 1R X"
+  // New format: "plan(LONG): entry ~X · stop X (1.2×ATR) · mål X (2×ATR, R/R X) · max N dagar"
   const planMatch = planLine.match(
-    /plan\((LONG|SHORT)\):\s*entry\s*~?([\d.]+)\s*·\s*stop\s+([\d.]+).*·\s*mål.*?([\d.]+)\s*\(R\/R\s+([\d.]+)\)\s*·\s*1R\s+([\d.]+)/
+    /plan\((LONG|SHORT)\):\s*entry\s*~?([\d.]+)\s*·\s*stop\s+([\d.]+)[^·]*·\s*mål\s*~?(?:[+\-\d.]+%\s*)?([\d.]+).*?R\/R\s+([\d.]+)/
   );
 
   if (!planMatch) {
@@ -137,12 +138,9 @@ function parseCandidate(
   const direction = planMatch[1] as "LONG" | "SHORT";
   const entryPrice = parseFloat(planMatch[2]);
   const stopPrice = parseFloat(planMatch[3]);
-  // Always enforce 1:2 R:R — the Telegram bot sends "mål +1%" (tiny target) which gives
-  // terrible R/R (0.25–0.5). Override by computing target as entry ± 2× stop-distance.
+  const targetPrice = parseFloat(planMatch[4]);
+  const rr = parseFloat(planMatch[5]);
   const oneR = Math.abs(entryPrice - stopPrice);
-  const RR = 2;
-  const targetPrice = direction === "LONG" ? entryPrice + RR * oneR : entryPrice - RR * oneR;
-  const rr = RR;
 
   return {
     category,
