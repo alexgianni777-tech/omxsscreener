@@ -630,16 +630,18 @@ router.patch("/screener/candidates/:id/top3pick", async (req, res): Promise<void
   if (!candidate) { res.status(404).json({ error: "Candidate not found" }); return; }
 
   if (isTop3Pick) {
-    // Enforce max 3 per session
+    // Enforce max 3 per direction per session (3 LONG köp-picks + 3 SHORT sälj-picks)
     const existing = await db
-      .select({ id: candidatesTable.id })
+      .select({ id: candidatesTable.id, direction: candidatesTable.direction })
       .from(candidatesTable)
       .where(and(
         eq(candidatesTable.sessionId, candidate.sessionId),
         eq(candidatesTable.isTop3Pick as any, true),
       ));
-    if (existing.length >= 3 && !existing.some((p) => p.id === id)) {
-      res.status(409).json({ error: "Max 3 picks per session — ta bort en stjärna först" });
+    const sameDir = existing.filter((p) => p.direction === candidate.direction);
+    if (sameDir.length >= 3 && !sameDir.some((p) => p.id === id)) {
+      const dirLabel = candidate.direction === "SHORT" ? "sälj-picks" : "köp-picks";
+      res.status(409).json({ error: `Max 3 ${dirLabel} — ta bort en stjärna först` });
       return;
     }
   }

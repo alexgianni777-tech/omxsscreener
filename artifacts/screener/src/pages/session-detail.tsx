@@ -37,19 +37,30 @@ export function SessionDetail() {
   const quoteMap: Record<string, QuoteResult> = {};
   quotes?.forEach((q) => { quoteMap[q.ticker] = q; });
 
-  // ── Top 3 picks — hooks MUST be declared before any conditional return ────────
-  const [pickedIds, setPickedIds] = useState<Set<number>>(new Set<number>());
+  // ── Top 3 picks — separate pools per direction (3 köp + 3 sälj) ─────────────
+  const [pickedLongIds, setPickedLongIds] = useState<Set<number>>(new Set<number>());
+  const [pickedShortIds, setPickedShortIds] = useState<Set<number>>(new Set<number>());
   useEffect(() => {
     if (!session) return;
-    const s = new Set<number>();
-    session.candidates.forEach((c: any) => { if (c.isTop3Pick) s.add(c.id); });
-    setPickedIds(s);
+    const longs = new Set<number>();
+    const shorts = new Set<number>();
+    session.candidates.forEach((c: any) => {
+      if (c.isTop3Pick) {
+        if (c.direction === "SHORT") shorts.add(c.id);
+        else longs.add(c.id);
+      }
+    });
+    setPickedLongIds(longs);
+    setPickedShortIds(shorts);
   }, [session?.id]);
 
-  const togglePick = async (candidateId: number, current: boolean) => {
+  const togglePick = async (candidateId: number, current: boolean, direction: string) => {
     const next = !current;
-    if (next && pickedIds.size >= 3) return;
-    setPickedIds((prev) => { const s = new Set(prev); next ? s.add(candidateId) : s.delete(candidateId); return s; });
+    const isShort = direction === "SHORT";
+    const currentCount = isShort ? pickedShortIds.size : pickedLongIds.size;
+    const setter = isShort ? setPickedShortIds : setPickedLongIds;
+    if (next && currentCount >= 3) return;
+    setter((prev) => { const s = new Set(prev); next ? s.add(candidateId) : s.delete(candidateId); return s; });
     await fetch(`/api/screener/candidates/${candidateId}/top3pick`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -193,12 +204,20 @@ export function SessionDetail() {
             {marketStateLabel.text}
           </span>
         )}
-        <div className="ml-auto flex items-center gap-1.5 font-medium">
-          <Star className={`w-3.5 h-3.5 ${pickedIds.size > 0 ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`} />
-          <span className={pickedIds.size > 0 ? "text-amber-400" : ""}>
-            Top 3: {pickedIds.size}/3 markerade
-          </span>
-          {pickedIds.size === 0 && <span className="text-muted-foreground/60">— klicka ⭐ på kandidater</span>}
+        <div className="ml-auto flex items-center gap-3 font-medium text-xs">
+          <div className="flex items-center gap-1">
+            <TrendingUp className={`w-3 h-3 ${pickedLongIds.size > 0 ? "text-success" : "text-muted-foreground"}`} />
+            <Star className={`w-3 h-3 ${pickedLongIds.size > 0 ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`} />
+            <span className={pickedLongIds.size > 0 ? "text-amber-400" : "text-muted-foreground"}>Köp {pickedLongIds.size}/3</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <TrendingDown className={`w-3 h-3 ${pickedShortIds.size > 0 ? "text-destructive" : "text-muted-foreground"}`} />
+            <Star className={`w-3 h-3 ${pickedShortIds.size > 0 ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`} />
+            <span className={pickedShortIds.size > 0 ? "text-amber-400" : "text-muted-foreground"}>Sälj {pickedShortIds.size}/3</span>
+          </div>
+          {pickedLongIds.size === 0 && pickedShortIds.size === 0 && (
+            <span className="text-muted-foreground/60">— klicka ⭐ på kandidater</span>
+          )}
         </div>
       </div>
 
@@ -238,8 +257,8 @@ export function SessionDetail() {
                     daysOld={daysOld}
                     isEdgeAI={isEdgeAI}
                     rank={idx + 1}
-                    isPicked={pickedIds.has(candidate.id)}
-                    pickedCount={pickedIds.size}
+                    isPicked={candidate.direction === "SHORT" ? pickedShortIds.has(candidate.id) : pickedLongIds.has(candidate.id)}
+                    pickedCount={candidate.direction === "SHORT" ? pickedShortIds.size : pickedLongIds.size}
                     onTogglePick={togglePick}
                   />
                 ))}
@@ -369,7 +388,7 @@ function CandidateRow({
   rank: number;
   isPicked: boolean;
   pickedCount: number;
-  onTogglePick: (id: number, current: boolean) => void;
+  onTogglePick: (id: number, current: boolean, direction: string) => void;
 }) {
   const updateOutcome = useUpdateCandidateOutcome();
   const queryClient = useQueryClient();
@@ -468,7 +487,7 @@ function CandidateRow({
               <CandlestickIcon className="w-3.5 h-3.5" />
             </button>
             <button
-              onClick={() => onTogglePick(candidate.id, isPicked)}
+              onClick={() => onTogglePick(candidate.id, isPicked, candidate.direction)}
               disabled={!isPicked && pickedCount >= 3}
               title={isPicked ? "Ta bort från Top 3" : pickedCount >= 3 ? "Max 3 picks — ta bort en först" : "Lägg till i Top 3"}
               className={`p-1 rounded transition-colors ${

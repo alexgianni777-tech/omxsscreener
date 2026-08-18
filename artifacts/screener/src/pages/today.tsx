@@ -189,10 +189,23 @@ export function Today() {
 
   const allCandidates = session?.candidates ?? [];
   const hasMarket = allCandidates.some(c => c.market != null);
-  const sePicks = hasMarket ? selectPicks(allCandidates.filter(c => c.market === "SE")) : [];
-  const usPicks = hasMarket ? selectPicks(allCandidates.filter(c => c.market === "US")) : [];
-  // flat array for rendering: SE first, then US; legacy fallback if no market data
-  const picks: Candidate[] = hasMarket ? [...sePicks, ...usPicks] : selectPicks(allCandidates);
+  // LONG (köp) and SHORT (sälj) are separate pick pools
+  const longCands = allCandidates.filter(c => c.direction !== "SHORT");
+  const shortCands = allCandidates.filter(c => c.direction === "SHORT");
+  const sePicks = hasMarket ? selectPicks(longCands.filter(c => c.market === "SE")) : [];
+  const usPicks = hasMarket ? selectPicks(longCands.filter(c => c.market === "US")) : [];
+  const seShortPicks = hasMarket ? selectPicks(shortCands.filter(c => c.market === "SE")) : [];
+  const usShortPicks = hasMarket ? selectPicks(shortCands.filter(c => c.market === "US")) : [];
+  // LONG picks first, SHORT picks last — a "Topp 3 Sälj" divider renders between them
+  const picks: Candidate[] = hasMarket
+    ? [...sePicks, ...usPicks, ...seShortPicks, ...usShortPicks]
+    : [...selectPicks(longCands), ...selectPicks(shortCands)];
+
+  // ── Market regime flags (hoisted so picks.map can reference them) ─────────────
+  const mw = session?.marketWeather;
+  const isRiskOff = /risk.?off|motvind|kontrak/i.test(mw?.trendLabel ?? "");
+  const isRsiHigh = (mw?.rsi ?? 0) > 0 && (mw?.rsi ?? 0) > 75;
+  const isRsiLow  = (mw?.rsi ?? 0) > 0 && (mw?.rsi ?? 0) < 25;
 
   // risk amounts per pick
   const riskKr = account != null ? account * (riskPct / 100) : null;
@@ -432,34 +445,29 @@ export function Today() {
         )}
 
         {/* ── Regime filter warning ─────────────────────────────────────── */}
-        {picks.length > 0 && session?.marketWeather && (() => {
-          const { trendLabel, rsi } = session.marketWeather!;
-          const isRiskOff = /risk.?off|motvind|kontrak/i.test(trendLabel ?? "");
-          const isRsiHigh = rsi > 0 && rsi > 75;
-          const isRsiLow  = rsi > 0 && rsi < 25;
-          if (!isRiskOff && !isRsiHigh && !isRsiLow) return null;
-          return (
-            <div className={`flex items-start gap-2.5 px-4 py-3 rounded-xl text-sm mb-1 ${
-              isRiskOff
-                ? "bg-destructive/10 border border-destructive/20 text-destructive"
-                : "bg-amber-500/10 border border-amber-500/20 text-amber-500"
-            }`}>
-              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-              <span>
-                {isRiskOff
-                  ? `Marknaden signalerar ${trendLabel} — överväg att sitta still eller ta halv position.`
-                  : isRsiHigh
-                  ? `OMXS30 RSI ${rsi} — extremt overbought. Momentum kan reversera snart.`
-                  : `OMXS30 RSI ${rsi} — extremt oversold. Hög volatilitet, var extra försiktig med storlek.`}
-              </span>
-            </div>
-          );
-        })()}
+        {picks.length > 0 && (isRiskOff || isRsiHigh || isRsiLow) && (
+          <div className={`flex items-start gap-2.5 px-4 py-3 rounded-xl text-sm mb-1 ${
+            isRiskOff
+              ? "bg-destructive/10 border border-destructive/20 text-destructive"
+              : "bg-amber-500/10 border border-amber-500/20 text-amber-500"
+          }`}>
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>
+              {isRiskOff
+                ? `Marknaden signalerar ${mw?.trendLabel} — överväg att sitta still eller ta halv position.`
+                : isRsiHigh
+                ? `OMXS30 RSI ${mw?.rsi} — extremt overbought. Momentum kan reversera snart.`
+                : `OMXS30 RSI ${mw?.rsi} — extremt oversold. Hög volatilitet, var extra försiktig med storlek.`}
+            </span>
+          </div>
+        )}
 
         <div className="space-y-3">
           {picks.map((candidate, i) => {
             const prevMarket = i > 0 ? picks[i - 1].market : null;
             const showHeader = hasMarket && candidate.market !== prevMarket;
+            const prevDir = i > 0 ? picks[i - 1].direction : null;
+            const isFirstShort = candidate.direction === "SHORT" && prevDir !== "SHORT";
             const isLong = candidate.direction === "LONG";
             const stopDist = ((candidate.entryPrice - candidate.stopPrice) / candidate.entryPrice) * 100 * (isLong ? 1 : -1);
             const targetDist = ((candidate.targetPrice - candidate.entryPrice) / candidate.entryPrice) * 100 * (isLong ? 1 : -1);
@@ -485,6 +493,17 @@ export function Today() {
                 {showHeader && (
                   <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 pt-2 pb-2 flex items-center gap-1.5">
                     {candidate.market === "SE" ? "🇸🇪 Sverige" : "🇺🇸 USA"}
+                  </div>
+                )}
+                {isFirstShort && (
+                  <div className="flex items-center gap-2 px-1 pt-4 pb-2 border-t border-destructive/20 mt-2">
+                    <TrendingDown className="w-3.5 h-3.5 text-destructive" />
+                    <span className="text-sm font-semibold text-destructive">Topp 3 Sälj</span>
+                    {isRiskOff && (
+                      <span className="text-[10px] bg-destructive/10 text-destructive border border-destructive/20 px-1.5 py-0.5 rounded font-medium">
+                        risk-off
+                      </span>
+                    )}
                   </div>
                 )}
               <div
