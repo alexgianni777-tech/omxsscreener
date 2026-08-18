@@ -64,23 +64,12 @@ router.post(
       return;
     }
 
-    // 2. Derive session date from generatedAt
-    const sessionDate = (edgeData.generatedAt as string).slice(0, 10);
-
-    // 2a. Staleness guard — refuse if data is more than 4 calendar days old.
-    //     4 days covers Mon morning (Fri's data) plus holiday buffers.
-    //     Beyond that the setups are almost certainly no longer valid.
-    const dataAge = Math.floor(
-      (Date.now() - new Date(edgeData.generatedAt).getTime()) / 86_400_000,
-    );
-    if (dataAge > 4) {
-      res.status(422).json({
-        error: `EdgeAI data is ${dataAge} days old (generated ${sessionDate}) — too stale to import. Wait for EdgeAI to publish new signals.`,
-        generatedAt: edgeData.generatedAt,
-        staleDays: dataAge,
-      });
-      return;
-    }
+    // 2. Use today's UTC date as session date.
+    //    Note: edgeData.generatedAt only changes when *new signals* are found — not every day.
+    //    EdgeAI commits daily, so the data is always current; generatedAt just reflects the last
+    //    signal change. Using generatedAt as the date would produce stale-looking sessions on
+    //    days with unchanged signals. Mirror the scheduler's approach: always use today's date.
+    const sessionDate = new Date().toISOString().slice(0, 10);
 
     // 2b. Fetch real OMXS30 market weather from Yahoo Finance
     let omxsValue = 0, perf5d = 0, perf1m = 0, perf3m = 0, marketRsi = 0;
