@@ -20,7 +20,7 @@ const router: IRouter = Router();
 
 router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
   const sessions = await db
-    .select({ id: screenerSessionsTable.id, date: screenerSessionsTable.date, source: screenerSessionsTable.source })
+    .select({ id: screenerSessionsTable.id, date: screenerSessionsTable.date, source: screenerSessionsTable.source, edgeWinRate: screenerSessionsTable.edgeWinRate })
     .from(screenerSessionsTable)
     .orderBy(asc(screenerSessionsTable.date));
 
@@ -97,11 +97,35 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
       };
     });
 
+    // Direction split — informational picks per direction, not counted in cumulative R
+    const sortedLong = sorted.filter((c) => c.direction !== "SHORT");
+    const sortedShort = sorted.filter((c) => c.direction === "SHORT");
+    const manualLong = manualPicks.filter((c) => c.direction !== "SHORT");
+    const manualShort = manualPicks.filter((c) => c.direction === "SHORT");
+    const topLong = (manualLong.length > 0 ? manualLong : sortedLong).slice(0, 3);
+    const topShort = (manualShort.length > 0 ? manualShort : sortedShort).slice(0, 3);
+
+    const mapInfoPick = (c: (typeof allCandidates)[0]) => {
+      const rr = (c.rr ?? 0) > 0 ? (c.rr as number) : 1.5;
+      const eid = c.earningsInDays;
+      return {
+        ticker: c.ticker,
+        direction: c.direction,
+        edgeScore: Number((((c.perf1m ?? 0) / 100) * ((c.rsi ?? 0) / 100)).toFixed(4)),
+        outcome: c.outcome,
+        r: c.outcome === "WIN" ? rr : c.outcome === "LOSS" ? -1 : null,
+        earningsWarning: eid != null && eid >= 0 && eid <= 5,
+      };
+    };
+
     return {
       date: session.date,
       sessionId: session.id,
       source: session.source ?? null,
       picks,
+      longPicks: topLong.map(mapInfoPick),
+      shortPicks: topShort.map(mapInfoPick),
+      edgeWinRate: session.edgeWinRate ?? null,
       sessionR: sessionHasResolved ? sessionR : null,
       cumulativeR,
     };

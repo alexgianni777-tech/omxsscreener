@@ -1,5 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Route, Switch, Router as WouterRouter } from 'wouter';
+import { Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
+import { useEffect } from 'react';
+import { useListSessions } from '@workspace/api-client-react';
 import { AuthProvider, useAuthContext } from './lib/auth-context';
 import { Shell } from './components/layout';
 import { Today } from './pages/today';
@@ -70,6 +72,7 @@ function LoginGate() {
         <Route path="/" component={Today} />
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/sessions" component={Sessions} />
+        <Route path="/sessions/today" component={TodaySessionRedirect} />
         <Route path="/sessions/:id" component={SessionDetail} />
         <Route path="/import" component={Import} />
         <Route path="/candidates" component={Candidates} />
@@ -78,6 +81,20 @@ function LoginGate() {
         <Route component={NotFound} />
       </Switch>
     </Shell>
+  );
+}
+
+// #39 — Redirect /sessions/today → latest session detail
+function TodaySessionRedirect() {
+  const { data: sessions } = useListSessions();
+  const [, navigate] = useLocation();
+  useEffect(() => {
+    if (sessions?.[0]) navigate(`/sessions/${sessions[0].id}`, { replace: true });
+  }, [sessions]);
+  return (
+    <div className="flex items-center justify-center py-20 text-muted-foreground text-sm animate-pulse">
+      Laddar senaste session…
+    </div>
   );
 }
 

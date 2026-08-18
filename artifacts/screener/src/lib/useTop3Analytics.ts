@@ -16,6 +16,9 @@ export interface Top3Session {
   sessionId: number;
   source: string | null;
   picks: Top3Pick[];
+  longPicks: Top3Pick[];
+  shortPicks: Top3Pick[];
+  edgeWinRate: number | null;
   sessionR: number | null;
   cumulativeR: number;
 }

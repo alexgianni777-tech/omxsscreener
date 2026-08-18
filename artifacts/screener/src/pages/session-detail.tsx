@@ -457,6 +457,10 @@ function CandidateRow({
   const nearStop = distFromStop != null && Math.abs(distFromStop) < 1.5;
   const entryDriftPct = distFromEntry != null ? Math.abs(distFromEntry) : 0;
   const entryStale = daysOld >= 1 && entryDriftPct > 2 && candidate.outcome === "PENDING";
+  const targetPct = candidate.entryPrice > 0
+    ? Math.abs((candidate.targetPrice - candidate.entryPrice) / candidate.entryPrice * 100)
+    : 0;
+  const isTargetFar = targetPct > 10;
 
   // EdgeAI per-candidate edge score
   const score = edgeScore(candidate);
@@ -517,6 +521,14 @@ function CandidateRow({
               <div className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold font-mono ${edgeScoreColor(score)}`}
                    title={`Sannolikhet = WR × E[R] = ${winRatePct}% × ${expectancyR.toFixed(2)}R`}>
                 E[R] {expectancyR >= 0 ? "+" : ""}{expectancyR.toFixed(2)}
+              </div>
+            )}
+            {isTargetFar && (
+              <div
+                className="flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold text-amber-500 bg-amber-500/10 border-amber-500/30"
+                title={`Target är ${targetPct.toFixed(1)}% från entry — möjligen swing-trade tidshorisont`}
+              >
+                ⚠ +{targetPct.toFixed(0)}%
               </div>
             )}
             <div className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold ${dirColor}`}>

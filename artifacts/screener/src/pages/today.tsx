@@ -578,10 +578,12 @@ export function Today() {
                       <div className="font-mono font-bold text-destructive">{candidate.stopPrice.toFixed(2)}</div>
                       <div className="text-[10px] text-destructive/60">{pct(-Math.abs(stopDist))}</div>
                     </div>
-                    <div className="bg-success/5 border border-success/15 rounded-lg p-3 text-center">
+                    <div className={`rounded-lg p-3 text-center ${Math.abs(targetDist) > 10 ? "bg-amber-500/5 border border-amber-500/20" : "bg-success/5 border border-success/15"}`}>
                       <div className="text-[10px] text-success/80 uppercase tracking-wider mb-1">Target</div>
                       <div className="font-mono font-bold text-success">{candidate.targetPrice.toFixed(2)}</div>
-                      <div className="text-[10px] text-success/60">+{Math.abs(targetDist).toFixed(1)}%</div>
+                      <div className={`text-[10px] font-medium ${Math.abs(targetDist) > 10 ? "text-amber-500" : "text-success/60"}`}>
+                        +{Math.abs(targetDist).toFixed(1)}%{Math.abs(targetDist) > 10 ? " ⚠" : ""}
+                      </div>
                     </div>
                   </div>
 

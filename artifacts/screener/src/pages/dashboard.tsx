@@ -430,24 +430,43 @@ function TodaySessionPanel() {
           </div>
         </div>
 
-        {/* Right: top3 status + open button */}
+        {/* Right: top3 picks preview + open button */}
         <div className="flex items-center gap-3 sm:flex-col sm:items-end">
-          {/* Top 3 stars status */}
-          <div className="flex items-center gap-1.5 text-xs">
-            {[0, 1, 2].map((i) => (
-              <Star
-                key={i}
-                className={`h-4 w-4 ${
-                  i < top3Count
-                    ? "text-amber-400 fill-amber-400"
-                    : "text-muted-foreground/30"
-                }`}
-              />
-            ))}
-            <span className="ml-1 text-muted-foreground font-medium">
-              {top3Count}/3 picks satta
-            </span>
-          </div>
+          {/* Ticker chips when picks exist; fall back to stars otherwise */}
+          {top3Session?.picks && top3Session.picks.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {top3Session.picks.map((p) => (
+                <span
+                  key={p.ticker}
+                  className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded border ${
+                    p.direction === "SHORT"
+                      ? "bg-destructive/10 text-destructive border-destructive/20"
+                      : "bg-success/10 text-success border-success/20"
+                  } ${p.outcome === "LOSS" ? "opacity-40 line-through" : p.outcome === "WIN" ? "opacity-70" : ""}`}
+                  title={`${p.direction} · ${p.outcome ?? "PENDING"}`}
+                >
+                  {p.ticker.replace(/\.ST$/i, "")}
+                  {p.outcome === "WIN" ? " ✓" : p.outcome === "LOSS" ? " ✗" : ""}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-xs">
+              {[0, 1, 2].map((i) => (
+                <Star
+                  key={i}
+                  className={`h-4 w-4 ${
+                    i < top3Count
+                      ? "text-amber-400 fill-amber-400"
+                      : "text-muted-foreground/30"
+                  }`}
+                />
+              ))}
+              <span className="ml-1 text-muted-foreground font-medium">
+                {top3Count}/3 picks satta
+              </span>
+            </div>
+          )}
           {/* Open session link */}
           <Link
             href={`/sessions/${id}`}
@@ -957,6 +976,14 @@ function Top3MarketCard({
     [sessions],
   );
 
+  // #28 — Rule 7 side-by-side comparison (raw vs clean)
+  const rawStats = useMemo(() => computeMarketStats(sessions), [sessions]);
+  const cleanSessions = useMemo(
+    () => sessions.map((s) => ({ ...s, picks: s.picks.filter((p) => !p.earningsWarning) })),
+    [sessions],
+  );
+  const cleanStats = useMemo(() => computeMarketStats(cleanSessions), [cleanSessions]);
+
   return (
     <div className="bg-card border border-border rounded-lg p-5 shadow-sm flex flex-col gap-4">
       {/* Header */}
@@ -1006,6 +1033,86 @@ function Top3MarketCard({
           <Pill label="Sessioner" value={`${stats.completedSessions}/${stats.totalSessions}`} />
         </div>
       )}
+
+      {/* #28 Rule 7 comparison — shown when earnings exclusions make a real difference */}
+      {earningsWarningCount > 0 && rawStats.total > 0 && (
+        <div className="bg-amber-500/5 rounded-md border border-amber-500/20 px-3 py-2.5 space-y-1.5">
+          <div className="text-[10px] text-amber-500 font-semibold uppercase tracking-wide">
+            Regel 7 påverkan
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <div className="text-muted-foreground text-[10px] mb-0.5">Utan Regel 7</div>
+              <div className="font-mono">{rawStats.winRate != null ? formatPercent(rawStats.winRate) : "–"} hitrate</div>
+              <div className={`font-mono font-bold ${rawStats.avgR != null ? (rawStats.avgR > 0 ? "text-success" : "text-destructive") : ""}`}>
+                {rawStats.avgR != null ? `${rawStats.avgR >= 0 ? "+" : ""}${formatNumber(rawStats.avgR, 2)}R` : "–"} snitt
+              </div>
+            </div>
+            <div>
+              <div className="text-success text-[10px] mb-0.5 font-medium">Med Regel 7 ✓</div>
+              <div className="font-mono">{cleanStats.winRate != null ? formatPercent(cleanStats.winRate) : "–"} hitrate</div>
+              <div className={`font-mono font-bold ${cleanStats.avgR != null ? (cleanStats.avgR > 0 ? "text-success" : "text-destructive") : ""}`}>
+                {cleanStats.avgR != null ? `${cleanStats.avgR >= 0 ? "+" : ""}${formatNumber(cleanStats.avgR, 2)}R` : "–"} snitt
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* #56 Direction split — LONG vs SHORT hitrate (shown when there is resolved data) */}
+      {(() => {
+        const allLong = sessions.flatMap((s) => s.longPicks ?? []);
+        const allShort = sessions.flatMap((s) => s.shortPicks ?? []);
+        const longRes = allLong.filter((p) => p.outcome === "WIN" || p.outcome === "LOSS");
+        const shortRes = allShort.filter((p) => p.outcome === "WIN" || p.outcome === "LOSS");
+        if (longRes.length === 0 && shortRes.length === 0) return null;
+        const longWR = longRes.length > 0 ? longRes.filter((p) => p.outcome === "WIN").length / longRes.length : null;
+        const shortWR = shortRes.length > 0 ? shortRes.filter((p) => p.outcome === "WIN").length / shortRes.length : null;
+        return (
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="bg-success/5 border border-success/15 rounded-md p-2">
+              <div className="text-[10px] text-success font-semibold mb-0.5">📈 Köp-picks</div>
+              <div className="font-mono">{longWR != null ? formatPercent(longWR) : "—"} hitrate</div>
+              <div className="text-[10px] text-muted-foreground">{longRes.length}/{allLong.length} avslutade</div>
+            </div>
+            <div className="bg-destructive/5 border border-destructive/15 rounded-md p-2">
+              <div className="text-[10px] text-destructive font-semibold mb-0.5">📉 Sälj-picks</div>
+              <div className="font-mono">{shortWR != null ? formatPercent(shortWR) : "—"} hitrate</div>
+              <div className="text-[10px] text-muted-foreground">{shortRes.length}/{allShort.length} avslutade</div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* #47 EdgeAI kalibrering — lovad WR vs faktisk WR */}
+      {sessions.some((s) => s.edgeWinRate != null) && (() => {
+        const withRate = sessions.filter((s) => s.edgeWinRate != null);
+        const avgPromised = withRate.reduce((a, s) => a + (s.edgeWinRate ?? 0), 0) / withRate.length;
+        const allResolved = sessions.flatMap((s) => s.picks).filter((p) => p.outcome === "WIN" || p.outcome === "LOSS");
+        const actualWR = allResolved.length > 0 ? allResolved.filter((p) => p.outcome === "WIN").length / allResolved.length : null;
+        return (
+          <div className="bg-blue-500/5 border border-blue-500/20 rounded-md px-3 py-2 space-y-1.5">
+            <div className="text-[10px] text-blue-400 font-semibold uppercase tracking-wide">
+              EdgeAI kalibrering
+            </div>
+            <div className="flex gap-4 text-xs">
+              <div>
+                <div className="text-muted-foreground text-[10px]">Lovad WR</div>
+                <div className="font-mono font-bold">{formatPercent(avgPromised)}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground text-[10px]">Faktisk WR</div>
+                <div className={`font-mono font-bold ${actualWR != null ? (actualWR >= avgPromised ? "text-success" : "text-destructive") : ""}`}>
+                  {actualWR != null ? formatPercent(actualWR) : "—"}
+                </div>
+              </div>
+              {actualWR == null && (
+                <div className="text-muted-foreground text-[10px] self-end italic">Logga utfall för att se jämförelse</div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Chart or empty state */}
       {isLoading ? (

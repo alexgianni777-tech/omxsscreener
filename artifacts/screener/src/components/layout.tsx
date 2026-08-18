@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { LineChart, Sunrise, LayoutDashboard, History, FileDown, Activity, Swords, CalendarDays, LogOut } from "lucide-react";
+import { LineChart, Sunrise, LayoutDashboard, History, FileDown, Activity, Swords, CalendarDays, LogOut, ArrowRight } from "lucide-react";
 import { useAuthContext } from "../lib/auth-context";
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -9,6 +9,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
   const navItems = [
     { href: "/", label: "Idag", icon: Sunrise },
+    { href: "/sessions/today", label: "Dagens session →", icon: ArrowRight },
     { href: "/survival", label: "Challenge Tracker", icon: Swords },
     { href: "/sessions", label: "Sessions", icon: History },
     { href: "/dashboard", label: "Statistik", icon: LayoutDashboard },
