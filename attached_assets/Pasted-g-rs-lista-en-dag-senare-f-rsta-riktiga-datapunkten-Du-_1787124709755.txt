@@ -1,0 +1,49 @@
+gårs lista, en dag senare — första riktiga datapunkten
+
+Du handlade inte, men listan är loggad. Så här gick den på en dag:
+
+Kandidat	Igår	Idag	Utfall
+SSAB long	108,10 (stop 104,73)	104,00, gap −2,7 %	Stoppad ut vid öppning, sämre än stop
+AstraZeneca short	1492,50 (stop 1551,64)	1535,00, gap +2,9 %	−0,72R, nära stop
+Telia short	43,67	43,91	Mot
+Ericsson short	96,60	96,88	Mot
+Saab long	696,70	686,50	−0,39R
+Getinge, Hexagon, Essity	—	—	Svagt plus
+
+Hade du kört "ta alla kvalificerade" igår hade dagen blivit klart negativ, och hela bucket 4 hade gått åt fel håll — sjätte dagen i rad. Det är en observation, inte statistik. Men det är exakt den typ av data backfillen ska producera i hundratal, och det tog en dag att generera manuellt.
+
+Dedupen är fixad
+
+Getinge står bara i SQUEEZE nu. Bra.
+
+Två saker kvar:
+
+Momentum-bucketen rankar på fel fält. Electrolux ligger på plats 4 med RS3m −0,9 — negativ relativ styrka — och −11,3 % från 20-dagarshögsta, i en bucket vars rubrik är "relativ styrka mot index". Sorteringen måste ske på 1m (+18,3 %). Antingen är rubriken fel eller sorteringen. Med ATR 5,2 % är det dessutom listans mest volatila namn.
+
+SMA-RSI oförändrad. Getinge 71 → 78 på en +0,4 %-dag. Index 46 → 49 på en nedgångsdag. Och Getinge med RSI 78 i en squeeze-bucket är en motsägelse i sig.
+
+Volym 0,0x på 10 av 12. Fixen är inte deployad.
+
+(Hexagons RS3m 21,9 → 8,4 och index 3m 6,8 → 4,1 är fönsterrullning, inte buggar.)
+
+AstraZeneca visar precis hur fel bucket 4 är
+
+Screenern säger short på 1535 efter ett gap upp på 2,9 %, vid RSI 37. Samtidigt: Marketmate publicerade i går ett köpcase i AstraZeneca via mini future lång med 1,78x hävstång, stop loss 1455 kr och målområde 1697 kr. De noterar att aktien är ner 21 % från aprilstoppen vid 1925 kr, och att ledningen stoppade BMS-affären efter marknadens reaktion.
+
+Fundamentalt: Q2 gav intäkter på 14,46 mdr USD mot väntade 14,08, en ökning med 16,1 % år över år, medan en sen fas-studie i lungcancer avbröts.
+
+Du behöver inte hålla med dem. Poängen är att din bucket 4 shortar en aktie som är översåld, har slagit på omsättning, vars fusionsoro är undanröjd, och där andra öppnar långa positioner med definierad stop. RS3m utan momentumfilter producerar systematiskt kontrarian-shorts i fel riktning.
+
+Riksbanken imorgon
+
+Beskedet publiceras torsdagen den 20 augusti efter mötet idag onsdag. Vid junibeslutet lämnades räntan oförändrad, men Riksbanken höjde ränteprognosen något, vilket ökade sannolikheten för en höjning senare under året.
+
+SEB och Nordea ligger båda på dagens lista. Nordea med 15 dagars tidsbarriär sitter garanterat över beskedet.
+
+Läget
+
+Index 3243,5, sjunde nedgångssessionen, −1,5 % på fem dagar, 3m nere på 4,1 %. Etiketten säger fortfarande "MEDVIND". Momentum-bucketen innehåller nu ett namn med negativ relativ styrka.
+
+Ingen trade idag, och skälet är enkelt: du står inför ett räntebesked med ett system vars urvalslogik du dokumenterat vet innehåller minst två fel, och du har fortfarande noll historiska observationer att kalibrera mot.
+
+Kör backfillen idag eller imorgon. Klistra in headern från candidates-log.csv plus en rad, så skriver jag skriptet.
