@@ -315,7 +315,6 @@ paths:
           required: false
           schema:
             type: string
-            format: uri
       responses:
         '302':
           description: Redirect to the returnTo path on success or /api/login on failure.
@@ -412,7 +411,6 @@ components:
           type: string
         email:
           type: [string, 'null']
-          format: email
         firstName:
           type: [string, 'null']
         lastName:
@@ -440,7 +438,6 @@ components:
         redirect_uri:
           type: string
           minLength: 1
-          format: uri
         state:
           type: string
           minLength: 1
@@ -577,6 +574,12 @@ components:
           type: number
         volMultiplier:
           type: number
+        signalRsi:
+          type: ["number", "null"]
+          description: "Wilder RSI(14) calculated from the signal chart when available"
+        signalGapPct:
+          type: ["number", "null"]
+          description: "Opening gap from previous close in percent when available"
         distFrom20dH:
           type: number
         gapWarning:
@@ -601,6 +604,29 @@ components:
           type: ["number", "null"]
         outcomeNotes:
           type: ["string", "null"]
+        review:
+          $ref: "#/components/schemas/SignalReview"
+
+    SignalReview:
+      type: object
+      required: [status, reasons]
+      properties:
+        status:
+          type: string
+          enum: [APPROVED, WARN, BLOCKED]
+        reasons:
+          type: array
+          items:
+            type: string
+
+    SessionReview:
+      allOf:
+        - $ref: "#/components/schemas/SignalReview"
+        - type: object
+          required: [tradableCount]
+          properties:
+            tradableCount:
+              type: number
 
     CandidateWithSession:
       allOf:
@@ -664,6 +690,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Candidate"
+        sessionReview:
+          $ref: "#/components/schemas/SessionReview"
 
     CategoryStats:
       type: object

@@ -44,4 +44,7 @@ export * from './quoteResult';
 export * from './sessionConflictError';
 export * from './sessionDetail';
 export * from './sessionImport';
+export * from './sessionReview';
 export * from './sessionSummary';
+export * from './signalReview';
+export * from './signalReviewStatus';

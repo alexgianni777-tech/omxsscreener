@@ -9,12 +9,27 @@ import { eq } from "drizzle-orm";
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "../lib/omxs30TickerMap";
+import {
+  calculateOpeningGapPct,
+  calculateWilderRsi,
+  volumeMultiplierFromQuote,
+} from "../lib/marketIndicators";
+import { logger } from "../lib/logger";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
 const router: IRouter = Router();
 
 const EDGEAI_URL = "https://alexgianni777-tech.github.io/edgeai/public/data.json";
+
+function daysUntil(date: Date | number | null | undefined): number | null {
+  if (date == null) return null;
+  const time = date instanceof Date ? date.getTime() : date * 1_000;
+  if (!Number.isFinite(time)) return null;
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  return Math.round((time - today.getTime()) / 86_400_000);
+}
 
 function mapSetupToCategory(
   dir: string,
@@ -86,9 +101,10 @@ router.post(
         if (history.length >= 6)  perf5d  = ((omxsValue - history[history.length - 6].close)  / history[history.length - 6].close)  * 100;
         if (history.length >= 22) perf1m  = ((omxsValue - history[history.length - 22].close) / history[history.length - 22].close) * 100;
         if (history.length >= 64) perf3m  = ((omxsValue - history[history.length - 64].close) / history[history.length - 64].close) * 100;
+        marketRsi = calculateWilderRsi(history.map((bar) => Number(bar.close))) ?? 0;
       }
-    } catch {
-      // non-fatal — market weather stays 0 if Yahoo Finance is unavailable
+    } catch (err: any) {
+      logger.warn({ err: err.message }, "Manual EdgeAI import could not calculate OMXS30 weather");
     }
 
     // 3. Check for existing session (respect force flag)
@@ -144,6 +160,9 @@ router.post(
       const ticker = String(s.ticker ?? "").replace(/\.ST$/i, "").toUpperCase();
       // barsAgo: how many bars (trading days) ago the signal was first triggered
       const barsAgo = Number(s.barsAgo ?? 0);
+      const chart = Array.isArray(s.chart) ? s.chart : [];
+      const signalRsi = calculateWilderRsi(chart.map((bar: any) => Number(bar?.c)));
+      const signalGapPct = calculateOpeningGapPct(chart);
       return {
         market: s._market,                 // "SE" or "US" — drives the market split in today.tsx
         category,
@@ -157,8 +176,11 @@ router.post(
         pctB: Number(s.edge?.sample ?? 0),           // store N (sample size)
         atr: oneR,
         volMultiplier: 0,  // filled in by live Yahoo Finance fetch below
+        earningsInDays: null as number | null,
         distFrom20dH: barsAgo,             // store signal age in trading days
-        gapWarning: s.grade === "A" ? null : -1, // non-A grade as soft gap warning
+        signalRsi,
+        signalGapPct,
+        gapWarning: signalGapPct != null && Math.abs(signalGapPct) >= 2.5 ? signalGapPct : null,
         direction,
         entryPrice: entry,
         stopPrice: stop,
@@ -169,21 +191,22 @@ router.post(
       };
     });
 
-    // 5. Enrich volMultiplier from live Yahoo Finance — same strategy as scheduler.ts:
-    //    use intraday vol if ≥20% of daily avg, otherwise fall back to avg10d/avg3m trend ratio.
+    // 5. Enrich volume. Missing Yahoo fields stay at 0 but are logged and are
+    //    presented as "saknas", never as a silently valid 0,0x metric.
     await Promise.allSettled(
       mappedSetups.map(async (c) => {
         try {
           const q = (await yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false })) as any;
-          const vol:    number = q.regularMarketVolume       ?? 0;
-          const avg10d: number = q.averageDailyVolume10Day   ?? 0;
-          const avg3m:  number = q.averageDailyVolume3Month  ?? 0;
-          if (avg10d > 0 && vol / avg10d >= 0.2) {
-            c.volMultiplier = Math.round((vol / avg10d) * 10) / 10;
-          } else if (avg10d > 0 && avg3m > 0) {
-            c.volMultiplier = Math.round((avg10d / avg3m) * 10) / 10;
+          const volumeMultiplier = volumeMultiplierFromQuote(q);
+          if (volumeMultiplier != null) {
+            c.volMultiplier = volumeMultiplier;
+          } else {
+            logger.warn({ ticker: c.ticker }, "Volume enrichment missing Yahoo volume or average fields");
           }
-        } catch { /* keep 0 */ }
+          c.earningsInDays = daysUntil(q.earningsTimestamp);
+        } catch (err: any) {
+          logger.warn({ ticker: c.ticker, err: err.message }, "Volume enrichment failed");
+        }
       }),
     );
 
@@ -195,6 +218,7 @@ router.post(
       const existingCands = await db
         .select({
           ticker: candidatesTable.ticker,
+          direction: candidatesTable.direction,
           outcome: candidatesTable.outcome,
           exitPrice: candidatesTable.exitPrice,
           outcomeNotes: candidatesTable.outcomeNotes,

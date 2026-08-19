@@ -8,6 +8,7 @@
 import type { CandidateCategory } from './candidateCategory';
 import type { CandidateDirection } from './candidateDirection';
 import type { CandidateOutcomeProperty } from './candidateOutcomeProperty';
+import type { SignalReview } from './signalReview';
 
 export interface Candidate {
   id: number;
@@ -22,6 +23,16 @@ export interface Candidate {
   pctB: number;
   atr: number;
   volMultiplier: number;
+  /**
+     * Wilder RSI(14) calculated from the signal chart when available
+     * @nullable
+     */
+  signalRsi?: number | null;
+  /**
+     * Opening gap from previous close in percent when available
+     * @nullable
+     */
+  signalGapPct?: number | null;
   distFrom20dH: number;
   /** @nullable */
   gapWarning?: number | null;
@@ -36,4 +47,5 @@ export interface Candidate {
   exitPrice?: number | null;
   /** @nullable */
   outcomeNotes?: string | null;
+  review?: SignalReview;
 }

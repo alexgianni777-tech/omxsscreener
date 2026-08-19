@@ -15,6 +15,9 @@ import {
 import { parseScreenerText, ScreenerParseError } from "../lib/screenerParser";
 import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "../lib/omxs30TickerMap";
+import { volumeMultiplierFromQuote } from "../lib/marketIndicators";
+import { reviewCandidate, reviewSession } from "../lib/screeningReview";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
@@ -95,6 +98,8 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     pctB: c.pctB,
     atr: c.atr,
     volMultiplier: volMap.get(c.ticker) ?? c.volMultiplier,
+    signalRsi: c.rsi,
+    signalGapPct: c.gapWarning ?? null,
     distFrom20dH: c.distFrom20dH,
     gapWarning: c.gapWarning ?? undefined,
     earningsInDays: earningsInDays ?? undefined,
@@ -347,6 +352,8 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
           rs3m: c.rs3m,
           perf1m: c.perf1m,
           rsi: c.rsi,
+          signalRsi: c.rsi,
+          signalGapPct: c.gapWarning ?? null,
           pctB: c.pctB,
           atr: c.atr,
           volMultiplier: c.volMultiplier,
@@ -375,6 +382,8 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
           rs3m: c.rs3m,
           perf1m: c.perf1m,
           rsi: c.rsi,
+          signalRsi: c.rsi,
+          signalGapPct: c.gapWarning ?? null,
           pctB: c.pctB,
           atr: c.atr,
           volMultiplier: c.volMultiplier,
@@ -508,6 +517,15 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     .where(eq(candidatesTable.sessionId, session.id))
     .orderBy(candidatesTable.category, candidatesTable.rank);
 
+  const candidatesWithReview = candidates.map((candidate) => ({
+    ...mapCandidate(candidate),
+    review: reviewCandidate(candidate, session.source ?? null),
+  }));
+  const sessionReview = reviewSession(
+    candidatesWithReview.map((candidate) => candidate.review),
+    session.marketRsi,
+  );
+
   const parsed = GetSessionResponse.parse({
     id: session.id,
     date: session.date,
@@ -519,7 +537,8 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
       rsi: session.marketRsi,
       trendLabel: session.trendLabel,
     },
-    candidates: candidates.map(mapCandidate),
+    candidates: candidatesWithReview,
+    sessionReview,
   });
 
   // Append fields not in Zod schema — passed through directly
@@ -569,6 +588,8 @@ function mapCandidate(c: {
   pctB: number;
   atr: number;
   volMultiplier: number;
+  signalRsi: number | null;
+  signalGapPct: number | null;
   distFrom20dH: number;
   gapWarning: number | null;
   earningsInDays: number | null;
@@ -597,6 +618,8 @@ function mapCandidate(c: {
     pctB: c.pctB,
     atr: c.atr,
     volMultiplier: c.volMultiplier,
+    signalRsi: c.signalRsi ?? null,
+    signalGapPct: c.signalGapPct ?? null,
     distFrom20dH: c.distFrom20dH,
     gapWarning: c.gapWarning ?? null,
     earningsInDays: c.earningsInDays ?? null,
@@ -674,7 +697,7 @@ async function fetchEarningsBatch(
 /**
  * Fetch live volume ratio (regularMarketVolume / averageDailyVolume10Day) for
  * a batch of screener tickers. Returns a map keyed by the original ticker string.
- * Silently skips tickers where Yahoo Finance returns no data.
+ * Missing source data is deliberately omitted so the UI can present "saknas".
  */
 /**
  * Volume ratio strategy:
@@ -693,18 +716,14 @@ async function enrichVolMultiplier(
     [...new Set(tickers)].map(async (ticker) => {
       try {
         const q = (await yf.quote(resolveYahooTicker(ticker), {}, { validateResult: false })) as any;
-        const vol:   number = q.regularMarketVolume        ?? 0;
-        const avg10d: number = q.averageDailyVolume10Day   ?? 0;
-        const avg3m:  number = q.averageDailyVolume3Month  ?? 0;
-        if (avg10d > 0 && vol / avg10d >= 0.2) {
-          // Intraday vol is meaningful — use live ratio
-          volMap.set(ticker, Math.round((vol / avg10d) * 10) / 10);
-        } else if (avg10d > 0 && avg3m > 0) {
-          // Early session or market closed — use 10d-vs-3m trend ratio
-          volMap.set(ticker, Math.round((avg10d / avg3m) * 10) / 10);
+        const volumeMultiplier = volumeMultiplierFromQuote(q);
+        if (volumeMultiplier != null) {
+          volMap.set(ticker, volumeMultiplier);
+        } else {
+          logger.warn({ ticker }, "Volume enrichment missing Yahoo volume or average fields");
         }
-      } catch {
-        // no vol data available — leave the parsed fallback in place
+      } catch (err: any) {
+        logger.warn({ ticker, err: err.message }, "Volume enrichment failed");
       }
     }),
   );

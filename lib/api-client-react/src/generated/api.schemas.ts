@@ -60,6 +60,7 @@ export interface SessionConflictError {
   /** ID of the existing session for this date */
   existingSessionId: number;
 }
+
 export interface SessionImport {
   /** The raw text output from the screener */
   rawText: string;
@@ -138,6 +139,20 @@ export const CandidateOutcomeProperty = {
   PENDING: 'PENDING',
 } as const;
 
+export type SignalReviewStatus = typeof SignalReviewStatus[keyof typeof SignalReviewStatus];
+
+
+export const SignalReviewStatus = {
+  APPROVED: 'APPROVED',
+  WARN: 'WARN',
+  BLOCKED: 'BLOCKED',
+} as const;
+
+export interface SignalReview {
+  status: SignalReviewStatus;
+  reasons: string[];
+}
+
 export interface Candidate {
   id: number;
   sessionId: number;
@@ -151,6 +166,16 @@ export interface Candidate {
   pctB: number;
   atr: number;
   volMultiplier: number;
+  /**
+     * Wilder RSI(14) calculated from the signal chart when available
+     * @nullable
+     */
+  signalRsi?: number | null;
+  /**
+     * Opening gap from previous close in percent when available
+     * @nullable
+     */
+  signalGapPct?: number | null;
   distFrom20dH: number;
   /** @nullable */
   gapWarning?: number | null;
@@ -165,7 +190,12 @@ export interface Candidate {
   exitPrice?: number | null;
   /** @nullable */
   outcomeNotes?: string | null;
+  review?: SignalReview;
 }
+
+export type SessionReview = SignalReview & {
+  tradableCount: number;
+};
 
 export type CandidateWithSession = Candidate & {
   /** YYYY-MM-DD */
@@ -210,6 +240,7 @@ export interface SessionDetail {
   date: string;
   marketWeather: MarketWeather;
   candidates: Candidate[];
+  sessionReview?: SessionReview;
 }
 
 export type CategoryStatsCategory = typeof CategoryStatsCategory[keyof typeof CategoryStatsCategory];
@@ -375,3 +406,4 @@ iss?: string;
 export type LogoutBrowserSessionParams = {
 returnTo?: string;
 };
+

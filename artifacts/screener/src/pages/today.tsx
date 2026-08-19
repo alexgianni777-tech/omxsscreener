@@ -64,6 +64,10 @@ type Candidate = {
   earningsInDays: number | null;
   market: "SE" | "US" | null;
   pctB: number; // EdgeAI sample size (number of historical observations)
+  volMultiplier: number;
+  signalRsi?: number | null;
+  signalGapPct?: number | null;
+  review?: { status: "APPROVED" | "WARN" | "BLOCKED"; reasons: string[] };
 };
 
 type Session = {
@@ -80,6 +84,7 @@ type Session = {
     trendLabel: string;
   } | null;
   candidates: Candidate[];
+  sessionReview?: { status: "APPROVED" | "WARN" | "BLOCKED"; reasons: string[]; tradableCount: number };
 };
 
 type ChallengeData = {
@@ -176,8 +181,9 @@ export function Today() {
   // top picks: prefer starred, fallback to edge-score rank — split by market if data exists
   // Deduplicates by ticker: if a stock appears in multiple setups, keep only the best-ranked.
   function selectPicks(cands: Candidate[], n = 3): Candidate[] {
-    const starred = cands.filter(c => c.isTop3Pick);
-    const pool = starred.length > 0 ? starred : [...cands].sort((a, b) => b.perf1m * b.rsi - a.perf1m * a.rsi);
+    const eligible = cands.filter((candidate) => candidate.review?.status !== "BLOCKED");
+    const starred = eligible.filter(c => c.isTop3Pick);
+    const pool = starred.length > 0 ? starred : [...eligible].sort((a, b) => b.perf1m * b.rsi - a.perf1m * a.rsi);
     const seen = new Set<string>();
     const unique: Candidate[] = [];
     for (const c of pool) {
@@ -209,6 +215,13 @@ export function Today() {
 
   // risk amounts per pick
   const riskKr = account != null ? account * (riskPct / 100) : null;
+  const riskForCandidate = (candidate: Candidate) => {
+    if (riskKr == null) return null;
+    const sameDirection = picks.filter((pick) => pick.direction === candidate.direction).length;
+    // Two similar directional trades already carry correlated index exposure.
+    // Keep the group's total risk within the configured per-trade budget.
+    return riskKr / Math.max(1, sameDirection);
+  };
 
   // ── Yahoo Finance price check ─────────────────────────────────────────────
 
@@ -259,10 +272,11 @@ export function Today() {
       });
 
       // 2. Log to challenge tracker with auto-calculated P&L
-      if (riskKr != null) {
+      const allocatedRisk = riskForCandidate(candidate);
+      if (allocatedRisk != null) {
         const pnlKr = outcome === "WIN"
-          ? Math.round(riskKr * candidate.rr)
-          : Math.round(-riskKr);
+          ? Math.round(allocatedRisk * candidate.rr)
+          : Math.round(-allocatedRisk);
         await fetch(api("/survival/trades"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -440,7 +454,22 @@ export function Today() {
 
         {picks.length === 0 && !loading && (
           <div className="text-sm text-muted-foreground text-center py-12 border border-dashed border-border rounded-xl">
-            Inga picks idag ännu — kontrolleras automatiskt var 5:e minut från kl 10:00.
+            {session?.sessionReview?.status === "BLOCKED"
+              ? "Ingen kvalificerad trade idag — signalerna stoppades av risk- och datakvalitetsregler."
+              : "Inga picks idag ännu — kontrolleras automatiskt var 5:e minut från kl 10:00."}
+          </div>
+        )}
+        {session?.sessionReview && session.sessionReview.reasons.length > 0 && (
+          <div className={`flex items-start gap-2.5 px-4 py-3 rounded-xl text-sm mb-3 ${
+            session.sessionReview.status === "BLOCKED"
+              ? "bg-destructive/10 border border-destructive/20 text-destructive"
+              : "bg-amber-500/10 border border-amber-500/20 text-amber-500"
+          }`}>
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <div>
+              <span className="font-semibold">{session.sessionReview.status === "BLOCKED" ? "No-trade" : "Kontroll före trade"}</span>
+              <p className="text-xs mt-0.5 opacity-90">{session.sessionReview.reasons.join(" ")}</p>
+            </div>
           </div>
         )}
 
@@ -473,8 +502,9 @@ export function Today() {
             const targetDist = ((candidate.targetPrice - candidate.entryPrice) / candidate.entryPrice) * 100 * (isLong ? 1 : -1);
             const isDone = candidate.outcome && candidate.outcome !== "PENDING";
             const isLogging = logging === candidate.id;
-            const winPnl = riskKr != null ? Math.round(riskKr * candidate.rr) : null;
-            const lossPnl = riskKr != null ? Math.round(-riskKr) : null;
+            const allocatedRisk = riskForCandidate(candidate);
+            const winPnl = allocatedRisk != null ? Math.round(allocatedRisk * candidate.rr) : null;
+            const lossPnl = allocatedRisk != null ? Math.round(-allocatedRisk) : null;
             const quote = quotes[candidate.ticker];
             const autoHit = !isDone ? autoDetectOutcome(candidate) : null;
 
@@ -559,11 +589,24 @@ export function Today() {
                     </div>
                     <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-x-2">
                       <span>Pick #{i + 1} · R:R {candidate.rr.toFixed(1)}</span>
-                      {session.source === "edgeai" && candidate.perf1m > 0 && <span>WR {Math.round(candidate.perf1m)}%</span>}
-                      {session.source === "edgeai" && candidate.rsi > 0 && <span>E {(candidate.rsi / 100).toFixed(2)}R</span>}
-                      {session.source === "edgeai" && candidate.pctB > 0 && <span>{Math.round(candidate.pctB)} obs</span>}
+                      {session?.source === "edgeai" && candidate.perf1m > 0 && <span>WR {Math.round(candidate.perf1m)}%</span>}
+                      {session?.source === "edgeai" && candidate.rsi > 0 && <span>E {(candidate.rsi / 100).toFixed(2)}R</span>}
+                      {session?.source === "edgeai" && candidate.pctB > 0 && <span>{Math.round(candidate.pctB)} obs</span>}
+                      <span>Volym {candidate.volMultiplier > 0 ? `${candidate.volMultiplier.toFixed(1)}x` : "saknas"}</span>
+                      {candidate.review?.status === "WARN" && <span className="text-amber-500">⚠ granska</span>}
                     </div>
                   </div>
+
+                  {candidate.review && candidate.review.reasons.length > 0 && (
+                    <div className={`rounded-lg px-3 py-2 text-xs ${
+                      candidate.review.status === "BLOCKED"
+                        ? "bg-destructive/10 border border-destructive/20 text-destructive"
+                        : "bg-amber-500/10 border border-amber-500/20 text-amber-500"
+                    }`}>
+                      <strong>{candidate.review.status === "BLOCKED" ? "Ej kvalificerad: " : "Kontroll: "}</strong>
+                      {candidate.review.reasons.join(" ")}
+                    </div>
+                  )}
                 </div>
 
                 {/* Levels */}
@@ -611,6 +654,9 @@ export function Today() {
                       <span>Win: <strong className="text-success">+{kr(winPnl!)}</strong></span>
                       <span className="text-muted-foreground/40">·</span>
                       <span>Loss: <strong className="text-destructive">{kr(lossPnl!)}</strong></span>
+                      {picks.filter((pick) => pick.direction === candidate.direction).length > 1 && (
+                        <span className="text-amber-500">· delad riktningrisk</span>
+                      )}
                     </div>
                   )}
 

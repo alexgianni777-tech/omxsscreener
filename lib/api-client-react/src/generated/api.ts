@@ -38,7 +38,6 @@ import type {
   MobileTokenExchangeRequest,
   MobileTokenExchangeSuccess,
   QuoteResult,
-  SessionConflictError,
   SessionDetail,
   SessionImport,
   SessionSummary
@@ -53,6 +52,7 @@ type AwaitedInput<T> = PromiseLike<T> | T;
 
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
 
 
 const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
@@ -73,6 +73,8 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
 export const getHealthCheckUrl = () => {
 
 
+
+
   return `/api/healthz`
 }
 
@@ -91,6 +93,9 @@ export const healthCheck = async ( options?: Parameters<typeof customFetch>[1]):
 );}
 
 
+
+
+
 export const getHealthCheckQueryKey = () => {
     return [
     `/api/healthz`
@@ -106,7 +111,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getHealthCheckQueryKey();
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof healthCheck>>> = ({ signal }) => healthCheck({ signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData> & { queryKey: QueryKey }
@@ -133,7 +142,14 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
 }
 
 
+
+
+
+
+
 export const getImportSessionUrl = () => {
+
+
 
 
   return `/api/screener/sessions/import`
@@ -154,6 +170,9 @@ export const importSession = async (sessionImport: SessionImport, options?: Para
 );}
 
 
+
+
+
 export const getImportSessionMutationOptions = <TError = ErrorType<ErrorResponse | ImportConflict>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importSession>>, TError,{data: BodyType<SessionImport>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof importSession>>, TError,{data: BodyType<SessionImport>}, TContext> => {
@@ -166,11 +185,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof importSession>>, {data: BodyType<SessionImport>}> = (props) => {
           const {data} = props ?? {};
 
           return  importSession(data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -196,6 +221,8 @@ export const useImportSession = <TError = ErrorType<ErrorResponse | ImportConfli
 export const getListSessionsUrl = () => {
 
 
+
+
   return `/api/screener/sessions`
 }
 
@@ -214,6 +241,9 @@ export const listSessions = async ( options?: Parameters<typeof customFetch>[1])
 );}
 
 
+
+
+
 export const getListSessionsQueryKey = () => {
     return [
     `/api/screener/sessions`
@@ -229,7 +259,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getListSessionsQueryKey();
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof listSessions>>> = ({ signal }) => listSessions({ signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSessions>>, TError, TData> & { queryKey: QueryKey }
@@ -255,12 +289,87 @@ export function useListSessions<TData = Awaited<ReturnType<typeof listSessions>>
   return withQueryKey(query, queryOptions.queryKey);
 }
 
+
+
+
+
+
+
 export const getReimportSessionUrl = (id: number,) => {
+
+
 
 
   return `/api/screener/sessions/${id}/reimport`
 }
+
+/**
+ * @summary Re-import raw screener text into an existing session, preserving logged outcomes
+ */
+export const reimportSession = async (id: number,
+    sessionImport: SessionImport, options?: Parameters<typeof customFetch>[1]): Promise<SessionDetail> => {
+
+  return customFetch<SessionDetail>(getReimportSessionUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(sessionImport)
+  }
+);}
+
+
+
+
+
+export const getReimportSessionMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reimportSession>>, TError,{id: number;data: BodyType<SessionImport>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reimportSession>>, TError,{id: number;data: BodyType<SessionImport>}, TContext> => {
+
+const mutationKey = ['reimportSession'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reimportSession>>, {id: number;data: BodyType<SessionImport>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  reimportSession(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReimportSessionMutationResult = NonNullable<Awaited<ReturnType<typeof reimportSession>>>
+    export type ReimportSessionMutationBody = BodyType<SessionImport>
+    export type ReimportSessionMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Re-import raw screener text into an existing session, preserving logged outcomes
+ */
+export const useReimportSession = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reimportSession>>, TError,{id: number;data: BodyType<SessionImport>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reimportSession>>,
+        TError,
+        {id: number;data: BodyType<SessionImport>},
+        TContext
+      > => {
+      return useMutation(getReimportSessionMutationOptions(options));
+    }
+
 export const getGetSessionUrl = (id: number,) => {
+
+
 
 
   return `/api/screener/sessions/${id}`
@@ -281,6 +390,9 @@ export const getSession = async (id: number, options?: Parameters<typeof customF
 );}
 
 
+
+
+
 export const getGetSessionQueryKey = (id: number,) => {
     return [
     `/api/screener/sessions/${id}`
@@ -296,7 +408,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getGetSessionQueryKey(id);
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof getSession>>> = ({ signal }) => getSession(id, { signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSession>>, TError, TData> & { queryKey: QueryKey }
@@ -323,7 +439,14 @@ export function useGetSession<TData = Awaited<ReturnType<typeof getSession>>, TE
 }
 
 
+
+
+
+
+
 export const getDeleteSessionUrl = (id: number,) => {
+
+
 
 
   return `/api/screener/sessions/${id}`
@@ -344,6 +467,9 @@ export const deleteSession = async (id: number, options?: Parameters<typeof cust
 );}
 
 
+
+
+
 export const getDeleteSessionMutationOptions = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSession>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof deleteSession>>, TError,{id: number}, TContext> => {
@@ -356,11 +482,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteSession>>, {id: number}> = (props) => {
           const {id} = props ?? {};
 
           return  deleteSession(id,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -413,6 +545,9 @@ export const listCandidates = async (params?: ListCandidatesParams, options?: Pa
 );}
 
 
+
+
+
 export const getListCandidatesQueryKey = (params?: ListCandidatesParams,) => {
     return [
     `/api/candidates`, ...(params ? [params] : [])
@@ -428,7 +563,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getListCandidatesQueryKey(params);
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof listCandidates>>> = ({ signal }) => listCandidates(params, { signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCandidates>>, TError, TData> & { queryKey: QueryKey }
@@ -455,7 +594,14 @@ export function useListCandidates<TData = Awaited<ReturnType<typeof listCandidat
 }
 
 
+
+
+
+
+
 export const getUpdateCandidateOutcomeUrl = (id: number,) => {
+
+
 
 
   return `/api/candidates/${id}/outcome`
@@ -477,6 +623,9 @@ export const updateCandidateOutcome = async (id: number,
 );}
 
 
+
+
+
 export const getUpdateCandidateOutcomeMutationOptions = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCandidateOutcome>>, TError,{id: number;data: BodyType<CandidateOutcome>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof updateCandidateOutcome>>, TError,{id: number;data: BodyType<CandidateOutcome>}, TContext> => {
@@ -489,11 +638,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCandidateOutcome>>, {id: number;data: BodyType<CandidateOutcome>}> = (props) => {
           const {id,data} = props ?? {};
 
           return  updateCandidateOutcome(id,data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -546,6 +701,9 @@ export const getQuotes = async (params: GetQuotesParams, options?: Parameters<ty
 );}
 
 
+
+
+
 export const getGetQuotesQueryKey = (params?: GetQuotesParams,) => {
     return [
     `/api/screener/quotes`, ...(params ? [params] : [])
@@ -561,7 +719,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getGetQuotesQueryKey(params);
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof getQuotes>>> = ({ signal }) => getQuotes(params, { signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getQuotes>>, TError, TData> & { queryKey: QueryKey }
@@ -588,7 +750,14 @@ export function useGetQuotes<TData = Awaited<ReturnType<typeof getQuotes>>, TErr
 }
 
 
+
+
+
+
+
 export const getGetDashboardSummaryUrl = () => {
+
+
 
 
   return `/api/dashboard/summary`
@@ -609,6 +778,9 @@ export const getDashboardSummary = async ( options?: Parameters<typeof customFet
 );}
 
 
+
+
+
 export const getGetDashboardSummaryQueryKey = () => {
     return [
     `/api/dashboard/summary`
@@ -624,7 +796,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getGetDashboardSummaryQueryKey();
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof getDashboardSummary>>> = ({ signal }) => getDashboardSummary({ signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDashboardSummary>>, TError, TData> & { queryKey: QueryKey }
@@ -651,7 +827,14 @@ export function useGetDashboardSummary<TData = Awaited<ReturnType<typeof getDash
 }
 
 
+
+
+
+
+
 export const getGetCurrentAuthUserUrl = () => {
+
+
 
 
   return `/api/auth/user`
@@ -672,6 +855,9 @@ export const getCurrentAuthUser = async ( options?: Parameters<typeof customFetc
 );}
 
 
+
+
+
 export const getGetCurrentAuthUserQueryKey = () => {
     return [
     `/api/auth/user`
@@ -687,7 +873,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getGetCurrentAuthUserQueryKey();
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof getCurrentAuthUser>>> = ({ signal }) => getCurrentAuthUser({ signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCurrentAuthUser>>, TError, TData> & { queryKey: QueryKey }
@@ -712,6 +902,11 @@ export function useGetCurrentAuthUser<TData = Awaited<ReturnType<typeof getCurre
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+
+
+
+
 
 
 export const getBeginBrowserLoginUrl = (params?: BeginBrowserLoginParams,) => {
@@ -744,6 +939,9 @@ export const beginBrowserLogin = async (params?: BeginBrowserLoginParams, option
 );}
 
 
+
+
+
 export const getBeginBrowserLoginQueryKey = (params?: BeginBrowserLoginParams,) => {
     return [
     `/api/login`, ...(params ? [params] : [])
@@ -759,7 +957,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getBeginBrowserLoginQueryKey(params);
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof beginBrowserLogin>>> = ({ signal }) => beginBrowserLogin(params, { signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof beginBrowserLogin>>, TError, TData> & { queryKey: QueryKey }
@@ -784,6 +986,11 @@ export function useBeginBrowserLogin<TData = Awaited<ReturnType<typeof beginBrow
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+
+
+
+
 
 
 export const getHandleBrowserLoginCallbackUrl = (params?: HandleBrowserLoginCallbackParams,) => {
@@ -816,6 +1023,9 @@ export const handleBrowserLoginCallback = async (params?: HandleBrowserLoginCall
 );}
 
 
+
+
+
 export const getHandleBrowserLoginCallbackQueryKey = (params?: HandleBrowserLoginCallbackParams,) => {
     return [
     `/api/callback`, ...(params ? [params] : [])
@@ -831,7 +1041,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getHandleBrowserLoginCallbackQueryKey(params);
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof handleBrowserLoginCallback>>> = ({ signal }) => handleBrowserLoginCallback(params, { signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof handleBrowserLoginCallback>>, TError, TData> & { queryKey: QueryKey }
@@ -856,6 +1070,11 @@ export function useHandleBrowserLoginCallback<TData = Awaited<ReturnType<typeof 
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+
+
+
+
 
 
 export const getLogoutBrowserSessionUrl = (params?: LogoutBrowserSessionParams,) => {
@@ -888,6 +1107,9 @@ export const logoutBrowserSession = async (params?: LogoutBrowserSessionParams, 
 );}
 
 
+
+
+
 export const getLogoutBrowserSessionQueryKey = (params?: LogoutBrowserSessionParams,) => {
     return [
     `/api/logout`, ...(params ? [params] : [])
@@ -903,7 +1125,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
   const queryKey =  queryOptions?.queryKey ?? getLogoutBrowserSessionQueryKey(params);
 
 
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof logoutBrowserSession>>> = ({ signal }) => logoutBrowserSession(params, { signal, ...requestOptions });
+
+
+
 
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof logoutBrowserSession>>, TError, TData> & { queryKey: QueryKey }
@@ -930,7 +1156,14 @@ export function useLogoutBrowserSession<TData = Awaited<ReturnType<typeof logout
 }
 
 
+
+
+
+
+
 export const getExchangeMobileAuthorizationCodeUrl = () => {
+
+
 
 
   return `/api/mobile-auth/token-exchange`
@@ -951,6 +1184,9 @@ export const exchangeMobileAuthorizationCode = async (mobileTokenExchangeRequest
 );}
 
 
+
+
+
 export const getExchangeMobileAuthorizationCodeMutationOptions = <TError = ErrorType<ErrorEnvelope>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exchangeMobileAuthorizationCode>>, TError,{data: BodyType<MobileTokenExchangeRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof exchangeMobileAuthorizationCode>>, TError,{data: BodyType<MobileTokenExchangeRequest>}, TContext> => {
@@ -963,11 +1199,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof exchangeMobileAuthorizationCode>>, {data: BodyType<MobileTokenExchangeRequest>}> = (props) => {
           const {data} = props ?? {};
 
           return  exchangeMobileAuthorizationCode(data,requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -993,6 +1235,8 @@ export const useExchangeMobileAuthorizationCode = <TError = ErrorType<ErrorEnvel
 export const getLogoutMobileSessionUrl = () => {
 
 
+
+
   return `/api/mobile-auth/logout`
 }
 
@@ -1011,6 +1255,9 @@ export const logoutMobileSession = async ( options?: Parameters<typeof customFet
 );}
 
 
+
+
+
 export const getLogoutMobileSessionMutationOptions = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logoutMobileSession>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof logoutMobileSession>>, TError,void, TContext> => {
@@ -1023,11 +1270,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       : {mutation: { mutationKey, }, request: undefined};
 
 
+
+
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof logoutMobileSession>>, void> = () => {
 
 
           return  logoutMobileSession(requestOptions)
         }
+
+
+
+
 
 
   return  { mutationFn, ...mutationOptions }}
@@ -1050,59 +1303,3 @@ export const useLogoutMobileSession = <TError = ErrorType<unknown>,
       return useMutation(getLogoutMobileSessionMutationOptions(options));
     }
 
-
-    export type ReimportSessionMutationResult = NonNullable<Awaited<ReturnType<typeof reimportSession>>>
-
-    /**
- * @summary Re-import raw screener text into an existing session, preserving logged outcomes
- */
-export const useReimportSession = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reimportSession>>, TError,{id: number;data: BodyType<SessionImport>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof reimportSession>>,
-        TError,
-        {id: number;data: BodyType<SessionImport>},
-        TContext
-      > => {
-      return useMutation(getReimportSessionMutationOptions(options));
-    }
-
-    export type ReimportSessionMutationBody = BodyType<SessionImport>
-
-/**
- * @summary Re-import raw screener text into an existing session, preserving logged outcomes
- */
-export const reimportSession = async (id: number,
-    sessionImport: SessionImport, options?: Parameters<typeof customFetch>[1]): Promise<SessionDetail> => {
-
-  return customFetch<SessionDetail>(getReimportSessionUrl(id),
-  {
-    ...options,
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(sessionImport)
-  }
-);}
-
-export const getReimportSessionMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reimportSession>>, TError,{id: number;data: BodyType<SessionImport>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof reimportSession>>, TError,{id: number;data: BodyType<SessionImport>}, TContext> => {
-
-const mutationKey = ['reimportSession'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reimportSession>>, {id: number;data: BodyType<SessionImport>}> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  reimportSession(id,data,requestOptions)
-        }
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ReimportSessionMutationError = ErrorType<ErrorResponse>

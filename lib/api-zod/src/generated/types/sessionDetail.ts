@@ -7,6 +7,7 @@
  */
 import type { Candidate } from './candidate';
 import type { MarketWeather } from './marketWeather';
+import type { SessionReview } from './sessionReview';
 
 export interface SessionDetail {
   id: number;
@@ -14,4 +15,5 @@ export interface SessionDetail {
   date: string;
   marketWeather: MarketWeather;
   candidates: Candidate[];
+  sessionReview?: SessionReview;
 }

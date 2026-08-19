@@ -18,6 +18,9 @@ export const candidatesTable = pgTable("candidates", {
   pctB: real("pct_b").notNull(),
   atr: real("atr").notNull(),
   volMultiplier: real("vol_multiplier").notNull(),
+  // Separate signal inputs from legacy display fields: EdgeAI uses `rsi` for E[R].
+  signalRsi: real("signal_rsi"),
+  signalGapPct: real("signal_gap_pct"),
   distFrom20dH: real("dist_from_20d_h").notNull(),
   gapWarning: real("gap_warning"),
   earningsInDays: integer("earnings_in_days"),

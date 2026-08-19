@@ -48,6 +48,8 @@ export const ImportSessionResponse = zod.object({
   "pctB": zod.number(),
   "atr": zod.number(),
   "volMultiplier": zod.number(),
+  "signalRsi": zod.number().nullish().describe('Wilder RSI(14) calculated from the signal chart when available'),
+  "signalGapPct": zod.number().nullish().describe('Opening gap from previous close in percent when available'),
   "distFrom20dH": zod.number(),
   "gapWarning": zod.number().nullish(),
   "direction": zod.enum(['LONG', 'SHORT']),
@@ -58,8 +60,18 @@ export const ImportSessionResponse = zod.object({
   "oneR": zod.number(),
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
-  "outcomeNotes": zod.string().nullish()
-}))
+  "outcomeNotes": zod.string().nullish(),
+  "review": zod.object({
+  "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}).optional()
+})),
+  "sessionReview": zod.object({
+  "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}).and(zod.object({
+  "tradableCount": zod.number()
+})).optional()
 })
 
 
@@ -86,12 +98,70 @@ export const ListSessionsResponseItem = zod.object({
 })
 export const ListSessionsResponse = zod.array(ListSessionsResponseItem)
 
+
 /**
  * @summary Re-import raw screener text into an existing session, preserving logged outcomes
  */
 export const ReimportSessionParams = zod.object({
   "id": zod.coerce.number()
 })
+
+export const ReimportSessionBody = zod.object({
+  "rawText": zod.string().describe('The raw text output from the screener'),
+  "force": zod.boolean().optional().describe('If true, replace the existing session for this date while preserving logged outcomes')
+})
+
+export const ReimportSessionResponse = zod.object({
+  "id": zod.number(),
+  "date": zod.string().describe('YYYY-MM-DD'),
+  "marketWeather": zod.object({
+  "omxsValue": zod.number(),
+  "perf5d": zod.number(),
+  "perf1m": zod.number(),
+  "perf3m": zod.number(),
+  "rsi": zod.number(),
+  "trendLabel": zod.string()
+}),
+  "candidates": zod.array(zod.object({
+  "id": zod.number(),
+  "sessionId": zod.number(),
+  "category": zod.enum(['MOMENTUM', 'SQUEEZE', 'STUDS', 'WEAKEST']),
+  "rank": zod.number(),
+  "ticker": zod.string(),
+  "price": zod.number(),
+  "rs3m": zod.number(),
+  "perf1m": zod.number(),
+  "rsi": zod.number(),
+  "pctB": zod.number(),
+  "atr": zod.number(),
+  "volMultiplier": zod.number(),
+  "signalRsi": zod.number().nullish().describe('Wilder RSI(14) calculated from the signal chart when available'),
+  "signalGapPct": zod.number().nullish().describe('Opening gap from previous close in percent when available'),
+  "distFrom20dH": zod.number(),
+  "gapWarning": zod.number().nullish(),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "entryPrice": zod.number(),
+  "stopPrice": zod.number(),
+  "targetPrice": zod.number(),
+  "rr": zod.number(),
+  "oneR": zod.number(),
+  "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
+  "exitPrice": zod.number().nullish(),
+  "outcomeNotes": zod.string().nullish(),
+  "review": zod.object({
+  "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}).optional()
+})),
+  "sessionReview": zod.object({
+  "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}).and(zod.object({
+  "tradableCount": zod.number()
+})).optional()
+})
+
+
 /**
  * @summary Get a session with all its candidates
  */
@@ -123,10 +193,10 @@ export const GetSessionResponse = zod.object({
   "pctB": zod.number(),
   "atr": zod.number(),
   "volMultiplier": zod.number(),
+  "signalRsi": zod.number().nullish().describe('Wilder RSI(14) calculated from the signal chart when available'),
+  "signalGapPct": zod.number().nullish().describe('Opening gap from previous close in percent when available'),
   "distFrom20dH": zod.number(),
   "gapWarning": zod.number().nullish(),
-  "earningsInDays": zod.number().nullish(),
-  "market": zod.enum(['SE', 'US']).nullish(),
   "direction": zod.enum(['LONG', 'SHORT']),
   "entryPrice": zod.number(),
   "stopPrice": zod.number(),
@@ -136,8 +206,17 @@ export const GetSessionResponse = zod.object({
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
   "outcomeNotes": zod.string().nullish(),
-  "isTop3Pick": zod.boolean().optional()
-}))
+  "review": zod.object({
+  "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}).optional()
+})),
+  "sessionReview": zod.object({
+  "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}).and(zod.object({
+  "tradableCount": zod.number()
+})).optional()
 })
 
 
@@ -173,6 +252,8 @@ export const ListCandidatesResponseItem = zod.object({
   "pctB": zod.number(),
   "atr": zod.number(),
   "volMultiplier": zod.number(),
+  "signalRsi": zod.number().nullish().describe('Wilder RSI(14) calculated from the signal chart when available'),
+  "signalGapPct": zod.number().nullish().describe('Opening gap from previous close in percent when available'),
   "distFrom20dH": zod.number(),
   "gapWarning": zod.number().nullish(),
   "direction": zod.enum(['LONG', 'SHORT']),
@@ -183,7 +264,11 @@ export const ListCandidatesResponseItem = zod.object({
   "oneR": zod.number(),
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
-  "outcomeNotes": zod.string().nullish()
+  "outcomeNotes": zod.string().nullish(),
+  "review": zod.object({
+  "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}).optional()
 }).and(zod.object({
   "sessionDate": zod.string().describe('YYYY-MM-DD')
 }))
@@ -216,6 +301,8 @@ export const UpdateCandidateOutcomeResponse = zod.object({
   "pctB": zod.number(),
   "atr": zod.number(),
   "volMultiplier": zod.number(),
+  "signalRsi": zod.number().nullish().describe('Wilder RSI(14) calculated from the signal chart when available'),
+  "signalGapPct": zod.number().nullish().describe('Opening gap from previous close in percent when available'),
   "distFrom20dH": zod.number(),
   "gapWarning": zod.number().nullish(),
   "direction": zod.enum(['LONG', 'SHORT']),
@@ -226,7 +313,11 @@ export const UpdateCandidateOutcomeResponse = zod.object({
   "oneR": zod.number(),
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
-  "outcomeNotes": zod.string().nullish()
+  "outcomeNotes": zod.string().nullish(),
+  "review": zod.object({
+  "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}).optional()
 })
 
 
@@ -293,7 +384,7 @@ export const GetCurrentAuthUserHeader = zod.object({
 export const GetCurrentAuthUserResponse = zod.object({
   "user": zod.union([zod.object({
   "id": zod.string(),
-  "email": zod.string().email().nullable(),
+  "email": zod.string().nullable(),
   "firstName": zod.string().nullable(),
   "lastName": zod.string().nullable(),
   "profileImageUrl": zod.string().nullable()
@@ -317,7 +408,7 @@ export const BeginBrowserLoginResponse = zod.void()
 export const HandleBrowserLoginCallbackQueryParams = zod.object({
   "code": zod.coerce.string().optional(),
   "state": zod.coerce.string().optional(),
-  "iss": zod.string().url().optional()
+  "iss": zod.coerce.string().optional()
 })
 
 export const HandleBrowserLoginCallbackResponse = zod.void()
@@ -344,10 +435,15 @@ export const LogoutBrowserSessionResponse = zod.void()
  */
 
 
+
+
+
+
+
 export const ExchangeMobileAuthorizationCodeBody = zod.object({
   "code": zod.string().min(1),
   "code_verifier": zod.string().min(1),
-  "redirect_uri": zod.string().url().min(1),
+  "redirect_uri": zod.string().min(1),
   "state": zod.string().min(1),
   "nonce": zod.string().min(1).optional()
 })
@@ -369,44 +465,3 @@ export const LogoutMobileSessionResponse = zod.object({
 })
 
 
-export const ReimportSessionBody = zod.object({
-  "rawText": zod.string().describe('The raw text output from the screener')
-})
-
-export const ReimportSessionResponse = zod.object({
-  "id": zod.number(),
-  "date": zod.string().describe('YYYY-MM-DD'),
-  "marketWeather": zod.object({
-  "omxsValue": zod.number(),
-  "perf5d": zod.number(),
-  "perf1m": zod.number(),
-  "perf3m": zod.number(),
-  "rsi": zod.number(),
-  "trendLabel": zod.string()
-}),
-  "candidates": zod.array(zod.object({
-  "id": zod.number(),
-  "sessionId": zod.number(),
-  "category": zod.enum(['MOMENTUM', 'SQUEEZE', 'STUDS', 'WEAKEST']),
-  "rank": zod.number(),
-  "ticker": zod.string(),
-  "price": zod.number(),
-  "rs3m": zod.number(),
-  "perf1m": zod.number(),
-  "rsi": zod.number(),
-  "pctB": zod.number(),
-  "atr": zod.number(),
-  "volMultiplier": zod.number(),
-  "distFrom20dH": zod.number(),
-  "gapWarning": zod.number().nullish(),
-  "direction": zod.enum(['LONG', 'SHORT']),
-  "entryPrice": zod.number(),
-  "stopPrice": zod.number(),
-  "targetPrice": zod.number(),
-  "rr": zod.number(),
-  "oneR": zod.number(),
-  "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
-  "exitPrice": zod.number().nullish(),
-  "outcomeNotes": zod.string().nullish()
-}))
-})
