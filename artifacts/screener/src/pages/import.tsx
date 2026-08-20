@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { Terminal, Upload, AlertTriangle, RefreshCw, X, ShieldAlert, Zap, CheckCircle2 } from "lucide-react";
 import { useImportSession, getListSessionsQueryKey } from "@workspace/api-client-react";
+import { useAuthContext } from "../lib/auth-context";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -30,6 +31,7 @@ type EdgeAIStatus =
   | { kind: "idle" }
   | { kind: "loading" }
   | { kind: "success"; setupCount: number; date: string; generatedAt: string }
+  | { kind: "auth"; message: string }
   | { kind: "error"; message: string };
 
 export function Import() {
@@ -40,6 +42,7 @@ export function Import() {
   const [, setLocation] = useLocation();
   const importSession = useImportSession();
   const queryClient = useQueryClient();
+  const { login } = useAuthContext();
 
   const runImport = (text: string, force: boolean) => {
     setError(null);
@@ -90,9 +93,17 @@ export function Import() {
       const res = await fetch(`${BASE}/api/screener/sessions/import-from-edgeai`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ force }),
       });
       const data = await res.json();
+      if (res.status === 401) {
+        setEdgeStatus({
+          kind: "auth",
+          message: "Din inloggning har gått ut. Logga in igen och försök importen på nytt.",
+        });
+        return;
+      }
       if (res.status === 409) {
         // Reuse the same conflict modal as manual import
         setConflict({
@@ -156,11 +167,14 @@ export function Import() {
               {edgeStatus.kind === "error" && (
                 <span className="text-red-400 ml-1">· {edgeStatus.message}</span>
               )}
+              {edgeStatus.kind === "auth" && (
+                <span className="text-amber-400 ml-1">· {edgeStatus.message}</span>
+              )}
             </p>
           </div>
         </div>
         <button
-          onClick={() => handleEdgeAIImport(false)}
+          onClick={() => edgeStatus.kind === "auth" ? login() : handleEdgeAIImport(false)}
           disabled={edgeStatus.kind === "loading"}
           className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           data-testid="btn-edgeai-import"
@@ -169,6 +183,8 @@ export function Import() {
             <span className="animate-pulse">Hämtar…</span>
           ) : edgeStatus.kind === "success" ? (
             <><CheckCircle2 className="w-4 h-4" /> Importerad</>
+          ) : edgeStatus.kind === "auth" ? (
+            <>Logga in igen</>
           ) : (
             <><Zap className="w-4 h-4" /> Hämta & importera</>
           )}
