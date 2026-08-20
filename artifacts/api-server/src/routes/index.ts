@@ -13,12 +13,14 @@ import earningsScreenerRouter from "./earningsScreener";
 import priceChartRouter from "./priceChart";
 import telegramImportRouter from "./telegramImport";
 import marketIntelRouter from "./marketIntel";
+import { requireAuthentication } from "../middlewares/authMiddleware";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(authRouter);
 router.use(telegramImportRouter); // unauthenticated — uses its own bearer-token check
+router.use(requireAuthentication);
 router.use(screenerRouter);
 router.use(candidatesRouter);
 router.use(dashboardRouter);

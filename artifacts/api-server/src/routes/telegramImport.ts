@@ -15,6 +15,7 @@
  */
 
 import { Router, type IRouter, type Request, type Response } from "express";
+import { requireAuthentication } from "../middlewares/authMiddleware";
 import { eq } from "drizzle-orm";
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import { parseScreenerText, ScreenerParseError } from "../lib/screenerParser";
@@ -52,7 +53,7 @@ async function enrichVolMultiplier(
 const router: IRouter = Router();
 
 // GET /api/telegram-import/status — shows pipeline health without exposing secret
-router.get("/telegram-import/status", async (_req, res: Response): Promise<void> => {
+router.get("/telegram-import/status", requireAuthentication, async (_req, res: Response): Promise<void> => {
   const { db, screenerSessionsTable } = await import("@workspace/db");
   const { desc } = await import("drizzle-orm");
   const secretConfigured = !!process.env.TELEGRAM_IMPORT_SECRET;

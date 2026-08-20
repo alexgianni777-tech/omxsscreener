@@ -88,3 +88,16 @@ export async function authMiddleware(
 
   next();
 }
+
+/** Require a valid browser or mobile session after authMiddleware has hydrated req.user. */
+export function requireAuthentication(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  next();
+}

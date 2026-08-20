@@ -108,6 +108,7 @@ export function Today() {
   // per-trade logging state
   const [logging, setLogging] = useState<number | null>(null); // candidate id
   const [submitting, setSubmitting] = useState(false);
+  const [outcomeError, setOutcomeError] = useState<string | null>(null);
 
   // live Yahoo Finance prices
   const [quotes, setQuotes] = useState<Record<string, LiveQuote>>({});
@@ -263,13 +264,17 @@ export function Today() {
   const logOutcome = async (candidate: Candidate, outcome: "WIN" | "LOSS") => {
     if (!session || submitting) return;
     setSubmitting(true);
+    setOutcomeError(null);
     try {
       // 1. Mark screener candidate outcome
-      await fetch(api(`/screener/candidates/${candidate.id}/outcome`), {
+      const outcomeResponse = await fetch(api(`/candidates/${candidate.id}/outcome`), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ outcome, exitPrice: outcome === "WIN" ? candidate.targetPrice : candidate.stopPrice }),
       });
+      if (!outcomeResponse.ok) {
+        throw new Error("Kunde inte spara kandidatens utfall. Ingen trade har loggats.");
+      }
 
       // 2. Log to challenge tracker with auto-calculated P&L
       const allocatedRisk = riskForCandidate(candidate);
@@ -277,7 +282,7 @@ export function Today() {
         const pnlKr = outcome === "WIN"
           ? Math.round(allocatedRisk * candidate.rr)
           : Math.round(-allocatedRisk);
-        await fetch(api("/survival/trades"), {
+        const tradeResponse = await fetch(api("/survival/trades"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -290,6 +295,9 @@ export function Today() {
             followedPlan: true,
           }),
         });
+        if (!tradeResponse.ok) {
+          throw new Error("Utfallet sparades, men Challenge Tracker kunde inte logga traden. Kontrollera historiken innan du försöker igen.");
+        }
       }
 
       setLogging(null);
@@ -299,6 +307,8 @@ export function Today() {
         return next;
       });
       await load();
+    } catch (error) {
+      setOutcomeError(error instanceof Error ? error.message : "Kunde inte logga utfallet.");
     } finally {
       setSubmitting(false);
     }
@@ -470,6 +480,12 @@ export function Today() {
               <span className="font-semibold">{session.sessionReview.status === "BLOCKED" ? "No-trade" : "Kontroll före trade"}</span>
               <p className="text-xs mt-0.5 opacity-90">{session.sessionReview.reasons.join(" ")}</p>
             </div>
+          </div>
+        )}
+        {outcomeError && (
+          <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl text-sm mb-3 bg-destructive/10 border border-destructive/20 text-destructive">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <p>{outcomeError}</p>
           </div>
         )}
 
