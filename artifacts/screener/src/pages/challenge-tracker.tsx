@@ -15,6 +15,7 @@ type SurvivalTrade = {
   pnlKr: number;
   flag: "LAST" | "REFLEX";
   followedPlan: boolean;
+  boughtBeforeReport: boolean;
   createdAt: string;
 };
 
@@ -142,6 +143,7 @@ export function ChallengeTracker() {
   // trade form
   const [flag, setFlag] = useState<"LAST" | "REFLEX" | null>(null);
   const [followedPlan, setFollowedPlan] = useState<boolean | null>(null);
+  const [boughtBeforeReport, setBoughtBeforeReport] = useState(false);
   const [ticker, setTicker] = useState("");
   const [strategy, setStrategy] = useState("trend pullback");
   const [direction, setDirection] = useState<"LONG" | "SHORT">("LONG");
@@ -235,10 +237,11 @@ export function ChallengeTracker() {
           date: today(), ticker: ticker.trim().toUpperCase() || undefined,
           strategy, direction, leverageX: Number(leverageX) || undefined,
           pnlKr: Number(pnlKr), flag, followedPlan,
+           boughtBeforeReport,
         }),
       });
       setTicker(""); setPnlKr(""); setLeverageX("");
-      setFlag(null); setFollowedPlan(null);
+      setFlag(null); setFollowedPlan(null); setBoughtBeforeReport(false);
       load();
     } finally { setSubmitting(false); }
   };
@@ -608,6 +611,16 @@ export function ChallengeTracker() {
               className="bg-muted border border-border rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary" />
           </div>
 
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={boughtBeforeReport}
+              onChange={(e) => setBoughtBeforeReport(e.target.checked)}
+              className="h-3.5 w-3.5 accent-primary"
+            />
+            <span>Köpet gjordes före rapport — rapportdatum var anledningen till entryn</span>
+          </label>
+
           <div className="flex gap-2">
             <input type="number" value={pnlKr} onChange={(e) => setPnlKr(e.target.value)}
               placeholder="P&L i kr  (+ vinst / − förlust / 0 break-even)"
@@ -636,6 +649,7 @@ export function ChallengeTracker() {
                   <span className="font-bold">{t.ticker || t.strategy}</span>
                   <span className="text-muted-foreground">{t.date} · {t.strategy} · {t.direction}{t.leverageX ? ` ${t.leverageX}x` : ""}</span>
                   {!t.followedPlan && <span className="text-red-400 font-bold">✗plan</span>}
+                  {t.boughtBeforeReport && <span className="text-amber-400 font-bold">· före rapport</span>}
                 </div>
                 <div className="flex items-center gap-3">
                   <span className={`font-bold ${t.pnlKr >= 0 ? "text-emerald-400" : "text-red-400"}`}>{sgn(t.pnlKr)} kr</span>

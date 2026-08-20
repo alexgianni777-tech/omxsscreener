@@ -144,14 +144,15 @@ router.patch("/survival/config", async (req, res): Promise<void> => {
 
 // POST /survival/trades
 router.post("/survival/trades", async (req, res): Promise<void> => {
-  const { date, ticker, strategy, direction, leverageX, pnlKr, flag, followedPlan } = req.body ?? {};
+  const { date, ticker, strategy, direction, leverageX, pnlKr, flag, followedPlan, boughtBeforeReport } = req.body ?? {};
   if (
     typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
     typeof strategy !== "string" || !strategy ||
     !["LONG", "SHORT"].includes(direction) ||
     typeof pnlKr !== "number" || !isFinite(pnlKr) ||
     !["LAST", "REFLEX"].includes(flag) ||
-    typeof followedPlan !== "boolean"
+    typeof followedPlan !== "boolean" ||
+    (boughtBeforeReport !== undefined && typeof boughtBeforeReport !== "boolean")
   ) {
     res.status(400).json({ error: "Invalid trade payload" });
     return;
@@ -167,6 +168,7 @@ router.post("/survival/trades", async (req, res): Promise<void> => {
       pnlKr,
       flag,
       followedPlan,
+      boughtBeforeReport: boughtBeforeReport ?? false,
     })
     .returning();
   res.status(201).json(trade);

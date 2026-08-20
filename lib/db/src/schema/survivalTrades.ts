@@ -19,6 +19,7 @@ export const survivalTradesTable = pgTable("survival_trades", {
   pnlKr: real("pnl_kr").notNull(),
   flag: text("flag", { enum: ["LAST", "REFLEX"] }).notNull(),
   followedPlan: boolean("followed_plan").notNull(),
+  boughtBeforeReport: boolean("bought_before_report").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
