@@ -15,13 +15,19 @@
  */
 
 import { Router, type IRouter, type Request, type Response } from "express";
-import { requireAuthentication } from "../middlewares/authMiddleware";
+import { requireAdministrator } from "../middlewares/authMiddleware";
 import { eq } from "drizzle-orm";
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import { parseScreenerText, ScreenerParseError } from "../lib/screenerParser";
 import { logger } from "../lib/logger";
 import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "../lib/omxs30TickerMap";
+import { timingSafeEqual } from "node:crypto";
+import {
+  assertUniqueCandidateIdentities,
+  lockScreenerSession,
+  synchronizeCandidates,
+} from "../lib/candidateSynchronization";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
@@ -53,7 +59,7 @@ async function enrichVolMultiplier(
 const router: IRouter = Router();
 
 // GET /api/telegram-import/status — shows pipeline health without exposing secret
-router.get("/telegram-import/status", requireAuthentication, async (_req, res: Response): Promise<void> => {
+router.get("/telegram-import/status", requireAdministrator, async (_req, res: Response): Promise<void> => {
   const { db, screenerSessionsTable } = await import("@workspace/db");
   const { desc } = await import("drizzle-orm");
   const secretConfigured = !!process.env.TELEGRAM_IMPORT_SECRET;
@@ -80,7 +86,12 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
   }
   const authHeader = req.headers["authorization"] ?? "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-  if (token !== secret) {
+  const received = Buffer.from(token);
+  const expected = Buffer.from(secret);
+  if (
+    received.length !== expected.length ||
+    !timingSafeEqual(received, expected)
+  ) {
     res.status(401).json({ error: "Invalid or missing bearer token" });
     return;
   }
@@ -106,6 +117,14 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
   }
 
   const { date, marketWeather, candidates } = session;
+  try {
+    assertUniqueCandidateIdentities(
+      candidates.map((candidate) => ({ ...candidate, market: "SE" })),
+    );
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Duplicate candidates in import" });
+    return;
+  }
 
   // Enrich vol from live Yahoo Finance — overrides the bot's parsed 0.0x values
   await enrichVolMultiplier(candidates);
@@ -141,62 +160,13 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
   });
 
   // ── Upsert ──────────────────────────────────────────────────────────────────
-  const existing = await db
-    .select({ id: screenerSessionsTable.id })
-    .from(screenerSessionsTable)
-    .where(eq(screenerSessionsTable.date, date));
-
-  if (existing.length > 0) {
-    // Update — preserve any logged outcomes
-    const existingId = existing[0].id;
-
-    const existingCandidates = await db
-      .select({
-        ticker: candidatesTable.ticker,
-        outcome: candidatesTable.outcome,
-        exitPrice: candidatesTable.exitPrice,
-        outcomeNotes: candidatesTable.outcomeNotes,
-      })
-      .from(candidatesTable)
-      .where(eq(candidatesTable.sessionId, existingId));
-
-    const outcomeByTicker = new Map(
-      existingCandidates
-        .filter((c) => c.outcome !== "PENDING")
-        .map((c) => [c.ticker, { outcome: c.outcome, exitPrice: c.exitPrice, outcomeNotes: c.outcomeNotes }]),
-    );
-
-    await db.delete(candidatesTable).where(eq(candidatesTable.sessionId, existingId));
-
-    const [updated] = await db
-      .update(screenerSessionsTable)
-      .set({
-        omxsValue: marketWeather.omxsValue,
-        perf5d: marketWeather.perf5d,
-        perf1m: marketWeather.perf1m,
-        perf3m: marketWeather.perf3m,
-        marketRsi: marketWeather.rsi,
-        trendLabel: marketWeather.trendLabel,
-        rawText,
-        source: "telegram",
-      })
-      .where(eq(screenerSessionsTable.id, existingId))
-      .returning();
-
-    await db.insert(candidatesTable).values(
-      candidates.map((c) => buildRow(updated.id, c, outcomeByTicker.get(c.ticker))),
-    );
-
-    logger.info({ date, sessionId: updated.id, candidates: candidates.length }, "[telegram-import] Updated existing session");
-    res.status(200).json({ sessionId: updated.id, date, candidateCount: candidates.length });
-    return;
-  }
-
-  // Fresh insert
-  const [inserted] = await db
-    .insert(screenerSessionsTable)
-    .values({
-      date,
+  const result = await db.transaction(async (tx) => {
+    await lockScreenerSession(tx, date);
+    const [existing] = await tx
+      .select()
+      .from(screenerSessionsTable)
+      .where(eq(screenerSessionsTable.date, date));
+    const sessionRow = {
       omxsValue: marketWeather.omxsValue,
       perf5d: marketWeather.perf5d,
       perf1m: marketWeather.perf1m,
@@ -205,15 +175,20 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
       trendLabel: marketWeather.trendLabel,
       rawText,
       source: "telegram",
-    })
-    .returning();
+    };
+    const [stored] = existing
+      ? await tx.update(screenerSessionsTable).set(sessionRow).where(eq(screenerSessionsTable.id, existing.id)).returning()
+      : await tx.insert(screenerSessionsTable).values({ date, ...sessionRow }).returning();
+    const storedCandidates = await synchronizeCandidates(
+      tx,
+      stored.id,
+      candidates.map((candidate) => buildRow(stored.id, candidate)),
+    );
+    return { stored, candidateCount: storedCandidates.length, updated: Boolean(existing) };
+  });
 
-  await db.insert(candidatesTable).values(
-    candidates.map((c) => buildRow(inserted.id, c)),
-  );
-
-  logger.info({ date, sessionId: inserted.id, candidates: candidates.length }, "[telegram-import] New session created");
-  res.status(201).json({ sessionId: inserted.id, date, candidateCount: candidates.length });
+  logger.info({ date, sessionId: result.stored.id, candidates: result.candidateCount }, "[telegram-import] Session synchronized");
+  res.status(result.updated ? 200 : 201).json({ sessionId: result.stored.id, date, candidateCount: result.candidateCount });
 });
 
 export default router;

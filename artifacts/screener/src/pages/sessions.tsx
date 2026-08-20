@@ -1,13 +1,26 @@
-import { useListSessions, useDeleteSession, getListSessionsQueryKey } from "@workspace/api-client-react";
+import { useListSessions, getListSessionsQueryKey } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { formatNumber, formatPct, formatDate } from "../lib/utils";
 import { Trash2, ChevronRight, BarChart3, Activity } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+
+// Shape returned by GET /api/screener/sessions/:id/delete-impact
+interface DeleteImpact {
+  date: string;
+  candidates: number;
+  resolvedOutcomes: number;
+  linkedChallengeTrades: number;
+}
+
+const BASE = (import.meta.env.BASE_URL ?? "/").replace(/\/+$/, "");
+const api = (path: string) => `${BASE}/api${path}`;
 
 export function Sessions() {
   const { data: sessions, isLoading, isError } = useListSessions();
-  const deleteSession = useDeleteSession();
   const queryClient = useQueryClient();
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<number | null>(null);
 
   if (isLoading) {
     return <div className="animate-pulse space-y-4">
@@ -22,19 +35,66 @@ export function Sessions() {
     </div>;
   }
 
-  const handleDelete = (id: number, e: React.MouseEvent) => {
+  const handleDelete = async (id: number, e: React.MouseEvent) => {
     e.preventDefault();
-    if (confirm("Are you sure you want to delete this session?")) {
-      deleteSession.mutate({ id }, {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
-        }
-      });
+    setDeleteError(null);
+
+    // 1. Fetch impact
+    let impact: DeleteImpact;
+    try {
+      const r = await fetch(api(`/screener/sessions/${id}/delete-impact`));
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        setDeleteError(body.error ?? body.message ?? `Serverfel ${r.status}`);
+        return;
+      }
+      impact = await r.json();
+    } catch (err: any) {
+      setDeleteError(err.message ?? "Nätverksfel vid hämtning av konsekvensinformation");
+      return;
+    }
+
+    // 2. Build Swedish confirmation message with exact counts
+    const lines: string[] = [
+      `Ta bort session ${formatDate(impact.date)} permanent?`,
+      "",
+      `Detta raderar:`,
+      `  • ${impact.candidates} kandidat${impact.candidates !== 1 ? "er" : ""}`,
+    ];
+    if (impact.resolvedOutcomes > 0) {
+      lines.push(`  • ${impact.resolvedOutcomes} registrerat${impact.resolvedOutcomes !== 1 ? "e" : ""} utfall (WIN/LOSS/SKIP)`);
+    }
+    if (impact.linkedChallengeTrades > 0) {
+      lines.push(`  • ${impact.linkedChallengeTrades} länkad${impact.linkedChallengeTrades !== 1 ? "e" : ""} challenge-trade${impact.linkedChallengeTrades !== 1 ? "s" : ""}`);
+    }
+    lines.push("", "Åtgärden kan inte ångras.");
+
+    if (!confirm(lines.join("\n"))) return;
+
+    // 3. Delete with ?force=true
+    setDeleting(id);
+    try {
+      const r = await fetch(api(`/screener/sessions/${id}?force=true`), { method: "DELETE" });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        setDeleteError(body.error ?? body.message ?? `Serverfel ${r.status}`);
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+    } catch (err: any) {
+      setDeleteError(err.message ?? "Nätverksfel vid borttagning");
+    } finally {
+      setDeleting(null);
     }
   };
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {deleteError && (
+        <div className="p-3 rounded-lg border border-destructive/40 bg-destructive/10 text-destructive text-sm">
+          Kunde inte radera sessionen: {deleteError}
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold tracking-tight">Screener Sessions</h2>
         <Link 
@@ -97,7 +157,8 @@ export function Sessions() {
 
                   <button 
                     onClick={(e) => handleDelete(session.id, e)}
-                    className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                    disabled={deleting === session.id}
+                    className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors disabled:opacity-40"
                     aria-label="Delete session"
                     title="Delete session"
                   >

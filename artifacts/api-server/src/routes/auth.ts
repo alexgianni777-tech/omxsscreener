@@ -19,6 +19,7 @@ import {
   SESSION_TTL,
   type SessionData,
 } from '../lib/auth';
+import { isAdministrator } from '../middlewares/authMiddleware';
 
 const OIDC_COOKIE_TTL = 10 * 60 * 1000;
 
@@ -55,7 +56,9 @@ function getSafeReturnTo(value: unknown): string {
   if (
     typeof value !== 'string' ||
     !value.startsWith('/') ||
-    value.startsWith('//')
+    value.startsWith('//') ||
+    value.includes('\\') ||
+    value.includes('\0')
   ) {
     return '/';
   }
@@ -125,7 +128,10 @@ async function upsertUser(claims: Record<string, unknown>) {
 router.get('/auth/user', (req: Request, res: Response) => {
   res.json(
     GetCurrentAuthUserResponse.parse({
-      user: req.isAuthenticated() ? req.user : null,
+      user:
+        req.isAuthenticated() && isAdministrator(req.user)
+          ? req.user
+          : null,
     }),
   );
 });

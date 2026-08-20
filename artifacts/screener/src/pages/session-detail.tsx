@@ -62,7 +62,8 @@ export function SessionDetail() {
     const setter = isShort ? setPickedShortIds : setPickedLongIds;
     if (next && currentCount >= 3) return;
     setter((prev) => { const s = new Set(prev); next ? s.add(candidateId) : s.delete(candidateId); return s; });
-    await fetch(`/api/screener/candidates/${candidateId}/top3pick`, {
+    const base = (import.meta.env.BASE_URL ?? "/").replace(/\/+$/, "");
+    await fetch(`${base}/api/screener/candidates/${candidateId}/top3pick`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isTop3Pick: next }),

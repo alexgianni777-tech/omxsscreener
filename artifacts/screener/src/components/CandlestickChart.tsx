@@ -68,8 +68,9 @@ export function CandlestickChart({
     setData(null);
     setError(null);
     setLoading(true);
+    const base = (import.meta.env.BASE_URL ?? "/").replace(/\/+$/, "");
     const days = DAYS[timeframe];
-    fetch(`/api/screener/price-chart/${encodeURIComponent(ticker)}?days=${days}`)
+    fetch(`${base}/api/screener/price-chart/${encodeURIComponent(ticker)}?days=${days}`)
       .then((r) =>
         r.ok ? r.json() : r.json().then((e: any) => Promise.reject(e.error ?? "error")),
       )

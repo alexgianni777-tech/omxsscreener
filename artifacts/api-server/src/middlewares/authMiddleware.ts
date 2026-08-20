@@ -10,6 +10,7 @@ import {
   updateSession,
   type SessionData,
 } from '../lib/auth';
+import { logger } from '../lib/logger';
 
 declare global {
   namespace Express {
@@ -100,4 +101,49 @@ export function requireAuthentication(
     return;
   }
   next();
+}
+
+/**
+ * Trading data is private. The Repl owner is always the bootstrap administrator;
+ * optional allowlists make it possible to grant a second explicitly approved
+ * account access without turning ordinary login into authorization.
+ */
+export function requireAdministrator(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
+  if (isAdministrator(req.user)) {
+    next();
+    return;
+  }
+
+  logger.warn({ userId: req.user.id }, "Denied trading-data access for non-admin user");
+  res.status(403).json({ error: "This account is not approved to access trading data" });
+}
+
+export function isAdministrator(user: Express.User): boolean {
+  const allowedIds = new Set(
+    [
+      process.env.REPL_OWNER_ID,
+      process.env.REPL_USERID,
+      ...(process.env.ADMIN_USER_IDS ?? "").split(","),
+    ]
+      .map((value) => value?.trim())
+      .filter((value): value is string => Boolean(value)),
+  );
+  const allowedEmails = new Set(
+    (process.env.ADMIN_EMAILS ?? "")
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const email = user.email?.trim().toLowerCase();
+
+  return allowedIds.has(user.id) || Boolean(email && allowedEmails.has(email));
 }

@@ -164,6 +164,10 @@ export function ChallengeTracker() {
   const [posQuotes, setPosQuotes] = useState<Record<string, PositionQuote>>({});
   const [fetchingQuotes, setFetchingQuotes] = useState(false);
 
+  // mutation error feedback
+  const [tradeError, setTradeError] = useState<string | null>(null);
+  const [posError, setPosError] = useState<string | null>(null);
+
   const loadPositions = async () => {
     try {
       const r = await fetch(api("/survival/positions"));
@@ -229,8 +233,9 @@ export function ChallengeTracker() {
   const addTrade = async () => {
     if (!flag || followedPlan === null || pnlKr === "" || !strategy) return;
     setSubmitting(true);
+    setTradeError(null);
     try {
-      await fetch(api("/survival/trades"), {
+      const r = await fetch(api("/survival/trades"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -240,21 +245,35 @@ export function ChallengeTracker() {
            boughtBeforeReport,
         }),
       });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        setTradeError(body.error ?? body.message ?? `Serverfel ${r.status}`);
+        return;
+      }
       setTicker(""); setPnlKr(""); setLeverageX("");
       setFlag(null); setFollowedPlan(null); setBoughtBeforeReport(false);
+      setTradeError(null);
       load();
+    } catch (e: any) {
+      setTradeError(e.message ?? "Nätverksfel");
     } finally { setSubmitting(false); }
   };
 
   const deleteTrade = async (id: number) => {
-    if (!window.confirm("Ta bort?")) return;
-    await fetch(api(`/survival/trades/${id}`), { method: "DELETE" });
+    if (!window.confirm("Ta bort denna trade ur loggen? Åtgärden kan inte ångras.")) return;
+    const r = await fetch(api(`/survival/trades/${id}`), { method: "DELETE" });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      alert(body.error ?? body.message ?? `Serverfel ${r.status}`);
+      return;
+    }
     load();
   };
 
   const addPosition = async () => {
     if (!posForm.ticker || !posForm.entryPrice || !posForm.shares) return;
-    await fetch(api("/survival/positions"), {
+    setPosError(null);
+    const r = await fetch(api("/survival/positions"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -265,13 +284,25 @@ export function ChallengeTracker() {
         stopPrice: posForm.stopPrice ? Number(posForm.stopPrice) : undefined,
       }),
     });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      setPosError(body.error ?? body.message ?? `Serverfel ${r.status}`);
+      return;
+    }
     setPosForm({ ticker: "", direction: "LONG", entryPrice: "", shares: "", stopPrice: "" });
     setAddingPos(false);
+    setPosError(null);
     loadPositions();
   };
 
   const removePosition = async (id: number) => {
-    await fetch(api(`/survival/positions/${id}`), { method: "DELETE" });
+    if (!window.confirm("Ta bort denna position? Åtgärden kan inte ångras.")) return;
+    const r = await fetch(api(`/survival/positions/${id}`), { method: "DELETE" });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      alert(body.error ?? body.message ?? `Serverfel ${r.status}`);
+      return;
+    }
     loadPositions();
   };
 
@@ -491,11 +522,17 @@ export function ChallengeTracker() {
                 <button onClick={addPosition} className="flex-1 bg-primary text-primary-foreground text-xs py-1.5 rounded hover:bg-primary/90 transition-colors">
                   Lägg till
                 </button>
-                <button onClick={() => setAddingPos(false)} className="text-xs px-3 border border-border rounded hover:bg-muted text-muted-foreground transition-colors">
+                <button onClick={() => { setAddingPos(false); setPosError(null); }} className="text-xs px-3 border border-border rounded hover:bg-muted text-muted-foreground transition-colors">
                   Avbryt
                 </button>
               </div>
             </div>
+            {posError && (
+              <div className="flex items-center gap-2 rounded border border-red-500/40 bg-red-500/8 px-3 py-2 text-xs text-red-400">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                {posError}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -630,6 +667,13 @@ export function ChallengeTracker() {
               {submitting ? "…" : "LOGGA"}
             </button>
           </div>
+
+          {tradeError && (
+            <div className="flex items-center gap-2 rounded border border-red-500/40 bg-red-500/8 px-3 py-2 text-xs text-red-400">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              {tradeError}
+            </div>
+          )}
         </div>
       </div>
 

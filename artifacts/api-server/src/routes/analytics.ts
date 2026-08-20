@@ -52,9 +52,32 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
       (a, b) => (b.perf1m ?? 0) * (b.rsi ?? 0) - (a.perf1m ?? 0) * (a.rsi ?? 0),
     );
 
-    // Prefer manually starred picks; fall back to auto-rank by edge score
+    // Top 3 is deliberately per direction: up to three LONG and three SHORT
+    // candidates. Manual choices override auto-rank within their own direction.
+    const deterministicSort = (items: typeof candidates) =>
+      [...items].sort(
+        (a, b) =>
+          (b.perf1m ?? 0) * (b.rsi ?? 0) - (a.perf1m ?? 0) * (a.rsi ?? 0) ||
+          a.rank - b.rank ||
+          a.ticker.localeCompare(b.ticker),
+      );
     const manualPicks = candidates.filter((c) => c.isTop3Pick === true);
-    const top3 = manualPicks.length > 0 ? manualPicks.slice(0, 3) : sorted.slice(0, 3);
+    const selectDirection = (direction: "LONG" | "SHORT") => {
+      const pool = candidates.filter((candidate) =>
+        direction === "SHORT"
+          ? candidate.direction === "SHORT"
+          : candidate.direction !== "SHORT",
+      );
+      const manual = manualPicks.filter((candidate) =>
+        direction === "SHORT"
+          ? candidate.direction === "SHORT"
+          : candidate.direction !== "SHORT",
+      );
+      return deterministicSort(manual.length > 0 ? manual : pool).slice(0, 3);
+    };
+    const topLong = selectDirection("LONG");
+    const topShort = selectDirection("SHORT");
+    const top3 = [...topLong, ...topShort];
 
     let sessionR = 0;
     let sessionHasResolved = false;
@@ -98,13 +121,6 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
     });
 
     // Direction split — informational picks per direction, not counted in cumulative R
-    const sortedLong = sorted.filter((c) => c.direction !== "SHORT");
-    const sortedShort = sorted.filter((c) => c.direction === "SHORT");
-    const manualLong = manualPicks.filter((c) => c.direction !== "SHORT");
-    const manualShort = manualPicks.filter((c) => c.direction === "SHORT");
-    const topLong = (manualLong.length > 0 ? manualLong : sortedLong).slice(0, 3);
-    const topShort = (manualShort.length > 0 ? manualShort : sortedShort).slice(0, 3);
-
     const mapInfoPick = (c: (typeof allCandidates)[0]) => {
       const rr = (c.rr ?? 0) > 0 ? (c.rr as number) : 1.5;
       const eid = c.earningsInDays;

@@ -18,6 +18,7 @@ import {
   volumeMultiplierFromQuote,
 } from "./marketIndicators";
 import { edgeAiDirection, fetchFreshEdgeAiData } from "./edgeAiSource";
+import { lockScreenerSession, synchronizeCandidates } from "./candidateSynchronization";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -192,9 +193,19 @@ async function runImport(date: string): Promise<void> {
   );
 
   try {
-    const [inserted] = await db
-      .insert(screenerSessionsTable)
-      .values({
+    await db.transaction(async (tx) => {
+      await lockScreenerSession(tx, date);
+      const [alreadyStored] = await tx
+        .select({ id: screenerSessionsTable.id })
+        .from(screenerSessionsTable)
+        .where(eq(screenerSessionsTable.date, date));
+      if (alreadyStored) {
+        logger.info({ date, sessionId: alreadyStored.id }, "[scheduler] Session already exists after lock — skipping");
+        return;
+      }
+      const [inserted] = await tx
+        .insert(screenerSessionsTable)
+        .values({
         date,
         omxsValue: mw.omxsValue,
         perf5d: mw.perf5d,
@@ -211,17 +222,15 @@ async function runImport(date: string): Promise<void> {
           : null,
         edgePF: se?.edge?.profitFactor ?? null,
         edgeN: se?.edge?.n ?? null,
-      })
-      .returning();
+        })
+        .returning();
 
-    await db.insert(candidatesTable).values(
-      mapped.map((c) => ({ ...c, sessionId: inserted.id } as any)),
-    );
-
-    logger.info(
-      { date, sessionId: inserted.id, seSetups: seSetups.length, usSetups: usSetups.length, omxsValue: mw.omxsValue },
-      "[scheduler] Auto-import complete",
-    );
+      await synchronizeCandidates(tx, inserted.id, mapped);
+      logger.info(
+        { date, sessionId: inserted.id, seSetups: seSetups.length, usSetups: usSetups.length, omxsValue: mw.omxsValue },
+        "[scheduler] Auto-import complete",
+      );
+    });
   } catch (err: any) {
     throw new Error(`DB insert failed: ${err.message}`);
   }
@@ -229,7 +238,15 @@ async function runImport(date: string): Promise<void> {
 
 
 
+let tickInFlight = false;
+
 async function tick() {
+  if (tickInFlight) {
+    logger.warn("[scheduler] Skipping overlapping tick");
+    return;
+  }
+  tickInFlight = true;
+  try {
   const now = new Date();
   schedulerStatus.lastChecked = now.toISOString();
 
@@ -252,7 +269,9 @@ async function tick() {
       }
     }
   }
-
+  } finally {
+    tickInFlight = false;
+  }
 }
 
 export function startScheduler() {

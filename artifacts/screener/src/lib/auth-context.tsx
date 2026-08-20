@@ -21,8 +21,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    const base = (import.meta.env.BASE_URL ?? "/").replace(/\/+$/, "");
     let cancelled = false;
-    fetch("/api/auth/user", { credentials: "include" })
+    fetch(`${base}/api/auth/user`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((data: { user: AuthUser | null }) => {
         if (!cancelled) setUser(data.user ?? null);
@@ -38,12 +39,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(() => {
     const base = (import.meta.env.BASE_URL ?? "/").replace(/\/+$/, "") || "/";
-    window.location.href = `/api/login?returnTo=${encodeURIComponent(base)}`;
+    window.location.href = `${base}/api/login?returnTo=${encodeURIComponent(base)}`;
   }, []);
 
   const logout = useCallback(() => {
     const base = (import.meta.env.BASE_URL ?? "/").replace(/\/+$/, "") || "/";
-    window.location.href = `/api/logout?returnTo=${encodeURIComponent(base)}`;
+    window.location.href = `${base}/api/logout?returnTo=${encodeURIComponent(base)}`;
   }, []);
 
   return (

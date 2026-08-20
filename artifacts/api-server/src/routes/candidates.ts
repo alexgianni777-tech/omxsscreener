@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, candidatesTable, screenerSessionsTable } from "@workspace/db";
+import { db, candidatesTable, screenerSessionsTable, survivalTradesTable } from "@workspace/db";
 import {
   ListCandidatesQueryParams,
   UpdateCandidateOutcomeParams,
@@ -10,6 +10,54 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+type ChallengeTradeInput = {
+  date: string;
+  ticker: string;
+  strategy: string;
+  direction: "LONG" | "SHORT";
+  pnlKr: number;
+  flag: "LAST" | "REFLEX";
+  followedPlan: boolean;
+  boughtBeforeReport?: boolean;
+};
+
+function parseChallengeTrade(value: unknown):
+  | { success: true; data: ChallengeTradeInput }
+  | { success: false; error: string } {
+  if (!value || typeof value !== "object") {
+    return { success: false, error: "challengeTrade must be an object" };
+  }
+  const input = value as Record<string, unknown>;
+  const isDate = typeof input.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.date);
+  const isText = (field: "ticker" | "strategy", max: number) =>
+    typeof input[field] === "string" && input[field].trim().length > 0 && input[field].length <= max;
+  if (
+    !isDate ||
+    !isText("ticker", 32) ||
+    !isText("strategy", 120) ||
+    (input.direction !== "LONG" && input.direction !== "SHORT") ||
+    typeof input.pnlKr !== "number" ||
+    !Number.isFinite(input.pnlKr) ||
+    (input.flag !== "LAST" && input.flag !== "REFLEX") ||
+    typeof input.followedPlan !== "boolean" ||
+    (input.boughtBeforeReport !== undefined && typeof input.boughtBeforeReport !== "boolean")
+  ) {
+    return { success: false, error: "Invalid challengeTrade payload" };
+  }
+  return {
+    success: true,
+    data: {
+      date: input.date as string,
+      ticker: input.ticker as string,
+      strategy: input.strategy as string,
+      direction: input.direction as "LONG" | "SHORT",
+      pnlKr: input.pnlKr as number,
+      flag: input.flag as "LAST" | "REFLEX",
+      followedPlan: input.followedPlan as boolean,
+      boughtBeforeReport: input.boughtBeforeReport as boolean | undefined,
+    },
+  };
+}
 
 // GET /candidates
 router.get("/candidates", async (req, res): Promise<void> => {
@@ -84,46 +132,87 @@ router.patch("/candidates/:id/outcome", async (req, res): Promise<void> => {
     return;
   }
 
-  const [updated] = await db
-    .update(candidatesTable)
-    .set({
-      outcome: body.data.outcome,
-      exitPrice: body.data.exitPrice ?? null,
-      outcomeNotes: body.data.outcomeNotes ?? null,
-    })
-    .where(eq(candidatesTable.id, params.data.id))
-    .returning();
+  const challengeInput =
+    req.body?.challengeTrade === undefined
+      ? null
+      : parseChallengeTrade(req.body.challengeTrade);
+  if (challengeInput && !challengeInput.success) {
+    res.status(400).json({ error: challengeInput.error });
+    return;
+  }
+  if (
+    challengeInput &&
+    body.data.outcome !== "WIN" &&
+    body.data.outcome !== "LOSS"
+  ) {
+    res.status(400).json({ error: "A Challenge Tracker trade requires WIN or LOSS" });
+    return;
+  }
 
-  if (!updated) {
+  const result = await db.transaction(async (tx) => {
+    const [candidate] = await tx
+      .select()
+      .from(candidatesTable)
+      .where(eq(candidatesTable.id, params.data.id));
+    if (!candidate) return null;
+
+    const [updated] = await tx
+      .update(candidatesTable)
+      .set({
+        outcome: body.data.outcome,
+        exitPrice: body.data.exitPrice ?? null,
+        outcomeNotes: body.data.outcomeNotes ?? null,
+      })
+      .where(eq(candidatesTable.id, params.data.id))
+      .returning();
+
+    if (challengeInput) {
+      await tx
+        .insert(survivalTradesTable)
+        .values({
+          ...challengeInput.data,
+          sourceCandidateId: candidate.id,
+          ticker: challengeInput.data.ticker.trim().toUpperCase(),
+          boughtBeforeReport: challengeInput.data.boughtBeforeReport ?? false,
+        })
+        .onConflictDoNothing({
+          target: survivalTradesTable.sourceCandidateId,
+        });
+    }
+
+    return updated;
+  });
+
+  if (!result) {
     res.status(404).json({ error: "Candidate not found" });
     return;
   }
 
   res.json(
     UpdateCandidateOutcomeResponse.parse({
-      id: updated.id,
-      sessionId: updated.sessionId,
-      category: updated.category,
-      rank: updated.rank,
-      ticker: updated.ticker,
-      price: updated.price,
-      rs3m: updated.rs3m,
-      perf1m: updated.perf1m,
-      rsi: updated.rsi,
-      pctB: updated.pctB,
-      atr: updated.atr,
-      volMultiplier: updated.volMultiplier,
-      distFrom20dH: updated.distFrom20dH,
-      gapWarning: updated.gapWarning ?? null,
-      direction: updated.direction,
-      entryPrice: updated.entryPrice,
-      stopPrice: updated.stopPrice,
-      targetPrice: updated.targetPrice,
-      rr: updated.rr,
-      oneR: updated.oneR,
-      outcome: updated.outcome,
-      exitPrice: updated.exitPrice ?? null,
-      outcomeNotes: updated.outcomeNotes ?? null,
+      id: result.id,
+      sessionId: result.sessionId,
+      category: result.category,
+      rank: result.rank,
+      ticker: result.ticker,
+      price: result.price,
+      rs3m: result.rs3m,
+      perf1m: result.perf1m,
+      rsi: result.rsi,
+      pctB: result.pctB,
+      atr: result.atr,
+      volMultiplier: result.volMultiplier,
+      distFrom20dH: result.distFrom20dH,
+      gapWarning: result.gapWarning ?? null,
+      direction: result.direction,
+      entryPrice: result.entryPrice,
+      stopPrice: result.stopPrice,
+      targetPrice: result.targetPrice,
+      rr: result.rr,
+      oneR: result.oneR,
+      outcome: result.outcome,
+      exitPrice: result.exitPrice ?? null,
+      outcomeNotes: result.outcomeNotes ?? null,
     })
   );
 });

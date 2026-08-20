@@ -122,12 +122,16 @@ export function Today() {
   const saveRisk = async () => {
     const v = parseFloat(riskInput);
     if (!isNaN(v) && v > 0 && v <= 100) {
-      setRiskPct(v);
-      await fetch(api("/survival/config"), {
+      const response = await fetch(api("/survival/config"), {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ riskPct: v }),
       });
+      if (!response.ok) {
+        setOutcomeError("Kunde inte uppdatera risknivån. Försök igen.");
+        return;
+      }
+      setRiskPct(v);
     }
     setEditingRisk(false);
   };
@@ -266,26 +270,15 @@ export function Today() {
     setSubmitting(true);
     setOutcomeError(null);
     try {
-      // 1. Mark screener candidate outcome
-      const outcomeResponse = await fetch(api(`/candidates/${candidate.id}/outcome`), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ outcome, exitPrice: outcome === "WIN" ? candidate.targetPrice : candidate.stopPrice }),
-      });
-      if (!outcomeResponse.ok) {
-        throw new Error("Kunde inte spara kandidatens utfall. Ingen trade har loggats.");
-      }
-
-      // 2. Log to challenge tracker with auto-calculated P&L
+      // Candidate outcome and the optional Challenge Tracker trade are one
+      // idempotent server operation. A retry cannot create a duplicate trade.
       const allocatedRisk = riskForCandidate(candidate);
-      if (allocatedRisk != null) {
+      const challengeTrade = allocatedRisk != null
+        ? (() => {
         const pnlKr = outcome === "WIN"
           ? Math.round(allocatedRisk * candidate.rr)
           : Math.round(-allocatedRisk);
-        const tradeResponse = await fetch(api("/survival/trades"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+          return {
             date: session.date,
             ticker: candidate.ticker.replace(/\.ST$/i, ""),
             strategy: "trend pullback",
@@ -293,11 +286,21 @@ export function Today() {
             pnlKr,
             flag: "LAST",
             followedPlan: true,
-          }),
-        });
-        if (!tradeResponse.ok) {
-          throw new Error("Utfallet sparades, men Challenge Tracker kunde inte logga traden. Kontrollera historiken innan du försöker igen.");
-        }
+          };
+        })()
+        : undefined;
+      const outcomeResponse = await fetch(api(`/candidates/${candidate.id}/outcome`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          outcome,
+          exitPrice: outcome === "WIN" ? candidate.targetPrice : candidate.stopPrice,
+          challengeTrade,
+        }),
+      });
+      if (!outcomeResponse.ok) {
+        const body = await outcomeResponse.json().catch(() => ({}));
+        throw new Error(body.error ?? "Kunde inte spara utfall och Challenge Tracker-trade.");
       }
 
       setLogging(null);

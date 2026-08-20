@@ -1,7 +1,7 @@
 const EDGEAI_RAW_DATA_URL =
   "https://raw.githubusercontent.com/alexgianni777-tech/edgeai/main/public/data.json";
 
-const MAX_EDGEAI_DATA_AGE_MS = 4 * 24 * 60 * 60 * 1_000;
+const MAX_EDGEAI_DATA_AGE_MS = 30 * 60 * 60 * 1_000;
 
 export class EdgeAiDataFreshnessError extends Error {
   constructor(
@@ -43,15 +43,26 @@ export async function fetchFreshEdgeAiData(timeoutMs: number): Promise<any> {
   }
 
   const ageMs = Date.now() - generatedAtMs;
-  if (ageMs > MAX_EDGEAI_DATA_AGE_MS) {
+  const generatedDate = new Date(generatedAtMs).toISOString().slice(0, 10);
+  const currentDate = new Date().toISOString().slice(0, 10);
+  if (ageMs < -5 * 60 * 1_000 || ageMs > MAX_EDGEAI_DATA_AGE_MS || generatedDate !== currentDate) {
     const ageDays = Math.floor(ageMs / 86_400_000);
     throw new EdgeAiDataFreshnessError(
-      `EdgeAI data is ${ageDays} days old and will not be imported as a current session`,
+      `EdgeAI data is from ${generatedDate} (${ageDays} days old) and will not be imported as today's session`,
       generatedAt,
     );
   }
 
   return data;
+}
+
+export function edgeAiSessionDate(data: { generatedAt?: unknown }): string {
+  const generatedAt = typeof data.generatedAt === "string" ? data.generatedAt : "";
+  const timestamp = Date.parse(generatedAt);
+  if (!Number.isFinite(timestamp)) {
+    throw new EdgeAiDataFreshnessError("EdgeAI response has no valid generatedAt timestamp", generatedAt || null);
+  }
+  return new Date(timestamp).toISOString().slice(0, 10);
 }
 
 export function edgeAiDirection(value: unknown): "LONG" | "SHORT" {

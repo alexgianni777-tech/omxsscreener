@@ -3,6 +3,6 @@
   buildCommand = "npm install -g pnpm@latest && pnpm install --frozen-lockfile && pnpm run build:production"
 
 [deploy]
-  startCommand = "node artifacts/api-server/dist/index.mjs"
+  startCommand = "pnpm --filter @workspace/db run push && node artifacts/api-server/dist/index.mjs"
   restartPolicyType = "on_failure"
   restartPolicyMaxRetries = 3

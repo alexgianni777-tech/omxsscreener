@@ -1,4 +1,5 @@
-import { pgTable, serial, text, real, boolean, date, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, real, boolean, date, timestamp, integer, uniqueIndex } from "drizzle-orm/pg-core";
+import { candidatesTable } from "./candidates";
 
 export const survivalConfigTable = pgTable("survival_config", {
   id: serial("id").primaryKey(),
@@ -20,8 +21,11 @@ export const survivalTradesTable = pgTable("survival_trades", {
   flag: text("flag", { enum: ["LAST", "REFLEX"] }).notNull(),
   followedPlan: boolean("followed_plan").notNull(),
   boughtBeforeReport: boolean("bought_before_report").notNull().default(false),
+  sourceCandidateId: integer("source_candidate_id").references(() => candidatesTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("survival_trades_source_candidate_unique").on(table.sourceCandidateId),
+]);
 
 export type SurvivalConfig = typeof survivalConfigTable.$inferSelect;
 export type SurvivalTrade = typeof survivalTradesTable.$inferSelect;
