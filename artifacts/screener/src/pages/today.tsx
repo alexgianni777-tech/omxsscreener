@@ -12,6 +12,7 @@ import { Link } from "wouter";
 import {
   TrendingUp, TrendingDown, Trophy, ChevronRight,
   Target, Settings2, CheckCircle2, XCircle, RefreshCw, Zap, AlertTriangle,
+  Star,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -515,6 +516,7 @@ export function Today() {
             const prevMarket = i > 0 ? picks[i - 1].market : null;
             const showHeader = hasMarket && candidate.market !== prevMarket;
             const prevDir = i > 0 ? picks[i - 1].direction : null;
+            const isFirstLong = candidate.direction !== "SHORT" && i === 0;
             const isFirstShort = candidate.direction === "SHORT" && prevDir !== "SHORT";
             const isLong = candidate.direction === "LONG";
             const stopDist = ((candidate.entryPrice - candidate.stopPrice) / candidate.entryPrice) * 100 * (isLong ? 1 : -1);
@@ -539,6 +541,15 @@ export function Today() {
 
             return (
               <div key={candidate.id}>
+                {isFirstLong && (
+                  <div className="flex items-center gap-2 px-1 pt-1 pb-2">
+                    <TrendingUp className="w-3.5 h-3.5 text-success" />
+                    <span className="text-sm font-semibold text-success">Topp 3 Köp</span>
+                    {!picks.some((pick) => pick.isTop3Pick) && (
+                      <span className="text-[10px] text-muted-foreground">automatiskt rankade</span>
+                    )}
+                  </div>
+                )}
                 {showHeader && (
                   <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 pt-2 pb-2 flex items-center gap-1.5">
                     {candidate.market === "SE" ? "🇸🇪 Sverige" : "🇺🇸 USA"}
@@ -584,6 +595,10 @@ export function Today() {
                       }`}>
                         {isLong ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                         {candidate.direction}
+                      </span>
+                      <span className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-amber-400/10 text-amber-500 border border-amber-400/20">
+                        <Star className="w-3 h-3 fill-amber-400" />
+                        {candidate.isTop3Pick ? "Ditt Top 3-val" : "Auto Top 3"}
                       </span>
                       {isDone && (
                         <span className={`text-xs font-bold px-2 py-0.5 rounded ${
