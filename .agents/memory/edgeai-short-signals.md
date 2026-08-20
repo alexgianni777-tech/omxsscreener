@@ -1,7 +1,24 @@
 ---
 name: EdgeAI Short Signals
-description: When EdgeAI generates short setups, how direction is mapped, and why dev DB may show 0 shorts when prod has them.
+description: Burry filter constraints, short direction mapping, and why valid output can contain zero shorts.
 ---
+
+## Burry filter
+
+The Burry filter is EdgeAI's dedicated SHORT setup. It looks for an individual
+stock that is in its own downtrend, rallies into its short-entry conditions, and
+belongs to the weakest third of its market's 63-day relative-strength ranking.
+It may be evaluated when the broad index is risk-on; the individual stock must
+provide the weakness rather than relying on a global bear-market flag.
+
+**Why:** The former global risk-off gate hid all short candidates whenever the
+index was strong, even when individual laggards met a short setup.
+
+**How to apply:** Keep the walk-forward quality gate active. A Burry candidate
+must not be emitted merely to produce a daily short pick; tune the strategy
+only after its out-of-sample expectancy, profit factor, and sample size support
+it. Short track-record resolution must use short-specific stop, target, and R
+math.
 
 ## How direction is mapped
 
@@ -13,13 +30,16 @@ Exact lowercase match. EdgeAI sends `dir: "long"` or `dir: "short"` on each setu
 
 ## When shorts appear
 
-EdgeAI generates `dir: "short"` for individual stocks that are relatively weak against OMXS30 (category = WEAKEST). It is NOT triggered by a global bearish regime — shorts can appear even in a bullish market if individual stocks lag.
+EdgeAI generates `dir: "short"` only when the Burry filter is both
+walk-forward validated and freshly triggered for an eligible weak stock. It is
+normal for the daily file to contain zero shorts when no candidate passes both
+tests.
 
-Example: Aug 17, 2026 prod DB had AstraZeneca, Telia, Ericsson as SHORT/WEAKEST while the broader market was trending up.
+## Why a database can show zero shorts
 
-## Why dev DB shows 0 shorts when prod has them
-
-Dev and prod use separate databases. The dev DB re-imported EdgeAI data *after* EdgeAI updated its data.json, so the short signals were gone. Prod captured them at the right moment.
+Separate databases can contain different daily snapshots. Re-importing after
+EdgeAI has regenerated `data.json` can replace an earlier short-bearing
+snapshot with a later file that contains no valid short signals.
 
 **Why:** EdgeAI's `generatedAt` only changes when new signals appear. The data.json is a live file that overwrites previous signals — there's no historical versioning.
 

@@ -1,5 +1,5 @@
 - [Screener Architecture](screener-architecture.md) — data flow, field semantics (volMultiplier≠R:R, market tagging), ATR-relative targets per bucket, RSI, backfill status
-- [EdgeAI Short Signals](edgeai-short-signals.md) — when shorts appear, how direction maps, why DB may show 0 shorts even when prod has them
+- [EdgeAI Short Signals](edgeai-short-signals.md) — Burry filter rules, short direction mapping, and why valid output may still contain zero shorts
 - [Nav isActive Gotcha](nav-isactive-gotcha.md) — startsWith matching conflicts between /sessions and /sessions/today; fix pattern documented
 - [OpenAPI Zod Compatibility](openapi-zod-compatibility.md) — URI/email formats generate Zod 4-only helpers while the workspace pins Zod 3.x.
 - [API Authentication Guard](api-auth-guard.md) — private trading APIs require server-side sessions; UI login gates are not access control.
