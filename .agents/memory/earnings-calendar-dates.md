@@ -17,3 +17,16 @@ UTC midnight incorrectly turns “today” into “tomorrow”.
 screener, EdgeAI imports, scheduler imports, and any future Rule 7 report-date
 calculation. Keep imported historical-session dates relative to that session's
 calendar date rather than the later viewing date.
+
+## QuoteSummary value shape
+
+Treat Yahoo QuoteSummary earnings values as either primitives or legacy
+`{ raw }` wrappers. EPS history, surprise percentages, revisions, estimates,
+and analyst targets must be unwrapped before they are used.
+
+**Why:** The installed yahoo-finance2 version returns plain numbers and ISO
+date strings for these modules. Code that assumes every value has a `raw`
+property silently converts complete earnings histories into empty UI values.
+
+**How to apply:** Keep the compatibility unwrapping at the API boundary rather
+than teaching UI components about provider-specific response formats.

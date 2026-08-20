@@ -24,6 +24,42 @@ const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] 
 let cache: { data: unknown; expiresAt: number } | null = null;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
+/**
+ * yahoo-finance2 has returned both QuoteSummary modules with `{ raw }`
+ * wrappers and plain primitive values across versions. Keep the route tolerant
+ * of both shapes so valid earnings data does not become null in the UI.
+ */
+function yahooValue(value: unknown): unknown {
+  if (value == null) return null;
+  if (typeof value === "object" && "raw" in value) {
+    return (value as { raw?: unknown }).raw ?? null;
+  }
+  return value;
+}
+
+function yahooNumber(value: unknown): number | null {
+  const raw = yahooValue(value);
+  if (raw == null || raw === "") return null;
+  const number = typeof raw === "number" ? raw : Number(raw);
+  return Number.isFinite(number) ? number : null;
+}
+
+function yahooDate(value: unknown): Date | null {
+  const raw = yahooValue(value);
+  if (raw instanceof Date) {
+    return Number.isFinite(raw.getTime()) ? raw : null;
+  }
+  if (typeof raw === "number") {
+    const date = new Date(raw < 1_000_000_000_000 ? raw * 1_000 : raw);
+    return Number.isFinite(date.getTime()) ? date : null;
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    const date = new Date(raw);
+    return Number.isFinite(date.getTime()) ? date : null;
+  }
+  return null;
+}
+
 // ── OMXS30 universe ──────────────────────────────────────────────────────────
 const OMXS30_TICKERS: { yahoo: string; display: string }[] = [
   { yahoo: "ABB.ST",       display: "ABB" },
@@ -286,16 +322,15 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
       beat: boolean | null;
     };
     const historicalEarnings: EarningsItem[] = rawHistory.map((h: any) => {
-      const estimate = h.epsEstimate?.raw ?? null;
-      const actual = h.epsActual?.raw ?? null;
-      const surprisePct = h.surprisePercent?.raw != null
-        ? Number((h.surprisePercent.raw * 100).toFixed(2))
+      const estimate = yahooNumber(h.epsEstimate);
+      const actual = yahooNumber(h.epsActual);
+      const surpriseRaw = yahooNumber(h.surprisePercent);
+      const surprisePct = surpriseRaw != null
+        ? Number((surpriseRaw * 100).toFixed(2))
         : estimate != null && actual != null && estimate !== 0
         ? Number((((actual - estimate) / Math.abs(estimate)) * 100).toFixed(2))
         : null;
-      const quarterDate = h.quarter?.raw
-        ? new Date(h.quarter.raw * 1000)
-        : null;
+      const quarterDate = yahooDate(h.quarter);
       const dayPlusOneReturn = quarterDate
         ? computeDayPlusOneReturn(history, quarterDate)
         : null;
@@ -333,18 +368,18 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
     // earningsTrend — grab current quarter revision counts
     const trendArr: any[] = (summary?.earningsTrend as any)?.trend ?? [];
     const currentTrend = trendArr.find((t: any) => t.period === "0q") ?? trendArr[0];
-    const revUp = currentTrend?.epsRevisions?.upLast30days?.raw ?? 0;
-    const revDown = currentTrend?.epsRevisions?.downLast30days?.raw ?? 0;
-    const nextEpsEstimate = currentTrend?.earningsEstimate?.avg?.raw ?? null;
+    const revUp = yahooNumber(currentTrend?.epsRevisions?.upLast30days) ?? 0;
+    const revDown = yahooNumber(currentTrend?.epsRevisions?.downLast30days) ?? 0;
+    const nextEpsEstimate = yahooNumber(currentTrend?.earningsEstimate?.avg);
 
     // financialData — analyst consensus + price target
     const fd = (summary as any)?.financialData ?? {};
-    const recommendationKey: string | null = fd.recommendationKey ?? null; // "strong_buy" | "buy" | "hold" | "sell" | "strong_sell"
-    const recommendationMean: number | null = fd.recommendationMean?.raw ?? null; // 1.0–5.0
-    const numberOfAnalystOpinions: number | null = fd.numberOfAnalystOpinions?.raw ?? null;
-    const targetMeanPrice: number | null = fd.targetMeanPrice?.raw ?? null;
-    const targetLowPrice: number | null = fd.targetLowPrice?.raw ?? null;
-    const targetHighPrice: number | null = fd.targetHighPrice?.raw ?? null;
+    const recommendationKey = (yahooValue(fd.recommendationKey) as string | null) ?? null; // "strong_buy" | "buy" | "hold" | "sell" | "strong_sell"
+    const recommendationMean = yahooNumber(fd.recommendationMean); // 1.0–5.0
+    const numberOfAnalystOpinions = yahooNumber(fd.numberOfAnalystOpinions);
+    const targetMeanPrice = yahooNumber(fd.targetMeanPrice);
+    const targetLowPrice = yahooNumber(fd.targetLowPrice);
+    const targetHighPrice = yahooNumber(fd.targetHighPrice);
     const upsidePct: number | null =
       stock.livePrice && targetMeanPrice
         ? Number((((targetMeanPrice - stock.livePrice) / stock.livePrice) * 100).toFixed(1))
