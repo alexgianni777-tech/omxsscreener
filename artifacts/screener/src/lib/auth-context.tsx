@@ -38,13 +38,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(() => {
-    const base = (import.meta.env.BASE_URL ?? "/").replace(/\/+$/, "") || "/";
-    window.location.href = `${base}/api/login?returnTo=${encodeURIComponent(base)}`;
+    const base = (import.meta.env.BASE_URL ?? "/").replace(/\/+$/, "");
+    const returnTo = base || "/";
+    window.location.href = `${base}/api/login?returnTo=${encodeURIComponent(returnTo)}`;
   }, []);
 
   const logout = useCallback(() => {
-    const base = (import.meta.env.BASE_URL ?? "/").replace(/\/+$/, "") || "/";
-    window.location.href = `${base}/api/logout?returnTo=${encodeURIComponent(base)}`;
+    const base = (import.meta.env.BASE_URL ?? "/").replace(/\/+$/, "");
+    const returnTo = base || "/";
+    window.location.href = `${base}/api/logout?returnTo=${encodeURIComponent(returnTo)}`;
   }, []);
 
   return (
