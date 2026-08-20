@@ -28,7 +28,11 @@ Stop always = entry - 1.2×ATR. R/R = targetMult / 1.2 (e.g., 2.0/1.2 ≈ 1.67).
 Switched from simple 14-bar window average to Wilder's EMA warmup (2026-08-12). Requires closes.length >= 29. Eliminates "RSI rises when price falls" window-rollover artifact.
 
 ## EdgeAI staleness guard
-edgeai.ts rejects data older than 4 calendar days with 422. Covers Mon morning (Fri's data) plus holiday buffers. If EdgeAI hasn't published in >4 days, no import happens — check manually.
+EdgeAI imports fetch the canonical GitHub repository file, rather than GitHub Pages, because the Pages endpoint can serve an outdated `data.json` after a fresh commit. Imports reject data older than 4 calendar days with 422. Covers Mon morning (Fri's data) plus holiday buffers. If EdgeAI hasn't published in >4 days, no import happens — check manually.
+
+**Why:** A cached upstream signal file must never be stored as today's trade list; this would make signals appear current while omitting newer setups.
+
+**How to apply:** Keep manual and scheduled imports on the shared fresh-source helper. A short is represented only when EdgeAI explicitly supplies `dir: "short"`; no fallback short should be synthesized.
 
 ## GitHub PAT issues
 The GITHUB_PAT secret in Replit must be a full GitHub classic token (~40 chars, starts with ghp_) or fine-grained token (93+ chars). Users have entered short wrong values. Use the GitHub Replit integration (connection:conn_github_01M07N23478V7V8E5YZKNGFJ93) for API calls from the agent instead of relying on the shell env var.

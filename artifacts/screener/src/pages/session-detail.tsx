@@ -1,4 +1,4 @@
-import { useGetSession, getGetSessionQueryKey, useGetQuotes, Candidate, CandidateOutcomeProperty, useUpdateCandidateOutcome, QuoteResult } from "@workspace/api-client-react";
+import { useGetSession, getGetSessionQueryKey, useGetQuotes, getGetQuotesQueryKey, Candidate, CandidateOutcomeProperty, useUpdateCandidateOutcome, QuoteResult } from "@workspace/api-client-react";
 import { useParams, Link } from "wouter";
 import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
 import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity, AlertTriangle, Clock, ExternalLink, CandlestickChart as CandlestickIcon, Star } from "lucide-react";
@@ -30,9 +30,10 @@ export function SessionDetail() {
 
   const tickers = session?.candidates.map((c) => c.ticker) ?? [];
   const tickersParam = tickers.join(",");
+  const quoteParams = { tickers: tickersParam };
   const { data: quotes } = useGetQuotes(
-    { tickers: tickersParam },
-    { query: { enabled: tickers.length > 0, refetchInterval: 60_000 } }
+    quoteParams,
+    { query: { queryKey: getGetQuotesQueryKey(quoteParams), enabled: tickers.length > 0, refetchInterval: 60_000 } }
   );
   const quoteMap: Record<string, QuoteResult> = {};
   quotes?.forEach((q) => { quoteMap[q.ticker] = q; });

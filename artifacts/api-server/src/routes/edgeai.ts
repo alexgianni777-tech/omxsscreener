@@ -14,13 +14,16 @@ import {
   calculateWilderRsi,
   volumeMultiplierFromQuote,
 } from "../lib/marketIndicators";
+import {
+  edgeAiDirection,
+  EdgeAiDataFreshnessError,
+  fetchFreshEdgeAiData,
+} from "../lib/edgeAiSource";
 import { logger } from "../lib/logger";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
 const router: IRouter = Router();
-
-const EDGEAI_URL = "https://alexgianni777-tech.github.io/edgeai/public/data.json";
 
 function daysUntil(date: Date | number | null | undefined): number | null {
   if (date == null) return null;
@@ -32,10 +35,10 @@ function daysUntil(date: Date | number | null | undefined): number | null {
 }
 
 function mapSetupToCategory(
-  dir: string,
+  direction: "LONG" | "SHORT",
   setupName: string,
 ): "MOMENTUM" | "SQUEEZE" | "STUDS" | "WEAKEST" {
-  if (dir === "short") return "WEAKEST";
+  if (direction === "SHORT") return "WEAKEST";
   const n = setupName.toLowerCase();
   if (n.includes("squeeze") || n.includes("bollinger") || n.includes("reversion") || n.includes("mean"))
     return "SQUEEZE";
@@ -50,16 +53,12 @@ router.post(
     // 1. Fetch latest EdgeAI data
     let edgeData: any;
     try {
-      const resp = await fetch(EDGEAI_URL, {
-        headers: { Accept: "application/json" },
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!resp.ok) {
-        res.status(502).json({ error: `EdgeAI fetch failed: ${resp.status}` });
+      edgeData = await fetchFreshEdgeAiData(10_000);
+    } catch (err: any) {
+      if (err instanceof EdgeAiDataFreshnessError) {
+        res.status(422).json({ error: err.message, generatedAt: err.generatedAt });
         return;
       }
-      edgeData = await resp.json();
-    } catch (err: any) {
       res.status(502).json({ error: `Could not reach EdgeAI: ${err.message}` });
       return;
     }
@@ -147,9 +146,9 @@ router.post(
     const rankCounter: Record<string, number> = {};
 
     const mappedSetups = taggedSetups.map((s: any) => {
-      const category = mapSetupToCategory(s.dir, s.setup ?? "");
+      const direction = edgeAiDirection(s.dir);
+      const category = mapSetupToCategory(direction, s.setup ?? "");
       rankCounter[category] = (rankCounter[category] ?? 0) + 1;
-      const direction = s.dir === "short" ? "SHORT" : "LONG";
       const entry = Number(s.entry ?? 0);
       const stop = Number(s.stop ?? 0);
       const target = Number(s.target ?? 0);

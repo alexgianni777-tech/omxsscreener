@@ -584,6 +584,9 @@ components:
           type: number
         gapWarning:
           type: ["number", "null"]
+        market:
+          type: ["string", "null"]
+          description: "Origin market for the signal: SE or US"
         direction:
           type: string
           enum: [LONG, SHORT]
@@ -735,6 +738,12 @@ components:
         marketState:
           type: ["string", "null"]
           description: REGULAR, PRE, POST, CLOSED
+        earningsDate:
+          type: ["string", "null"]
+          description: Next earnings date in YYYY-MM-DD format when Yahoo provides it
+        earningsInDays:
+          type: ["number", "null"]
+          description: Calendar days until the next earnings date; negative means it has passed
         error:
           type: ["string", "null"]
 

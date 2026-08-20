@@ -36,6 +36,11 @@ export interface Candidate {
   distFrom20dH: number;
   /** @nullable */
   gapWarning?: number | null;
+  /**
+     * Origin market for the signal: SE or US
+     * @nullable
+     */
+  market?: string | null;
   direction: CandidateDirection;
   entryPrice: number;
   stopPrice: number;

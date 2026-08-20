@@ -179,6 +179,11 @@ export interface Candidate {
   distFrom20dH: number;
   /** @nullable */
   gapWarning?: number | null;
+  /**
+     * Origin market for the signal: SE or US
+     * @nullable
+     */
+  market?: string | null;
   direction: CandidateDirection;
   entryPrice: number;
   stopPrice: number;
@@ -289,6 +294,16 @@ export interface QuoteResult {
      * @nullable
      */
   marketState?: string | null;
+  /**
+     * Next earnings date in YYYY-MM-DD format when Yahoo provides it
+     * @nullable
+     */
+  earningsDate?: string | null;
+  /**
+     * Calendar days until the next earnings date; negative means it has passed
+     * @nullable
+     */
+  earningsInDays?: number | null;
   /** @nullable */
   error?: string | null;
 }

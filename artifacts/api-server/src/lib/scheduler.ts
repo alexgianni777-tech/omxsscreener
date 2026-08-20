@@ -17,9 +17,9 @@ import {
   calculateWilderRsi,
   volumeMultiplierFromQuote,
 } from "./marketIndicators";
+import { edgeAiDirection, fetchFreshEdgeAiData } from "./edgeAiSource";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
-const EDGEAI_URL = "https://alexgianni777-tech.github.io/edgeai/public/data.json";
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 // Start checking from 08:00 UTC (10:00 CEST) — market has been open 1 h.
@@ -67,8 +67,8 @@ async function sessionExistsForDate(date: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-function mapCategory(dir: string, setupName: string): "MOMENTUM" | "SQUEEZE" | "STUDS" | "WEAKEST" {
-  if (dir === "short") return "WEAKEST";
+function mapCategory(direction: "LONG" | "SHORT", setupName: string): "MOMENTUM" | "SQUEEZE" | "STUDS" | "WEAKEST" {
+  if (direction === "SHORT") return "WEAKEST";
   const n = setupName.toLowerCase();
   if (n.includes("squeeze") || n.includes("bollinger") || n.includes("reversion")) return "SQUEEZE";
   if (n.includes("pullback") || n.includes("stud") || n.includes("reversal")) return "STUDS";
@@ -97,9 +97,9 @@ async function fetchOmxsMarketWeather(): Promise<{
 }
 
 function mapSetup(s: any, rankCounter: Record<string, number>) {
-  const category = mapCategory(s.dir, s.setup ?? "");
+  const direction = edgeAiDirection(s.dir);
+  const category = mapCategory(direction, s.setup ?? "");
   rankCounter[category] = (rankCounter[category] ?? 0) + 1;
-  const direction = s.dir === "short" ? "SHORT" : "LONG";
   const entry      = Number(s.entry  ?? 0);
   const stop       = Number(s.stop   ?? 0);
   const oneR       = Math.abs(entry - stop);
@@ -143,18 +143,7 @@ function mapSetup(s: any, rankCounter: Record<string, number>) {
 async function runImport(date: string): Promise<void> {
   logger.info({ date }, "[scheduler] Fetching EdgeAI data.json");
 
-  const resp = await fetch(EDGEAI_URL, {
-    headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(15_000),
-  });
-
-  if (!resp.ok) throw new Error(`EdgeAI fetch HTTP ${resp.status}`);
-
-  const edgeData: any = await resp.json();
-
-  // Note: edgeData.generatedAt only changes when new signals are found — not every day.
-  // EdgeAI commits daily (verified via GitHub), so the data is always current;
-  // the timestamp just reflects the last signal change, not the last run.
+  const edgeData = await fetchFreshEdgeAiData(15_000);
 
   const se = edgeData?.markets?.SE;
   const seSetups: any[] = se?.setups ?? [];
@@ -217,7 +206,9 @@ async function runImport(date: string): Promise<void> {
         source: "edgeai",
         edgeRegime: JSON.stringify(se?.regime ?? {}),
         edgeExpectancy: se?.edge?.expectancyR ?? null,
-        edgeWinRate: se?.edge?.winRate ?? null,
+        edgeWinRate: se?.edge?.winRate != null
+          ? (se.edge.winRate > 1 ? se.edge.winRate / 100 : se.edge.winRate)
+          : null,
         edgePF: se?.edge?.profitFactor ?? null,
         edgeN: se?.edge?.n ?? null,
       })

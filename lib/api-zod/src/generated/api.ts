@@ -52,6 +52,7 @@ export const ImportSessionResponse = zod.object({
   "signalGapPct": zod.number().nullish().describe('Opening gap from previous close in percent when available'),
   "distFrom20dH": zod.number(),
   "gapWarning": zod.number().nullish(),
+  "market": zod.string().nullish().describe('Origin market for the signal: SE or US'),
   "direction": zod.enum(['LONG', 'SHORT']),
   "entryPrice": zod.number(),
   "stopPrice": zod.number(),
@@ -139,6 +140,7 @@ export const ReimportSessionResponse = zod.object({
   "signalGapPct": zod.number().nullish().describe('Opening gap from previous close in percent when available'),
   "distFrom20dH": zod.number(),
   "gapWarning": zod.number().nullish(),
+  "market": zod.string().nullish().describe('Origin market for the signal: SE or US'),
   "direction": zod.enum(['LONG', 'SHORT']),
   "entryPrice": zod.number(),
   "stopPrice": zod.number(),
@@ -197,6 +199,7 @@ export const GetSessionResponse = zod.object({
   "signalGapPct": zod.number().nullish().describe('Opening gap from previous close in percent when available'),
   "distFrom20dH": zod.number(),
   "gapWarning": zod.number().nullish(),
+  "market": zod.string().nullish().describe('Origin market for the signal: SE or US'),
   "direction": zod.enum(['LONG', 'SHORT']),
   "entryPrice": zod.number(),
   "stopPrice": zod.number(),
@@ -256,6 +259,7 @@ export const ListCandidatesResponseItem = zod.object({
   "signalGapPct": zod.number().nullish().describe('Opening gap from previous close in percent when available'),
   "distFrom20dH": zod.number(),
   "gapWarning": zod.number().nullish(),
+  "market": zod.string().nullish().describe('Origin market for the signal: SE or US'),
   "direction": zod.enum(['LONG', 'SHORT']),
   "entryPrice": zod.number(),
   "stopPrice": zod.number(),
@@ -305,6 +309,7 @@ export const UpdateCandidateOutcomeResponse = zod.object({
   "signalGapPct": zod.number().nullish().describe('Opening gap from previous close in percent when available'),
   "distFrom20dH": zod.number(),
   "gapWarning": zod.number().nullish(),
+  "market": zod.string().nullish().describe('Origin market for the signal: SE or US'),
   "direction": zod.enum(['LONG', 'SHORT']),
   "entryPrice": zod.number(),
   "stopPrice": zod.number(),
@@ -335,6 +340,8 @@ export const GetQuotesResponseItem = zod.object({
   "change": zod.number().nullish().describe('Absolute price change from previous close'),
   "changePct": zod.number().nullish().describe('Percent change from previous close'),
   "marketState": zod.string().nullish().describe('REGULAR, PRE, POST, CLOSED'),
+  "earningsDate": zod.string().nullish().describe('Next earnings date in YYYY-MM-DD format when Yahoo provides it'),
+  "earningsInDays": zod.number().nullish().describe('Calendar days until the next earnings date; negative means it has passed'),
   "error": zod.string().nullish()
 })
 export const GetQuotesResponse = zod.array(GetQuotesResponseItem)
