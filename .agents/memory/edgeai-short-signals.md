@@ -3,7 +3,7 @@ name: EdgeAI Short Signals
 description: Burry filter constraints, short direction mapping, and why valid output can contain zero shorts.
 ---
 
-## Burry filter
+## Burry and Big Short filters
 
 The Burry filter is EdgeAI's dedicated SHORT setup. It looks for an individual
 stock that is in its own downtrend, rallies into its short-entry conditions, and
@@ -19,6 +19,20 @@ must not be emitted merely to produce a daily short pick; tune the strategy
 only after its out-of-sample expectancy, profit factor, and sample size support
 it. Short track-record resolution must use short-specific stop, target, and R
 math.
+
+The Big Short is the broader, independent companion strategy. It requires a
+bearish EMA20/EMA50 alignment and a rally near EMA20, but permits a stock near
+EMA50, uses a lower RSI threshold, and accepts relative strength up to the
+60th percentile. Burry remains capped at the 35th percentile.
+
+**Why:** A strict Burry setup can be rare. A separate broader strategy creates
+more opportunities without silently weakening Burry or combining two different
+edges in the same performance statistics.
+
+**How to apply:** Each short strategy must retain its own walk-forward
+validation. Do not emit Big Short candidates just because its criteria are
+broader; its out-of-sample metrics must independently pass the live quality
+gate.
 
 ## How direction is mapped
 

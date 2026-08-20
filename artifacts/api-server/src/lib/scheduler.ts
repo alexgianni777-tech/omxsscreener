@@ -19,6 +19,7 @@ import {
 } from "./marketIndicators";
 import { edgeAiDirection, fetchFreshEdgeAiData } from "./edgeAiSource";
 import { lockScreenerSession, synchronizeCandidates } from "./candidateSynchronization";
+import { calendarDaysUntil } from "./marketCalendar";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -30,12 +31,7 @@ const EARLIEST_HOUR_UTC   = 8;
 const EARLIEST_MINUTE_UTC = 0;
 
 function daysUntil(date: Date | number | null | undefined): number | null {
-  if (date == null) return null;
-  const time = date instanceof Date ? date.getTime() : date * 1_000;
-  if (!Number.isFinite(time)) return null;
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-  return Math.round((time - today.getTime()) / 86_400_000);
+  return calendarDaysUntil(date);
 }
 
 // In-memory status — reset on server restart

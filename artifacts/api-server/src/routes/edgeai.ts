@@ -20,6 +20,7 @@ import {
   EdgeAiDataFreshnessError,
   fetchFreshEdgeAiData,
 } from "../lib/edgeAiSource";
+import { calendarDaysUntil } from "../lib/marketCalendar";
 import { logger } from "../lib/logger";
 import {
   assertUniqueCandidateIdentities,
@@ -32,12 +33,7 @@ const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] 
 const router: IRouter = Router();
 
 function daysUntil(date: Date | number | null | undefined): number | null {
-  if (date == null) return null;
-  const time = date instanceof Date ? date.getTime() : date * 1_000;
-  if (!Number.isFinite(time)) return null;
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-  return Math.round((time - today.getTime()) / 86_400_000);
+  return calendarDaysUntil(date);
 }
 
 function mapSetupToCategory(

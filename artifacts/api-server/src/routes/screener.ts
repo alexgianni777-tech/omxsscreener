@@ -16,6 +16,7 @@ import { parseScreenerText, ScreenerParseError } from "../lib/screenerParser";
 import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "../lib/omxs30TickerMap";
 import { volumeMultiplierFromQuote } from "../lib/marketIndicators";
+import { calendarDaysBetween } from "../lib/marketCalendar";
 import { reviewCandidate, reviewSession } from "../lib/screeningReview";
 import { logger } from "../lib/logger";
 import {
@@ -749,12 +750,8 @@ async function fetchEarningsInDaysAt(ticker: string, sessionDate: string): Promi
     const quote = await _yf.quote(resolveYahooTicker(ticker));
     const earningsTs: Date | null = (quote as any).earningsTimestamp ?? null;
     if (!earningsTs || !(earningsTs instanceof Date)) return null;
-    const ms = earningsTs.getTime();
-    if (!ms || isNaN(ms)) return null;
-    const earningsDateStr = earningsTs.toISOString().slice(0, 10);
-    return Math.round(
-      (new Date(earningsDateStr).getTime() - new Date(sessionDate).getTime()) / 86_400_000,
-    );
+    const sessionStart = new Date(`${sessionDate}T00:00:00.000Z`);
+    return calendarDaysBetween(earningsTs, sessionStart);
   } catch {
     return null;
   }

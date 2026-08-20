@@ -15,6 +15,7 @@ import { Router, type IRouter } from "express";
 import YahooFinance from "yahoo-finance2";
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
+import { calendarDaysBetween, utcCalendarDate } from "../lib/marketCalendar";
 
 const router: IRouter = Router();
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
@@ -133,14 +134,8 @@ async function withConcurrency<T>(
 // ── Days from today ───────────────────────────────────────────────────────────
 function daysFromToday(dt: Date | string | null | undefined): number | null {
   if (!dt) return null;
-  const ms = dt instanceof Date ? dt.getTime() : new Date(dt).getTime();
-  if (isNaN(ms)) return null;
-  const todayMs = Date.UTC(
-    new Date().getUTCFullYear(),
-    new Date().getUTCMonth(),
-    new Date().getUTCDate(),
-  );
-  return Math.round((ms - todayMs) / 86_400_000);
+  const eventDate = dt instanceof Date ? dt : new Date(dt);
+  return calendarDaysBetween(eventDate);
 }
 
 // ── Day-of-earnings price reaction ────────────────────────────────────────────
@@ -305,7 +300,7 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
         ? computeDayPlusOneReturn(history, quarterDate)
         : null;
       return {
-        date: quarterDate?.toISOString().slice(0, 10) ?? h.period ?? "?",
+        date: utcCalendarDate(quarterDate) ?? h.period ?? "?",
         estimate,
         actual,
         surprisePct,
@@ -383,9 +378,7 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
       yahooTicker: stock.yahoo,
       display: stock.display,
       market: stock.market,
-      earningsDate: stock.earningsTimestamp instanceof Date
-        ? stock.earningsTimestamp.toISOString().slice(0, 10)
-        : null,
+      earningsDate: utcCalendarDate(stock.earningsTimestamp),
       earningsInDays: stock.earningsInDays,
       livePrice: stock.livePrice,
       changePct: stock.changePct,
