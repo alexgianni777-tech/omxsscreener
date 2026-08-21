@@ -7,6 +7,9 @@ export const openPositionsTable = pgTable("open_positions", {
   entryPrice: real("entry_price").notNull(),
   shares: real("shares").notNull(),
   stopPrice: real("stop_price"),
+  targetPrice: real("target_price"),
+  market: text("market"),
+  notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -15,6 +15,13 @@
       "when": 1787215106885,
       "tag": "0001_amused_whistler",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787289498824,
+      "tag": "0002_flaky_victor_mancha",
+      "breakpoints": true
     }
   ]
 }

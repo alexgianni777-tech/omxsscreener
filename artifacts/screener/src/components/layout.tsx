@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { LineChart, Sunrise, LayoutDashboard, History, FileDown, Activity, Swords, CalendarDays, LogOut, ArrowRight } from "lucide-react";
+import { LineChart, Sunrise, LayoutDashboard, History, FileDown, Activity, Swords, CalendarDays, LogOut, ArrowRight, Briefcase } from "lucide-react";
 import { useAuthContext } from "../lib/auth-context";
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -15,6 +15,7 @@ export function Shell({ children }: { children: ReactNode }) {
     { href: "/dashboard", label: "Statistik", icon: LayoutDashboard },
     { href: "/candidates", label: "Candidates", icon: Activity },
     { href: "/import", label: "Import Data", icon: FileDown },
+    { href: "/portfolio", label: "Nuvarande portfölj", icon: Briefcase },
     { href: "/earnings", label: "Rapporter", icon: CalendarDays },
   ];
 
