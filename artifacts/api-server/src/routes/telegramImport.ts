@@ -24,7 +24,7 @@ import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "../lib/omxs30TickerMap";
 import { timingSafeEqual } from "node:crypto";
 import {
-  assertUniqueCandidateIdentities,
+  deduplicateCandidates,
   lockScreenerSession,
   synchronizeCandidates,
 } from "../lib/candidateSynchronization";
@@ -117,13 +117,13 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
   }
 
   const { date, marketWeather, candidates } = session;
-  try {
-    assertUniqueCandidateIdentities(
+  {
+    const { skipped } = deduplicateCandidates(
       candidates.map((candidate) => ({ ...candidate, market: "SE" })),
     );
-  } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : "Duplicate candidates in import" });
-    return;
+    if (skipped.length > 0) {
+      console.warn(`[telegram import] Skipped duplicate candidates: ${skipped.join(", ")}`);
+    }
   }
 
   // Enrich vol from live Yahoo Finance — overrides the bot's parsed 0.0x values

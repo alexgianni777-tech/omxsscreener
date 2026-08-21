@@ -20,7 +20,7 @@ import { calendarDaysBetween } from "../lib/marketCalendar";
 import { reviewCandidate, reviewSession } from "../lib/screeningReview";
 import { logger } from "../lib/logger";
 import {
-  assertUniqueCandidateIdentities,
+  deduplicateCandidates,
   lockScreenerSession,
   synchronizeCandidates,
 } from "../lib/candidateSynchronization";
@@ -53,13 +53,13 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     .where(eq(screenerSessionsTable.date, session.date));
 
   const { force } = parsed.data;
-  try {
-    assertUniqueCandidateIdentities(
+  {
+    const { skipped } = deduplicateCandidates(
       session.candidates.map((candidate) => ({ ...candidate, market: "SE" })),
     );
-  } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : "Duplicate candidates in import" });
-    return;
+    if (skipped.length > 0) {
+      console.warn(`[screener import] Skipped duplicate candidates: ${skipped.join(", ")}`);
+    }
   }
 
   if (existing.length > 0 && !force) {

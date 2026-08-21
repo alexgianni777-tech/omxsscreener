@@ -23,15 +23,32 @@ export function candidateIdentity(candidate: CandidateInput): string {
   ].join("|");
 }
 
-export function assertUniqueCandidateIdentities(candidates: CandidateInput[]) {
+/** @deprecated Use deduplicateCandidates instead — no longer throws on duplicates. */
+export function assertUniqueCandidateIdentities(_candidates: CandidateInput[]) {
+  // kept for import compatibility; deduplication is now handled silently
+}
+
+/**
+ * Remove duplicate candidates from an incoming batch, keeping the first
+ * occurrence of each (market|category|ticker|direction) identity.
+ * Returns the deduplicated list and the identities that were skipped.
+ */
+export function deduplicateCandidates<T extends CandidateInput>(
+  candidates: T[],
+): { candidates: T[]; skipped: string[] } {
   const seen = new Set<string>();
+  const result: T[] = [];
+  const skipped: string[] = [];
   for (const candidate of candidates) {
     const identity = candidateIdentity(candidate);
     if (seen.has(identity)) {
-      throw new Error(`Duplicate candidate in import: ${identity}`);
+      skipped.push(identity);
+    } else {
+      seen.add(identity);
+      result.push(candidate);
     }
-    seen.add(identity);
   }
+  return { candidates: result, skipped };
 }
 
 /**
@@ -44,7 +61,11 @@ export async function synchronizeCandidates(
   sessionId: number,
   incoming: CandidateInput[],
 ) {
-  assertUniqueCandidateIdentities(incoming);
+  const { candidates: deduped, skipped } = deduplicateCandidates(incoming);
+  if (skipped.length > 0) {
+    console.warn(`[sync] Skipped duplicate candidates: ${skipped.join(", ")}`);
+  }
+  incoming = deduped;
 
   const existing: any[] = await tx
     .select()
