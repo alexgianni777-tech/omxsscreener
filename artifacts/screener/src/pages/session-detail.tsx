@@ -463,6 +463,13 @@ function CandidateRow({
     ? Math.abs((candidate.targetPrice - candidate.entryPrice) / candidate.entryPrice * 100)
     : 0;
   const isTargetFar = targetPct > 10;
+  const stopPct = candidate.entryPrice > 0 && candidate.stopPrice > 0
+    ? Math.abs((candidate.stopPrice - candidate.entryPrice) / candidate.entryPrice * 100)
+    : null;
+  const refPrice = livePrice ?? candidate.price;
+  const entryGapPct = refPrice > 0
+    ? ((candidate.entryPrice - refPrice) / refPrice * 100)
+    : null;
 
   // EdgeAI per-candidate edge score
   const score = edgeScore(candidate);
@@ -531,6 +538,12 @@ function CandidateRow({
                 title={`Target är ${targetPct.toFixed(1)}% från entry — möjligen swing-trade tidshorisont`}
               >
                 ⚠ +{targetPct.toFixed(0)}%
+              </div>
+            )}
+            {candidate.direction === "SHORT" && isEdgeAI && (
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold text-amber-500 bg-amber-500/10 border-amber-500/30"
+                   title="Short-strategin är i beta — edge valideras fortfarande">
+                BETA
               </div>
             )}
             <div className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold ${dirColor}`}>
@@ -641,14 +654,29 @@ function CandidateRow({
         <div className="flex flex-col justify-center">
           <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1"><Crosshair className="w-3 h-3"/> Entry</div>
           <div className="font-mono font-semibold text-base">{formatNumber(candidate.entryPrice)}</div>
+          {entryGapPct != null && (
+            <div className={`font-mono text-[10px] mt-0.5 ${Math.abs(entryGapPct) < 0.3 ? "text-success" : "text-muted-foreground"}`}>
+              {entryGapPct >= 0 ? "+" : ""}{entryGapPct.toFixed(1)}% fr. nu
+            </div>
+          )}
         </div>
         <div className="flex flex-col justify-center">
           <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1"><ShieldAlert className="w-3 h-3"/> Stop</div>
           <div className="font-mono font-semibold text-destructive">{formatNumber(candidate.stopPrice)}</div>
+          {stopPct != null && (
+            <div className="font-mono text-[10px] text-destructive mt-0.5">
+              −{stopPct.toFixed(1)}% fr. entry
+            </div>
+          )}
         </div>
         <div className="flex flex-col justify-center">
           <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1"><Target className="w-3 h-3"/> Target</div>
           <div className="font-mono font-semibold text-success">{formatNumber(candidate.targetPrice)}</div>
+          {targetPct > 0 && (
+            <div className="font-mono text-[10px] text-success mt-0.5">
+              +{targetPct.toFixed(1)}% fr. entry
+            </div>
+          )}
         </div>
         <div className="flex flex-col justify-center">
           <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Risk / Reward</div>
