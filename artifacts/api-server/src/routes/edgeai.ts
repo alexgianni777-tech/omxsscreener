@@ -23,7 +23,7 @@ import {
 import { calendarDaysUntil } from "../lib/marketCalendar";
 import { logger } from "../lib/logger";
 import {
-  assertUniqueCandidateIdentities,
+  deduplicateCandidates,
   lockScreenerSession,
   synchronizeCandidates,
 } from "../lib/candidateSynchronization";
@@ -135,7 +135,7 @@ router.post(
       return;
     }
 
-    // 4. Map setups → candidates (SE + US combined), group by category for ranking
+    // 4. Map setups → candidates (SE + US combined), rank each market separately.
     //    Tag each setup with its market BEFORE combining so the market column is populated.
     const usRaw: any[] = edgeData?.markets?.US?.setups ?? [];
     const taggedSetups = [
@@ -147,7 +147,8 @@ router.post(
     const mappedSetups = taggedSetups.map((s: any) => {
       const direction = edgeAiDirection(s.dir);
       const category = mapSetupToCategory(direction, s.setup ?? "");
-      rankCounter[category] = (rankCounter[category] ?? 0) + 1;
+      const rankKey = `${s._market}:${category}`;
+      rankCounter[rankKey] = (rankCounter[rankKey] ?? 0) + 1;
       const entry = Number(s.entry ?? 0);
       const stop = Number(s.stop ?? 0);
       const target = Number(s.target ?? 0);
@@ -164,13 +165,15 @@ router.post(
       return {
         market: s._market,                 // "SE" or "US" — drives the market split in today.tsx
         category,
-        rank: rankCounter[category],
+        rank: rankCounter[rankKey],
         ticker,
         price: entry,
         rs3m: Number(s.rs ?? 0),
         // Normalize to decimal 0–1 (EdgeAI may send integer % like 51)
         perf1m: (() => { const wr = Number(s.edge?.winRate ?? 0); return wr > 1 ? wr / 100 : wr; })(), // store winRate here for per-candidate display
-        rsi: Number(s.edge?.expectancyR ?? 0) * 100, // store expectancyR × 100 for display
+        // `rsi` is a legacy integer display field. Round the calculated
+        // expectancy percentage before storing it in the integer DB column.
+        rsi: Math.round(Number(s.edge?.expectancyR ?? 0) * 100),
         pctB: Number(s.edge?.sample ?? 0),           // store N (sample size)
         atr: oneR,
         volMultiplier: 0,  // filled in by live Yahoo Finance fetch below
@@ -188,17 +191,15 @@ router.post(
         outcome: "PENDING" as const,
       };
     });
-    try {
-      assertUniqueCandidateIdentities(mappedSetups);
-    } catch (error) {
-      res.status(422).json({ error: error instanceof Error ? error.message : "Duplicate EdgeAI setups" });
-      return;
+    const { candidates: uniqueMappedSetups, skipped } = deduplicateCandidates(mappedSetups);
+    if (skipped.length > 0) {
+      logger.warn({ skipped }, "EdgeAI import skipped duplicate candidate identities");
     }
 
     // 5. Enrich volume. Missing Yahoo fields stay at 0 but are logged and are
     //    presented as "saknas", never as a silently valid 0,0x metric.
     await Promise.allSettled(
-      mappedSetups.map(async (c) => {
+      uniqueMappedSetups.map(async (c) => {
         try {
           const q = (await yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false })) as any;
           const volumeMultiplier = volumeMultiplierFromQuote(q);
@@ -234,7 +235,7 @@ router.post(
           })
           .where(eq(screenerSessionsTable.id, existingId))
           .returning();
-        await synchronizeCandidates(tx, updated.id, mappedSetups);
+        await synchronizeCandidates(tx, updated.id, uniqueMappedSetups);
         return updated.id;
       });
     } else {
@@ -269,7 +270,7 @@ router.post(
             edgeN: se.edge?.n ?? null,
           })
           .returning();
-        await synchronizeCandidates(tx, inserted.id, mappedSetups);
+        await synchronizeCandidates(tx, inserted.id, uniqueMappedSetups);
         return inserted.id;
       });
     }
@@ -277,7 +278,7 @@ router.post(
     res.status(existing.length > 0 && force ? 200 : 201).json({
       id: sessionId,
       date: sessionDate,
-      setupCount: mappedSetups.length,
+      setupCount: uniqueMappedSetups.length,
       generatedAt: edgeData.generatedAt,
       regime: se.regime,
     });

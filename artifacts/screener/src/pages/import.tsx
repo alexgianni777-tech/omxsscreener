@@ -96,7 +96,21 @@ export function Import() {
         credentials: "include",
         body: JSON.stringify({ force }),
       });
-      const data = await res.json();
+      const responseText = await res.text();
+      let data: any = null;
+      try {
+        data = responseText ? JSON.parse(responseText) : null;
+      } catch {
+        // A proxy or server failure may return an HTML error page. Do not
+        // surface a misleading JSON parsing error to the trader.
+      }
+      if (!data && !res.ok) {
+        setEdgeStatus({
+          kind: "error",
+          message: `Importtjänsten svarade med ${res.status}. Försök igen om en minut.`,
+        });
+        return;
+      }
       if (res.status === 401) {
         setEdgeStatus({
           kind: "auth",

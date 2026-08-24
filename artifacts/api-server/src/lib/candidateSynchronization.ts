@@ -1,6 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { candidatesTable } from "@workspace/db";
+import { logger } from "./logger";
 
 type CandidateInput = Record<string, unknown> & {
   market?: string | null;
@@ -62,9 +63,7 @@ export async function synchronizeCandidates(
   incoming: CandidateInput[],
 ) {
   const { candidates: deduped, skipped } = deduplicateCandidates(incoming);
-  if (skipped.length > 0) {
-    console.warn(`[sync] Skipped duplicate candidates: ${skipped.join(", ")}`);
-  }
+  if (skipped.length > 0) logger.warn({ skipped }, "Candidate synchronization skipped duplicate identities");
   incoming = deduped;
 
   const existing: any[] = await tx
