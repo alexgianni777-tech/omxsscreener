@@ -86,6 +86,7 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
     return {
       id: p.id,
       ticker: p.ticker,
+      instrument: p.instrument ?? null,
       direction: p.direction,
       market: p.market ?? null,
       notes: p.notes ?? null,
@@ -125,7 +126,7 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
 
 // POST /portfolio  — add position
 router.post("/portfolio", async (req, res): Promise<void> => {
-  const { ticker, direction, entryPrice, shares, stopPrice, targetPrice, market, notes } = req.body ?? {};
+  const { ticker, instrument, direction, entryPrice, shares, stopPrice, targetPrice, market, notes } = req.body ?? {};
   if (
     typeof ticker !== "string" || !ticker.trim() ||
     !["LONG", "SHORT"].includes(direction) ||
@@ -139,6 +140,7 @@ router.post("/portfolio", async (req, res): Promise<void> => {
     .insert(openPositionsTable)
     .values({
       ticker: ticker.trim().toUpperCase(),
+      instrument: typeof instrument === "string" && instrument.trim() ? instrument.trim() : null,
       direction,
       entryPrice,
       shares,

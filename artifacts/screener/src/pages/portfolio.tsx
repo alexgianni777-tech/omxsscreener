@@ -12,6 +12,7 @@ const api = (path: string) => `${BASE}/api${path}`;
 interface Position {
   id: number;
   ticker: string;
+  instrument: string | null;
   direction: "LONG" | "SHORT";
   market: string | null;
   notes: string | null;
@@ -154,6 +155,11 @@ function PositionCard({ pos, onDelete }: { pos: Position; onDelete: (id: number)
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-bold text-xl tracking-tight">{pos.ticker}</span>
+          {pos.instrument && (
+            <span className="text-xs text-muted-foreground border-l border-border pl-2">
+              {pos.instrument}
+            </span>
+          )}
           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
             isShort ? "bg-destructive/15 text-destructive" : "bg-success/15 text-success"
           }`}>
@@ -262,7 +268,7 @@ function MetricCell({
 
 // ── add-position form ──────────────────────────────────────────────────────────
 const EMPTY_FORM = {
-  ticker: "", direction: "LONG" as "LONG" | "SHORT",
+  ticker: "", instrument: "", direction: "LONG" as "LONG" | "SHORT",
   entryPrice: "", shares: "", stopPrice: "", targetPrice: "",
   market: "SE" as "SE" | "US", notes: "",
 };
@@ -287,6 +293,7 @@ function AddPositionForm({ onSuccess }: { onSuccess: () => void }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ticker: form.ticker.trim().toUpperCase(),
+          instrument: form.instrument.trim() || undefined,
           direction: form.direction,
           entryPrice: parseFloat(form.entryPrice),
           shares: parseFloat(form.shares),
@@ -322,6 +329,15 @@ function AddPositionForm({ onSuccess }: { onSuccess: () => void }) {
         <div>
           <label className={label}>Ticker</label>
           <input className={inp} placeholder="ABB" value={form.ticker} onChange={e => set("ticker", e.target.value)} />
+        </div>
+        <div className="col-span-2 sm:col-span-2">
+          <label className={label}>Köpt verktyg</label>
+          <input
+            className={inp}
+            placeholder="MINI L HEXAGON AVA 32"
+            value={form.instrument}
+            onChange={e => set("instrument", e.target.value)}
+          />
         </div>
         <div>
           <label className={label}>Riktning</label>
