@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Briefcase, TrendingUp, TrendingDown, RefreshCw, Plus, Trash2,
-  AlertTriangle, Target, ShieldAlert, ChevronUp, ChevronDown,
+  AlertTriangle, Target, ShieldAlert, ChevronUp, ChevronDown, ClipboardPaste, CheckCircle2,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -17,6 +17,7 @@ interface Position {
   market: string | null;
   notes: string | null;
   entryPrice: number;
+  lastPrice: number | null;
   stopPrice: number | null;
   targetPrice: number | null;
   shares: number;
@@ -44,6 +45,19 @@ interface PortfolioData {
   };
 }
 
+interface BrokerImportRow {
+  id: string;
+  instrument: string;
+  direction: "LONG" | "SHORT";
+  shares: number;
+  livePrice: number;
+  entryPrice: number;
+  pnlKr: number;
+  pnlPct: number;
+  marketValueKr: number;
+  ticker: string;
+}
+
 // ── helpers ────────────────────────────────────────────────────────────────────
 function fmt(n: number, dec = 0) {
   return n.toLocaleString("sv-SE", { minimumFractionDigits: dec, maximumFractionDigits: dec });
@@ -55,6 +69,63 @@ function daysHeld(createdAt: string) {
   const ms = Date.now() - new Date(createdAt).getTime();
   const d = Math.floor(ms / 86_400_000);
   return d === 0 ? "Idag" : d === 1 ? "1 dag" : `${d} dagar`;
+}
+
+function parseBrokerNumber(value: string) {
+  return Number(value.replace(/\s/g, "").replace(",", "."));
+}
+
+function parseBrokerExport(text: string): { rows: BrokerImportRow[]; errors: string[] } {
+  const lines = text
+    .split(/\r?\n/)
+    .map(line => line.replace(/\u00a0/g, " ").trim())
+    .filter(Boolean);
+  const rows: BrokerImportRow[] = [];
+  const errors: string[] = [];
+  const instrumentPattern = /^(?:MINI|TURBO|BULL|BEAR)\b/i;
+  const rowPattern = /^(\d+(?:[.,]\d+)?)\s+.*?\b\d{1,2}:\d{2}\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)\s+SEK\s+([+\-−]?\d[\d\s]*(?:[.,]\d+)?)\s+kr\s+([+\-−]?\d+(?:[.,]\d+)?)%\s+([\d\s.,]+)\s+kr$/i;
+
+  for (let index = 0; index < lines.length; index++) {
+    const instrument = lines[index];
+    if (!instrumentPattern.test(instrument)) continue;
+
+    const dataLine = lines[index + 1];
+    const match = dataLine?.replace(/−/g, "-").match(rowPattern);
+    if (!match) {
+      errors.push(`Kunde inte läsa värdena efter “${instrument}”.`);
+      continue;
+    }
+
+    const shares = parseBrokerNumber(match[1]);
+    const livePrice = parseBrokerNumber(match[2]);
+    const entryPrice = parseBrokerNumber(match[3]);
+    const pnlKr = parseBrokerNumber(match[4]);
+    const pnlPct = parseBrokerNumber(match[5]);
+    const marketValueKr = parseBrokerNumber(match[6]);
+    if ([shares, livePrice, entryPrice, pnlKr, pnlPct, marketValueKr].some(value => !Number.isFinite(value))) {
+      errors.push(`Ogiltiga siffror efter “${instrument}”.`);
+      continue;
+    }
+
+    rows.push({
+      id: `${instrument}-${index}`,
+      instrument,
+      direction: /^(?:MINI|TURBO|BULL|BEAR)\s+S\b/i.test(instrument) ? "SHORT" : "LONG",
+      shares,
+      livePrice,
+      entryPrice,
+      pnlKr,
+      pnlPct,
+      marketValueKr,
+      ticker: "",
+    });
+    index++;
+  }
+
+  if (rows.length === 0 && errors.length === 0) {
+    errors.push("Hittade inga instrumentrader. Klistra in instrumentnamn och raden med antal, kurser och värde.");
+  }
+  return { rows, errors };
 }
 
 // ── summary card ───────────────────────────────────────────────────────────────
@@ -178,7 +249,9 @@ function PositionCard({ pos, onDelete }: { pos: Position; onDelete: (id: number)
           {pos.livePrice != null && (
             <div className="text-right">
               <div className="font-mono font-bold text-base">{fmt(pos.livePrice, 2)}</div>
-              {pos.changePct != null && (
+              {pos.instrument ? (
+                <div className="text-[10px] text-muted-foreground">Senast importerat</div>
+              ) : pos.changePct != null && (
                 <div className={`text-xs font-mono flex items-center justify-end gap-0.5 ${
                   pos.changePct >= 0 ? "text-success" : "text-destructive"
                 }`}>
@@ -262,6 +335,148 @@ function MetricCell({
       </div>
       <div className={`font-mono font-semibold ${valueClass}`}>{value}</div>
       {sub && <div className={`font-mono text-[10px] ${subClass}`}>{sub}</div>}
+    </div>
+  );
+}
+
+function BrokerImport({ onSuccess }: { onSuccess: () => void }) {
+  const [text, setText] = useState("");
+  const [rows, setRows] = useState<BrokerImportRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const analyze = () => {
+    const parsed = parseBrokerExport(text);
+    setRows(parsed.rows);
+    setError(parsed.errors.length > 0 ? parsed.errors.join(" ") : null);
+    setSuccess(null);
+  };
+
+  const setTicker = (id: string, ticker: string) => {
+    setRows(current => current.map(row => row.id === id ? { ...row, ticker } : row));
+    setError(null);
+  };
+
+  const submit = async () => {
+    if (rows.some(row => !row.ticker.trim())) {
+      setError("Fyll i aktiens ticker för varje instrument innan importen bekräftas.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch(api("/portfolio/import"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entries: rows.map(row => ({
+            ticker: row.ticker.trim().toUpperCase(),
+            instrument: row.instrument,
+            direction: row.direction,
+            entryPrice: row.entryPrice,
+            lastPrice: row.livePrice,
+            shares: row.shares,
+            market: null,
+          })),
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(body.error ?? `Importen misslyckades (${res.status})`);
+        return;
+      }
+      setSuccess(`${body.updated} uppdaterade och ${body.created} nya positioner.`);
+      setText("");
+      setRows([]);
+      onSuccess();
+    } catch (e: any) {
+      setError(e.message ?? "Nätverksfel vid importen");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const inp = "w-full bg-background border border-border rounded-md px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary";
+  const label = "text-[10px] uppercase tracking-wider text-muted-foreground mb-1 block";
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-5 space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <ClipboardPaste className="h-4 w-4 text-primary" /> Importera från Avanza
+        </h3>
+        <p className="text-xs text-muted-foreground mt-1">
+          Klistra in hela tabellen. Instrumenten läses automatiskt; ange bara underliggande akties ticker i förhandsvisningen.
+        </p>
+      </div>
+      <textarea
+        className={`${inp} min-h-36 font-mono text-xs`}
+        placeholder={"MINI L HEXAGON AVA 32\n77\t+1,16%\t10:37\t40,26\t38,86 SEK\t+108 kr\t+3,60%\t3 100 kr"}
+        value={text}
+        onChange={e => setText(e.target.value)}
+        aria-label="Klistra in portföljtabell"
+      />
+      <button
+        onClick={analyze}
+        disabled={!text.trim()}
+        className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-md border border-border bg-background hover:bg-muted transition-colors disabled:opacity-50"
+      >
+        <RefreshCw className="h-4 w-4" /> Analysera inklistring
+      </button>
+
+      {rows.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Förhandsvisning ({rows.length} instrument)
+            </h4>
+            <span className="text-[11px] text-muted-foreground">Ticker krävs per rad</span>
+          </div>
+          {rows.map(row => (
+            <div key={row.id} className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_8rem] gap-3 items-end p-3 rounded-md border border-border bg-background">
+              <div className="min-w-0">
+                <div className="font-medium text-sm truncate">{row.instrument}</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {fmt(row.shares, 0)} st · entry {fmt(row.entryPrice, 2)} · senast {fmt(row.livePrice, 2)} ·{" "}
+                  <span className={row.pnlKr >= 0 ? "text-success" : "text-destructive"}>
+                    {sgn(row.pnlKr, 0)} kr ({sgn(row.pnlPct, 2)}%)
+                  </span>
+                </div>
+              </div>
+              <div>
+                <label className={label}>Aktiens ticker</label>
+                <input
+                  className={inp}
+                  placeholder="HEXA-B"
+                  value={row.ticker}
+                  onChange={e => setTicker(row.id, e.target.value)}
+                />
+              </div>
+            </div>
+          ))}
+          <button
+            onClick={submit}
+            disabled={submitting}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          >
+            {submitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            Uppdatera portfölj
+          </button>
+        </div>
+      )}
+
+      {error && (
+        <div className="text-xs text-destructive flex items-center gap-2">
+          <AlertTriangle className="h-3 w-3 shrink-0" />{error}
+        </div>
+      )}
+      {success && (
+        <div className="text-xs text-success flex items-center gap-2">
+          <CheckCircle2 className="h-3 w-3 shrink-0" />{success}
+        </div>
+      )}
     </div>
   );
 }
@@ -395,6 +610,7 @@ function AddPositionForm({ onSuccess }: { onSuccess: () => void }) {
 export function Portfolio() {
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery<PortfolioData>({
     queryKey: ["portfolio"],
@@ -419,6 +635,11 @@ export function Portfolio() {
     qc.invalidateQueries({ queryKey: ["portfolio"] });
   }, [qc]);
 
+  const onImported = useCallback(() => {
+    setShowImport(false);
+    qc.invalidateQueries({ queryKey: ["portfolio"] });
+  }, [qc]);
+
   const positions = data?.positions ?? [];
   const longs = positions.filter(p => p.direction === "LONG");
   const shorts = positions.filter(p => p.direction === "SHORT");
@@ -433,7 +654,7 @@ export function Portfolio() {
             Nuvarande portfölj
           </h2>
           <p className="text-muted-foreground mt-1 text-sm">
-            Öppna positioner med live-kurs, orealiserat P&L och avstånd till stop/target.
+            Öppna positioner med live-kurs eller senast importerade instrumentkurs, orealiserat P&L och avstånd till stop/target.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -444,6 +665,15 @@ export function Portfolio() {
           >
             <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
             Uppdatera
+          </button>
+          <button
+            onClick={() => setShowImport(v => !v)}
+            className={`inline-flex items-center gap-2 px-3 py-2 text-sm rounded-md border transition-colors ${
+              showImport ? "bg-muted text-foreground border-border" : "bg-card hover:bg-muted border-border"
+            }`}
+          >
+            <ClipboardPaste className="h-4 w-4" />
+            {showImport ? "Avbryt import" : "Importera Avanza"}
           </button>
           <button
             onClick={() => setShowForm(v => !v)}
@@ -461,6 +691,7 @@ export function Portfolio() {
 
       {/* add form */}
       {showForm && <AddPositionForm onSuccess={onAdded} />}
+      {showImport && <BrokerImport onSuccess={onImported} />}
 
       {/* loading */}
       {isLoading && (

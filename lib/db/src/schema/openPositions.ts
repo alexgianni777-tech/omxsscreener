@@ -6,6 +6,7 @@ export const openPositionsTable = pgTable("open_positions", {
   instrument: text("instrument"),
   direction: text("direction", { enum: ["LONG", "SHORT"] }).notNull(),
   entryPrice: real("entry_price").notNull(),
+  lastPrice: real("last_price"),
   shares: real("shares").notNull(),
   stopPrice: real("stop_price"),
   targetPrice: real("target_price"),

@@ -46,11 +46,12 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
     return;
   }
 
-  const quoteMap = await fetchQuotes(positions.map((p) => p.ticker));
+  const quoteMap = await fetchQuotes(positions.filter((p) => !p.instrument).map((p) => p.ticker));
 
   const enriched = positions.map((p) => {
     const q = quoteMap.get(p.ticker) ?? { livePrice: null, changePct: null };
-    const live = q.livePrice;
+    const live = p.instrument ? (p.lastPrice ?? null) : q.livePrice;
+    const changePct = p.instrument ? null : q.changePct;
 
     const isShort = p.direction === "SHORT";
     const risk1R = p.stopPrice != null ? Math.abs(p.entryPrice - p.stopPrice) : null;
@@ -91,6 +92,7 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
       market: p.market ?? null,
       notes: p.notes ?? null,
       entryPrice: p.entryPrice,
+      lastPrice: p.lastPrice ?? null,
       stopPrice: p.stopPrice ?? null,
       targetPrice: p.targetPrice ?? null,
       shares: p.shares,
@@ -98,7 +100,7 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
       risk1R: risk1R != null ? risk1R * p.shares : null,
       createdAt: p.createdAt,
       livePrice: live,
-      changePct: q.changePct,
+      changePct,
       unrealisedPct: unrealisedPct != null ? +unrealisedPct.toFixed(2) : null,
       unrealisedKr: unrealisedKr != null ? +unrealisedKr.toFixed(0) : null,
       currentR: currentR != null ? +currentR.toFixed(2) : null,
@@ -143,6 +145,7 @@ router.post("/portfolio", async (req, res): Promise<void> => {
       instrument: typeof instrument === "string" && instrument.trim() ? instrument.trim() : null,
       direction,
       entryPrice,
+      lastPrice: null,
       shares,
       stopPrice: typeof stopPrice === "number" && isFinite(stopPrice) && stopPrice > 0 ? stopPrice : null,
       targetPrice: typeof targetPrice === "number" && isFinite(targetPrice) && targetPrice > 0 ? targetPrice : null,
@@ -151,6 +154,95 @@ router.post("/portfolio", async (req, res): Promise<void> => {
     })
     .returning();
   res.status(201).json(pos);
+});
+
+// POST /portfolio/import — update positions from a pasted broker export.
+// Existing positions are matched by underlying ticker + instrument, so repeating
+// an import refreshes the position instead of creating another row.
+router.post("/portfolio/import", async (req, res): Promise<void> => {
+  const entries = req.body?.entries;
+  if (!Array.isArray(entries) || entries.length === 0 || entries.length > 100) {
+    res.status(400).json({ error: "Minst en och högst 100 positioner krävs." });
+    return;
+  }
+
+  const validEntries: Array<{
+    ticker: string;
+    instrument: string;
+    direction: "LONG" | "SHORT";
+    entryPrice: number;
+    lastPrice: number;
+    shares: number;
+    market: string | null;
+  }> = [];
+
+  for (const entry of entries) {
+    if (
+      typeof entry?.ticker !== "string" || !entry.ticker.trim() ||
+      typeof entry?.instrument !== "string" || !entry.instrument.trim() ||
+      !["LONG", "SHORT"].includes(entry.direction) ||
+      typeof entry?.entryPrice !== "number" || !isFinite(entry.entryPrice) || entry.entryPrice <= 0 ||
+      typeof entry?.lastPrice !== "number" || !isFinite(entry.lastPrice) || entry.lastPrice <= 0 ||
+      typeof entry?.shares !== "number" || !isFinite(entry.shares) || entry.shares <= 0
+    ) {
+      res.status(400).json({ error: "Varje importposition måste ha ticker, instrument, riktning, antal, inköpskurs och aktuell kurs." });
+      return;
+    }
+    validEntries.push({
+      ticker: entry.ticker.trim().toUpperCase(),
+      instrument: entry.instrument.trim(),
+      direction: entry.direction,
+      entryPrice: entry.entryPrice,
+      lastPrice: entry.lastPrice,
+      shares: entry.shares,
+      market: typeof entry.market === "string" && entry.market.trim() ? entry.market.trim().toUpperCase() : null,
+    });
+  }
+
+  const existing = await db.select().from(openPositionsTable);
+  let created = 0;
+  let updated = 0;
+
+  for (const entry of validEntries) {
+    const match = existing.find((position) =>
+      position.ticker.toUpperCase() === entry.ticker &&
+      (position.instrument ?? "").trim().toLowerCase() === entry.instrument.toLowerCase(),
+    );
+
+    if (match) {
+      await db
+        .update(openPositionsTable)
+        .set({
+          direction: entry.direction,
+          entryPrice: entry.entryPrice,
+          lastPrice: entry.lastPrice,
+          shares: entry.shares,
+          market: entry.market ?? match.market,
+        })
+        .where(eq(openPositionsTable.id, match.id));
+      updated++;
+    } else {
+      const [createdPosition] = await db
+        .insert(openPositionsTable)
+        .values({
+          ticker: entry.ticker,
+          instrument: entry.instrument,
+          direction: entry.direction,
+          entryPrice: entry.entryPrice,
+          lastPrice: entry.lastPrice,
+          shares: entry.shares,
+          market: entry.market,
+          stopPrice: null,
+          targetPrice: null,
+          notes: null,
+        })
+        .returning();
+      existing.push(createdPosition);
+      created++;
+    }
+  }
+
+  res.status(200).json({ created, updated, total: validEntries.length });
 });
 
 // DELETE /portfolio/:id
