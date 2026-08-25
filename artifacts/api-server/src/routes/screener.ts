@@ -22,6 +22,7 @@ import { logger } from "../lib/logger";
 import {
   deduplicateCandidates,
   lockScreenerSession,
+  mergeCandidateInputs,
   synchronizeCandidates,
 } from "../lib/candidateSynchronization";
 
@@ -58,7 +59,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
       session.candidates.map((candidate) => ({ ...candidate, market: "SE" })),
     );
     if (skipped.length > 0) {
-      console.warn(`[screener import] Skipped duplicate candidates: ${skipped.join(", ")}`);
+      logger.warn({ skipped }, "Screener import skipped duplicate candidates");
     }
   }
 
@@ -184,20 +185,16 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
           marketRsi: session.marketWeather.rsi,
           trendLabel: session.marketWeather.trendLabel,
           rawText: parsed.data.rawText,
+          source: isEdgeAISession ? "mixed" : existing[0].source,
         })
         .where(eq(screenerSessionsTable.id, existingId))
         .returning();
-      const incomingRows = session.candidates.map((candidate) =>
-        buildCandidateRow(updatedSession.id, candidate, earningsBatch.get(candidate.ticker) ?? null),
+      const incomingRows = mergeCandidateInputs(
+        session.candidates.map((candidate) =>
+          buildCandidateRow(updatedSession.id, candidate, earningsBatch.get(candidate.ticker) ?? null),
+        ),
+        existingCandidates.map(({ id, ...candidate }) => candidate as any),
       );
-      // Preserve existing US EdgeAI candidates while synchronizing the SE paste.
-      if (isEdgeAISession) {
-        incomingRows.push(
-          ...existingCandidates
-            .filter((candidate) => candidate.market === "US")
-            .map(({ id, ...candidate }) => candidate as any),
-        );
-      }
       const updatedCandidates = await synchronizeCandidates(tx, updatedSession.id, incomingRows);
       return { updatedSession, updatedCandidates };
     });

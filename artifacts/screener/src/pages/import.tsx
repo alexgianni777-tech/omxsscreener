@@ -284,14 +284,15 @@ MARKNADSVÄDER  OMXS30 3305.0 | 5d  2.7% | 1m  1.8% | 3m  8.9% | RSI  79
             <div className="p-5 space-y-4">
               {conflict.affectedOutcomes.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No outcomes have been logged yet. Re-importing will replace all candidates.
+                  No outcomes have been logged yet. The new import will be merged
+                  with candidates already in this session.
                 </p>
               ) : (
                 <>
                   <p className="text-sm text-muted-foreground">
-                    The following outcomes are already logged. They will be{" "}
-                    <span className="text-foreground font-medium">preserved</span> on re-import
-                    if the ticker still appears in the new screener output.
+                     The following outcomes are already logged. They will be{" "}
+                     <span className="text-foreground font-medium">preserved</span>.
+                     Candidates from both imports will remain in the session.
                   </p>
 
                   <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
@@ -320,8 +321,7 @@ MARKNADSVÄDER  OMXS30 3305.0 | 5d  2.7% | 1m  1.8% | 3m  8.9% | RSI  79
                   {loggedOutcomes.length > 0 && (
                     <p className="text-xs text-amber-400/80 flex items-start gap-1.5">
                       <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                      Tickers that disappear from the new screener output will lose their
-                      logged outcomes permanently.
+                       Existing candidates from the other screener source will not be removed.
                     </p>
                   )}
                 </>
@@ -347,7 +347,7 @@ MARKNADSVÄDER  OMXS30 3305.0 | 5d  2.7% | 1m  1.8% | 3m  8.9% | RSI  79
                 ) : (
                   <>
                     <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-                    Re-import anyway
+                     Merge & update
                   </>
                 )}
               </button>

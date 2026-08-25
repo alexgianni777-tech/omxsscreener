@@ -25,6 +25,7 @@ import { logger } from "../lib/logger";
 import {
   deduplicateCandidates,
   lockScreenerSession,
+  mergeCandidateInputs,
   synchronizeCandidates,
 } from "../lib/candidateSynchronization";
 
@@ -108,7 +109,7 @@ router.post(
     // 3. Check for existing session (respect force flag)
     const force = req.body?.force === true;
     const existing = await db
-      .select({ id: screenerSessionsTable.id })
+      .select({ id: screenerSessionsTable.id, source: screenerSessionsTable.source })
       .from(screenerSessionsTable)
       .where(eq(screenerSessionsTable.date, sessionDate));
 
@@ -196,6 +197,14 @@ router.post(
       logger.warn({ skipped }, "EdgeAI import skipped duplicate candidate identities");
     }
 
+    const existingCandidates =
+      existing.length > 0 && force
+        ? await db
+            .select()
+            .from(candidatesTable)
+            .where(eq(candidatesTable.sessionId, existing[0].id))
+        : [];
+
     // 5. Enrich volume. Missing Yahoo fields stay at 0 but are logged and are
     //    presented as "saknas", never as a silently valid 0,0x metric.
     await Promise.allSettled(
@@ -232,10 +241,18 @@ router.post(
             perf1m,
             perf3m,
             marketRsi,
+            source: existing[0].source === "edgeai" ? "edgeai" : "mixed",
           })
           .where(eq(screenerSessionsTable.id, existingId))
           .returning();
-        await synchronizeCandidates(tx, updated.id, uniqueMappedSetups);
+        await synchronizeCandidates(
+          tx,
+          updated.id,
+          mergeCandidateInputs(
+            uniqueMappedSetups,
+            existingCandidates.map(({ id, createdAt, ...candidate }) => candidate),
+          ),
+        );
         return updated.id;
       });
     } else {

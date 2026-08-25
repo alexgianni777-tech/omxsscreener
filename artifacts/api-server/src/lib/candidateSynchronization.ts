@@ -53,6 +53,25 @@ export function deduplicateCandidates<T extends CandidateInput>(
 }
 
 /**
+ * Merge a new import into an existing session without dropping candidates
+ * from the other source. Incoming candidates come first, so an exact
+ * identity match uses the latest import's values while synchronization still
+ * preserves any already-recorded outcome.
+ */
+export function mergeCandidateInputs<T extends CandidateInput>(
+  incoming: T[],
+  existing: CandidateInput[],
+): T[] {
+  const incomingIdentities = new Set(incoming.map(candidateIdentity));
+  return [
+    ...incoming,
+    ...existing.filter(
+      (candidate) => !incomingIdentities.has(candidateIdentity(candidate)),
+    ),
+  ] as T[];
+}
+
+/**
  * Synchronize an imported candidate set without deleting recorded history.
  * PENDING candidates that disappear from an import are removed; resolved
  * candidates remain, so a partial upstream response cannot erase outcomes.
