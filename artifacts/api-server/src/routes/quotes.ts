@@ -33,6 +33,8 @@ router.get("/screener/quotes", async (req, res): Promise<void> => {
     return;
   }
 
+  const fetchedAt = new Date().toISOString();
+
   const results = await Promise.all(
     tickers.map(async (ticker) => {
       const yahooTicker = resolveYahooTicker(ticker);
@@ -44,6 +46,10 @@ router.get("/screener/quotes", async (req, res): Promise<void> => {
           earningsTs instanceof Date
             ? earningsTs.toISOString().slice(0, 10)
             : null;
+        // regularMarketTime is when Yahoo's underlying price was last updated —
+        // this can lag far behind `fetchedAt` outside market hours or on stale feeds.
+        const marketTime: Date | null = (quote as any).regularMarketTime ?? null;
+        const asOf = marketTime instanceof Date ? marketTime.toISOString() : null;
         return {
           ticker,
           yahooTicker,
@@ -51,6 +57,8 @@ router.get("/screener/quotes", async (req, res): Promise<void> => {
           change: quote.regularMarketChange ?? null,
           changePct: quote.regularMarketChangePercent ?? null,
           marketState: quote.marketState ?? null,
+          asOf,
+          fetchedAt,
           earningsDate,
           earningsInDays,
           error: null,
@@ -63,6 +71,8 @@ router.get("/screener/quotes", async (req, res): Promise<void> => {
           change: null,
           changePct: null,
           marketState: null,
+          asOf: null,
+          fetchedAt,
           earningsDate: null,
           earningsInDays: null,
           error: `Could not fetch quote for ${yahooTicker}`,

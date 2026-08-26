@@ -118,7 +118,7 @@ function mapSetup(s: any, rankCounter: Record<string, number>) {
     price: entry,
     rs3m: Number(s.rs ?? 0),
     perf1m: (() => { const winRate = Number(s.edge?.winRate ?? 0); return winRate > 1 ? winRate / 100 : winRate; })(),
-    rsi: Number(s.edge?.expectancyR ?? 0) * 100,
+    rsi: Math.round(Number(s.edge?.expectancyR ?? 0) * 100),
     pctB: Number(s.edge?.sample ?? 0),
     atr: oneR,
     volMultiplier: 0, // filled in by live fetch below
@@ -222,6 +222,7 @@ async function runImport(date: string): Promise<void> {
         .returning();
 
       await synchronizeCandidates(tx, inserted.id, mapped);
+      // Fresh insert: nothing existed before, so a diff would be all-"added" noise — skip it.
       logger.info(
         { date, sessionId: inserted.id, seSetups: seSetups.length, usSetups: usSetups.length, omxsValue: mw.omxsValue },
         "[scheduler] Auto-import complete",

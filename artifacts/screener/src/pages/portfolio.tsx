@@ -26,6 +26,7 @@ interface Position {
   createdAt: string;
   livePrice: number | null;
   changePct: number | null;
+  quoteAsOf: string | null;
   unrealisedPct: number | null;
   unrealisedKr: number | null;
   currentR: number | null;
@@ -43,6 +44,7 @@ interface PortfolioData {
     totalUnrealisedKr: number;
     totalUnrealisedPct: number;
   };
+  fetchedAt: string;
 }
 
 interface BrokerImportRow {
@@ -70,6 +72,44 @@ function daysHeld(createdAt: string) {
   const d = Math.floor(ms / 86_400_000);
   return d === 0 ? "Idag" : d === 1 ? "1 dag" : `${d} dagar`;
 }
+
+/** Human-readable "how long ago" for a timestamp, in Swedish. */
+function timeAgo(iso: string | null): string | null {
+  if (!iso) return null;
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!isFinite(ms) || ms < 0) return null;
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 1) return "just nu";
+  if (minutes < 60) return `${minutes} min sedan`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} tim sedan`;
+  const days = Math.floor(hours / 24);
+  return `${days} dygn sedan`;
+}
+
+function timeOfDay(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Staleness tier for a quote/valuation timestamp, used to color the freshness badge. */
+function freshnessTier(iso: string | null): "fresh" | "stale" | "very-stale" | "unknown" {
+  if (!iso) return "unknown";
+  const minutes = (Date.now() - new Date(iso).getTime()) / 60_000;
+  if (!isFinite(minutes)) return "unknown";
+  if (minutes <= 15) return "fresh";
+  if (minutes <= 60) return "stale";
+  return "very-stale";
+}
+
+const FRESHNESS_STYLE: Record<ReturnType<typeof freshnessTier>, string> = {
+  fresh: "text-success bg-success/10 border-success/20",
+  stale: "text-amber-500 bg-amber-500/10 border-amber-500/20",
+  "very-stale": "text-destructive bg-destructive/10 border-destructive/20",
+  unknown: "text-muted-foreground bg-muted border-border",
+};
 
 function parseBrokerNumber(value: string) {
   return Number(value.replace(/\s/g, "").replace(",", "."));
@@ -129,22 +169,42 @@ function parseBrokerExport(text: string): { rows: BrokerImportRow[]; errors: str
 }
 
 // ── summary card ───────────────────────────────────────────────────────────────
-function SummaryBar({ summary }: { summary: PortfolioData["summary"] }) {
+function FreshnessBadge({ iso, label }: { iso: string | null; label: string }) {
+  const tier = freshnessTier(iso);
+  const ago = timeAgo(iso);
+  const at = timeOfDay(iso);
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border ${FRESHNESS_STYLE[tier]}`}
+      title={at ? `${label} kl ${at}` : label}
+    >
+      <RefreshCw className="h-2.5 w-2.5" />
+      {ago ? `${label} ${ago}` : `${label} okänd`}
+    </span>
+  );
+}
+
+function SummaryBar({ summary, fetchedAt }: { summary: PortfolioData["summary"]; fetchedAt: string }) {
   const isUp = summary.totalUnrealisedKr >= 0;
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-      <Tile label="Positioner" value={String(summary.count)} />
-      <Tile label="Investerat" value={`${fmt(summary.totalInvestedKr)} kr`} />
-      <Tile
-        label="Marknadsvärde"
-        value={`${fmt(summary.totalMarketValueKr)} kr`}
-      />
-      <Tile
-        label="Orealiserat P&L"
-        value={`${sgn(summary.totalUnrealisedKr, 0)} kr`}
-        sub={`${sgn(summary.totalUnrealisedPct, 2)}%`}
-        valueClass={isUp ? "text-success" : "text-destructive"}
-      />
+    <div className="space-y-2">
+      <div className="flex justify-end">
+        <FreshnessBadge iso={fetchedAt} label="Portföljvärdet beräknat" />
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Tile label="Positioner" value={String(summary.count)} />
+        <Tile label="Investerat" value={`${fmt(summary.totalInvestedKr)} kr`} />
+        <Tile
+          label="Marknadsvärde"
+          value={`${fmt(summary.totalMarketValueKr)} kr`}
+        />
+        <Tile
+          label="Orealiserat P&L"
+          value={`${sgn(summary.totalUnrealisedKr, 0)} kr`}
+          sub={`${sgn(summary.totalUnrealisedPct, 2)}%`}
+          valueClass={isUp ? "text-success" : "text-destructive"}
+        />
+      </div>
     </div>
   );
 }
@@ -257,6 +317,11 @@ function PositionCard({ pos, onDelete }: { pos: Position; onDelete: (id: number)
                 }`}>
                   {pos.changePct >= 0 ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                   {Math.abs(pos.changePct).toFixed(2)}%
+                </div>
+              )}
+              {!pos.instrument && (
+                <div className="mt-1">
+                  <FreshnessBadge iso={pos.quoteAsOf} label="Kurs" />
                 </div>
               )}
             </div>
@@ -708,7 +773,7 @@ export function Portfolio() {
 
       {/* summary */}
       {data && positions.length > 0 && (
-        <SummaryBar summary={data.summary} />
+        <SummaryBar summary={data.summary} fetchedAt={data.fetchedAt} />
       )}
 
       {/* empty state */}

@@ -29,6 +29,13 @@ export interface QuoteResult {
      */
   marketState?: string | null;
   /**
+     * Timestamp of the underlying market price itself (Yahoo's regularMarketTime); can lag well behind fetchedAt outside market hours
+     * @nullable
+     */
+  asOf?: Date | null;
+  /** Server time when this quote was fetched */
+  fetchedAt?: Date;
+  /**
      * Next earnings date in YYYY-MM-DD format when Yahoo provides it
      * @nullable
      */

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { db, candidatesTable, screenerSessionsTable, survivalTradesTable } from "@workspace/db";
 import {
   ListCandidatesQueryParams,
@@ -59,6 +59,16 @@ function parseChallengeTrade(value: unknown):
   };
 }
 
+/** Fetch which of the given candidate ids have a linked Challenge Tracker trade. */
+async function fetchLinkedTradeIds(candidateIds: number[]): Promise<Set<number>> {
+  if (candidateIds.length === 0) return new Set();
+  const rows = await db
+    .select({ sourceCandidateId: survivalTradesTable.sourceCandidateId })
+    .from(survivalTradesTable)
+    .where(inArray(survivalTradesTable.sourceCandidateId, candidateIds));
+  return new Set(rows.map((r) => r.sourceCandidateId).filter((id): id is number => id != null));
+}
+
 // GET /candidates
 router.get("/candidates", async (req, res): Promise<void> => {
   const queryParams = ListCandidatesQueryParams.safeParse(req.query);
@@ -106,6 +116,8 @@ router.get("/candidates", async (req, res): Promise<void> => {
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(screenerSessionsTable.date, candidatesTable.category, candidatesTable.rank);
 
+  const linkedIds = await fetchLinkedTradeIds(rows.map((r) => r.id));
+
   res.json(
     ListCandidatesResponse.parse(
       rows.map((r) => ({
@@ -113,6 +125,7 @@ router.get("/candidates", async (req, res): Promise<void> => {
         gapWarning: r.gapWarning ?? null,
         exitPrice: r.exitPrice ?? null,
         outcomeNotes: r.outcomeNotes ?? null,
+        hasLinkedTrade: linkedIds.has(r.id),
       }))
     )
   );
@@ -148,6 +161,26 @@ router.patch("/candidates/:id/outcome", async (req, res): Promise<void> => {
     res.status(400).json({ error: "A Challenge Tracker trade requires WIN or LOSS" });
     return;
   }
+  // Explicit confirmation required to drop a linked Challenge Tracker trade —
+  // financial history must never disappear as a side effect of an outcome edit.
+  const removeChallengeTrade = req.body?.removeChallengeTrade === true;
+
+  // Pre-check (read-only): if the outcome is moving away from WIN/LOSS and a
+  // trade is already linked, require explicit confirmation before touching anything.
+  const revertingOutcome = body.data.outcome !== "WIN" && body.data.outcome !== "LOSS";
+  if (revertingOutcome && !removeChallengeTrade) {
+    const [linkedTrade] = await db
+      .select()
+      .from(survivalTradesTable)
+      .where(eq(survivalTradesTable.sourceCandidateId, params.data.id));
+    if (linkedTrade) {
+      res.status(409).json({
+        error: `Detta utfall är kopplat till en loggad Challenge Tracker-trade (${linkedTrade.pnlKr} kr). Bekräfta borttagning för att fortsätta.`,
+        existingChallengeTrade: linkedTrade,
+      });
+      return;
+    }
+  }
 
   const result = await db.transaction(async (tx) => {
     const [candidate] = await tx
@@ -166,7 +199,12 @@ router.patch("/candidates/:id/outcome", async (req, res): Promise<void> => {
       .where(eq(candidatesTable.id, params.data.id))
       .returning();
 
+    let hasLinkedTrade = false;
+
     if (challengeInput) {
+      // Insert on first log, update in place on any later correction — a
+      // resubmitted outcome must overwrite the old Challenge Tracker entry,
+      // never sit silently next to it or get dropped.
       await tx
         .insert(survivalTradesTable)
         .values({
@@ -175,12 +213,36 @@ router.patch("/candidates/:id/outcome", async (req, res): Promise<void> => {
           ticker: challengeInput.data.ticker.trim().toUpperCase(),
           boughtBeforeReport: challengeInput.data.boughtBeforeReport ?? false,
         })
-        .onConflictDoNothing({
+        .onConflictDoUpdate({
           target: survivalTradesTable.sourceCandidateId,
+          set: {
+            date: challengeInput.data.date,
+            ticker: challengeInput.data.ticker.trim().toUpperCase(),
+            strategy: challengeInput.data.strategy,
+            direction: challengeInput.data.direction,
+            pnlKr: challengeInput.data.pnlKr,
+            flag: challengeInput.data.flag,
+            followedPlan: challengeInput.data.followedPlan,
+            boughtBeforeReport: challengeInput.data.boughtBeforeReport ?? false,
+          },
         });
+      hasLinkedTrade = true;
+    } else if (revertingOutcome && removeChallengeTrade) {
+      const deleted = await tx
+        .delete(survivalTradesTable)
+        .where(eq(survivalTradesTable.sourceCandidateId, candidate.id))
+        .returning({ id: survivalTradesTable.id });
+      hasLinkedTrade = false;
+      void deleted;
+    } else {
+      const [existingLink] = await tx
+        .select({ id: survivalTradesTable.id })
+        .from(survivalTradesTable)
+        .where(eq(survivalTradesTable.sourceCandidateId, candidate.id));
+      hasLinkedTrade = !!existingLink;
     }
 
-    return updated;
+    return { updated, hasLinkedTrade };
   });
 
   if (!result) {
@@ -188,31 +250,34 @@ router.patch("/candidates/:id/outcome", async (req, res): Promise<void> => {
     return;
   }
 
+  const { updated: result_, hasLinkedTrade } = result;
+
   res.json(
     UpdateCandidateOutcomeResponse.parse({
-      id: result.id,
-      sessionId: result.sessionId,
-      category: result.category,
-      rank: result.rank,
-      ticker: result.ticker,
-      price: result.price,
-      rs3m: result.rs3m,
-      perf1m: result.perf1m,
-      rsi: result.rsi,
-      pctB: result.pctB,
-      atr: result.atr,
-      volMultiplier: result.volMultiplier,
-      distFrom20dH: result.distFrom20dH,
-      gapWarning: result.gapWarning ?? null,
-      direction: result.direction,
-      entryPrice: result.entryPrice,
-      stopPrice: result.stopPrice,
-      targetPrice: result.targetPrice,
-      rr: result.rr,
-      oneR: result.oneR,
-      outcome: result.outcome,
-      exitPrice: result.exitPrice ?? null,
-      outcomeNotes: result.outcomeNotes ?? null,
+      id: result_.id,
+      sessionId: result_.sessionId,
+      category: result_.category,
+      rank: result_.rank,
+      ticker: result_.ticker,
+      price: result_.price,
+      rs3m: result_.rs3m,
+      perf1m: result_.perf1m,
+      rsi: result_.rsi,
+      pctB: result_.pctB,
+      atr: result_.atr,
+      volMultiplier: result_.volMultiplier,
+      distFrom20dH: result_.distFrom20dH,
+      gapWarning: result_.gapWarning ?? null,
+      direction: result_.direction,
+      entryPrice: result_.entryPrice,
+      stopPrice: result_.stopPrice,
+      targetPrice: result_.targetPrice,
+      rr: result_.rr,
+      oneR: result_.oneR,
+      outcome: result_.outcome,
+      exitPrice: result_.exitPrice ?? null,
+      outcomeNotes: result_.outcomeNotes ?? null,
+      hasLinkedTrade,
     })
   );
 });

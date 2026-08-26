@@ -195,6 +195,8 @@ export interface Candidate {
   exitPrice?: number | null;
   /** @nullable */
   outcomeNotes?: string | null;
+  /** Whether a Challenge Tracker trade is linked to this candidate's outcome */
+  hasLinkedTrade?: boolean;
   review?: SignalReview;
 }
 
@@ -239,6 +241,34 @@ export interface SessionSummary {
   trackedCount: number;
 }
 
+export interface ImportDiffEntry {
+  identity: string;
+  ticker: string;
+  category: string;
+  direction: string;
+  /** @nullable */
+  market?: string | null;
+}
+
+export type ImportDiffFieldChangeChangesItem = {
+  field: string;
+  from: unknown;
+  to: unknown;
+};
+
+export type ImportDiffFieldChange = ImportDiffEntry & {
+  changes: ImportDiffFieldChangeChangesItem[];
+};
+
+/**
+ * Exactly what the last import added, changed (excluding preserved outcome fields), or removed as stale PENDING candidates.
+ */
+export interface ImportDiff {
+  added: ImportDiffEntry[];
+  updated: ImportDiffFieldChange[];
+  removed: ImportDiffEntry[];
+}
+
 export interface SessionDetail {
   id: number;
   /** YYYY-MM-DD */
@@ -246,6 +276,8 @@ export interface SessionDetail {
   marketWeather: MarketWeather;
   candidates: Candidate[];
   sessionReview?: SessionReview;
+  /** What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads. */
+  importDiff?: ImportDiff;
 }
 
 export type CategoryStatsCategory = typeof CategoryStatsCategory[keyof typeof CategoryStatsCategory];
@@ -294,6 +326,13 @@ export interface QuoteResult {
      * @nullable
      */
   marketState?: string | null;
+  /**
+     * Timestamp of the underlying market price itself (Yahoo's regularMarketTime); can lag well behind fetchedAt outside market hours
+     * @nullable
+     */
+  asOf?: string | null;
+  /** Server time when this quote was fetched */
+  fetchedAt?: string;
   /**
      * Next earnings date in YYYY-MM-DD format when Yahoo provides it
      * @nullable

@@ -52,5 +52,7 @@ export interface Candidate {
   exitPrice?: number | null;
   /** @nullable */
   outcomeNotes?: string | null;
+  /** Whether a Challenge Tracker trade is linked to this candidate's outcome */
+  hasLinkedTrade?: boolean;
   review?: SignalReview;
 }

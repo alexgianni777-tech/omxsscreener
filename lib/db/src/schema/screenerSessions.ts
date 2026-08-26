@@ -1,4 +1,4 @@
-import { pgTable, serial, text, real, integer, date, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, real, integer, date, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -19,12 +19,19 @@ export const screenerSessionsTable = pgTable("screener_sessions", {
   edgeWinRate: real("edge_win_rate"),
   edgePF: real("edge_pf"),
   edgeN: integer("edge_n"),
+  // Snapshot of what the most recent import changed (added/updated/removed
+  // candidates), so traders can see exactly what a re-import touched without
+  // diffing session history manually. Null until the first re-import happens.
+  lastImportDiff: jsonb("last_import_diff"),
+  lastImportAt: timestamp("last_import_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const insertScreenerSessionSchema = createInsertSchema(screenerSessionsTable).omit({
   id: true,
   createdAt: true,
+  lastImportDiff: true,
+  lastImportAt: true,
 });
 export type InsertScreenerSession = z.infer<typeof insertScreenerSessionSchema>;
 export type ScreenerSession = typeof screenerSessionsTable.$inferSelect;

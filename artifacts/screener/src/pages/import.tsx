@@ -56,6 +56,15 @@ export function Import() {
         onError: (err: any) => {
           // ApiError wraps the response body in `.data`; fall back to top-level for safety.
           const body = err?.data ?? err;
+          // 401 → the session expired mid-use (e.g. a token refresh failure). A generic
+          // error here is a dead end; offer the same re-login path as the EdgeAI import.
+          if (err?.status === 401) {
+            setEdgeStatus({
+              kind: "auth",
+              message: "Din inloggning har gått ut. Logga in igen och försök importen på nytt.",
+            });
+            return;
+          }
           // 409 conflict with outcome details → show confirmation modal
           if (body?.sessionId !== undefined && Array.isArray(body?.affectedOutcomes)) {
             setConflict({

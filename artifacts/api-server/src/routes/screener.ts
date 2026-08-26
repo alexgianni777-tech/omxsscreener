@@ -173,7 +173,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
       .from(candidatesTable)
       .where(eq(candidatesTable.sessionId, existingId));
 
-    const { updatedSession, updatedCandidates } = await db.transaction(async (tx) => {
+    const { updatedSession, updatedCandidates, diff } = await db.transaction(async (tx) => {
       await lockScreenerSession(tx, session.date);
       const [updatedSession] = await tx
         .update(screenerSessionsTable)
@@ -195,10 +195,15 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
         ),
         existingCandidates.map(({ id, ...candidate }) => candidate as any),
       );
-      const updatedCandidates = await synchronizeCandidates(tx, updatedSession.id, incomingRows);
-      return { updatedSession, updatedCandidates };
+      const { candidates: updatedCandidates, diff } = await synchronizeCandidates(tx, updatedSession.id, incomingRows);
+      await tx
+        .update(screenerSessionsTable)
+        .set({ lastImportDiff: diff, lastImportAt: new Date() })
+        .where(eq(screenerSessionsTable.id, updatedSession.id));
+      return { updatedSession, updatedCandidates, diff };
     });
 
+    const linkedIds = await fetchLinkedTradeIds(updatedCandidates.map((c: any) => c.id));
     const response = ImportSessionResponse.parse({
       id: updatedSession.id,
       date: updatedSession.date,
@@ -210,7 +215,8 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
         rsi: updatedSession.marketRsi,
         trendLabel: updatedSession.trendLabel,
       },
-      candidates: updatedCandidates.map(mapCandidate),
+      candidates: updatedCandidates.map((c: any) => mapCandidate(c, linkedIds.has(c.id))),
+      importDiff: diff,
     });
 
     res.status(200).json(response);
@@ -240,7 +246,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
       rawText: parsed.data.rawText,
       })
       .returning();
-    const insertedCandidates = await synchronizeCandidates(
+    const { candidates: insertedCandidates } = await synchronizeCandidates(
       tx,
       insertedSession.id,
       session.candidates.map((c) =>
@@ -261,7 +267,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
       rsi: insertedSession.marketRsi,
       trendLabel: insertedSession.trendLabel,
     },
-    candidates: insertedCandidates.map(mapCandidate),
+    candidates: insertedCandidates.map((c: any) => mapCandidate(c)),
   });
 
   res.status(201).json(response);
@@ -357,14 +363,19 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
         oneR: candidate.oneR,
         outcome: "PENDING" as const,
       }));
-      const resultCandidates = await synchronizeCandidates(tx, updatedSession.id, rows);
-      return { updatedSession, resultCandidates };
+      const { candidates: resultCandidates, diff } = await synchronizeCandidates(tx, updatedSession.id, rows);
+      await tx
+        .update(screenerSessionsTable)
+        .set({ lastImportDiff: diff, lastImportAt: new Date() })
+        .where(eq(screenerSessionsTable.id, updatedSession.id));
+      return { updatedSession, resultCandidates, diff };
     }));
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Could not synchronize candidates" });
     return;
   }
 
+  const linkedIds = await fetchLinkedTradeIds(resultCandidates.map((c) => c.id));
   res.json(
     ReimportSessionResponse.parse({
       id: updatedSession.id,
@@ -377,7 +388,7 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
         rsi: updatedSession.marketRsi,
         trendLabel: updatedSession.trendLabel,
       },
-      candidates: resultCandidates.map(mapCandidate),
+      candidates: resultCandidates.map((c) => mapCandidate(c, linkedIds.has(c.id))),
     })
   );
 });
@@ -501,8 +512,9 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     .where(eq(candidatesTable.sessionId, session.id))
     .orderBy(candidatesTable.category, candidatesTable.rank);
 
+  const linkedIds = await fetchLinkedTradeIds(candidates.map((c) => c.id));
   const candidatesWithReview = candidates.map((candidate) => ({
-    ...mapCandidate(candidate),
+    ...mapCandidate(candidate, linkedIds.has(candidate.id)),
     review: reviewCandidate(candidate, session.source ?? null),
   }));
   const sessionReview = reviewSession(
@@ -523,6 +535,7 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     },
     candidates: candidatesWithReview,
     sessionReview,
+    importDiff: (session.lastImportDiff as any) ?? undefined,
   });
 
   // Append fields not in Zod schema — passed through directly
@@ -535,6 +548,7 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     edgeWinRate: session.edgeWinRate ?? null,
     edgePF: session.edgePF ?? null,
     edgeN: session.edgeN ?? null,
+    lastImportAt: session.lastImportAt ?? null,
   });
 });
 
@@ -585,6 +599,16 @@ router.delete("/screener/sessions/:id", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
+/** Fetch which of the given candidate ids have a linked Challenge Tracker trade. */
+async function fetchLinkedTradeIds(candidateIds: number[]): Promise<Set<number>> {
+  if (candidateIds.length === 0) return new Set();
+  const rows = await db
+    .select({ sourceCandidateId: survivalTradesTable.sourceCandidateId })
+    .from(survivalTradesTable)
+    .where(inArray(survivalTradesTable.sourceCandidateId, candidateIds));
+  return new Set(rows.map((r) => r.sourceCandidateId).filter((id): id is number => id != null));
+}
+
 function mapCandidate(c: {
   id: number;
   sessionId: number;
@@ -614,7 +638,7 @@ function mapCandidate(c: {
   exitPrice: number | null;
   outcomeNotes: string | null;
   isTop3Pick?: boolean | null;
-}) {
+}, hasLinkedTrade = false) {
   return {
     id: c.id,
     sessionId: c.sessionId,
@@ -644,6 +668,7 @@ function mapCandidate(c: {
     exitPrice: c.exitPrice ?? null,
     outcomeNotes: c.outcomeNotes ?? null,
     isTop3Pick: c.isTop3Pick ?? false,
+    hasLinkedTrade,
   };
 }
 

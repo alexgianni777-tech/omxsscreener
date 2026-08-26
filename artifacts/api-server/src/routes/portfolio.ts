@@ -17,18 +17,22 @@ import { resolveYahooTicker } from "../lib/omxs30TickerMap";
 const router: IRouter = Router();
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
-async function fetchQuotes(tickers: string[]): Promise<Map<string, { livePrice: number | null; changePct: number | null }>> {
-  const map = new Map<string, { livePrice: number | null; changePct: number | null }>();
+type QuoteInfo = { livePrice: number | null; changePct: number | null; asOf: string | null };
+
+async function fetchQuotes(tickers: string[]): Promise<Map<string, QuoteInfo>> {
+  const map = new Map<string, QuoteInfo>();
   await Promise.allSettled(
     [...new Set(tickers)].map(async (ticker) => {
       try {
         const q = await yf.quote(resolveYahooTicker(ticker), {}, { validateResult: false }) as any;
+        const marketTime: Date | null = q.regularMarketTime ?? null;
         map.set(ticker, {
           livePrice: q.regularMarketPrice ?? null,
           changePct: q.regularMarketChangePercent ?? null,
+          asOf: marketTime instanceof Date ? marketTime.toISOString() : null,
         });
       } catch {
-        map.set(ticker, { livePrice: null, changePct: null });
+        map.set(ticker, { livePrice: null, changePct: null, asOf: null });
       }
     }),
   );
@@ -41,17 +45,22 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
     .from(openPositionsTable)
     .orderBy(asc(openPositionsTable.createdAt));
 
+  const fetchedAt = new Date().toISOString();
+
   if (positions.length === 0) {
-    res.json({ positions: [], summary: { totalUnrealisedKr: 0, totalMarketValueKr: 0 } });
+    res.json({ positions: [], summary: { totalUnrealisedKr: 0, totalMarketValueKr: 0 }, fetchedAt });
     return;
   }
 
   const quoteMap = await fetchQuotes(positions.filter((p) => !p.instrument).map((p) => p.ticker));
 
   const enriched = positions.map((p) => {
-    const q = quoteMap.get(p.ticker) ?? { livePrice: null, changePct: null };
+    const q = quoteMap.get(p.ticker) ?? { livePrice: null, changePct: null, asOf: null };
     const live = p.instrument ? (p.lastPrice ?? null) : q.livePrice;
     const changePct = p.instrument ? null : q.changePct;
+    // Instruments (leveraged products) are priced from the broker's last pasted
+    // export, not a live feed — there is no market timestamp for those.
+    const quoteAsOf = p.instrument ? null : q.asOf;
 
     const isShort = p.direction === "SHORT";
     const risk1R = p.stopPrice != null ? Math.abs(p.entryPrice - p.stopPrice) : null;
@@ -101,6 +110,7 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
       createdAt: p.createdAt,
       livePrice: live,
       changePct,
+      quoteAsOf,
       unrealisedPct: unrealisedPct != null ? +unrealisedPct.toFixed(2) : null,
       unrealisedKr: unrealisedKr != null ? +unrealisedKr.toFixed(0) : null,
       currentR: currentR != null ? +currentR.toFixed(2) : null,
@@ -123,6 +133,7 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
       totalUnrealisedKr: +totalUnrealisedKr.toFixed(0),
       totalUnrealisedPct: totalInvestedKr > 0 ? +((totalUnrealisedKr / totalInvestedKr) * 100).toFixed(2) : 0,
     },
+    fetchedAt,
   });
 });
 

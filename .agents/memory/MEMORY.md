@@ -5,3 +5,4 @@
 - [API Authentication Guard](api-auth-guard.md) — private trading APIs require server-side sessions; UI login gates are not access control.
 - [Earnings Calendar Dates](earnings-calendar-dates.md) — Yahoo earnings timestamps carry a time; compare calendar days, never rounded elapsed hours.
 - [Portfolio Instrument Imports](portfolio-instrument-imports.md) — leveraged products use pasted broker prices and refresh by ticker plus instrument.
+- [EdgeAI Mapping Duplication](edgeai-mapping-duplication.md) — scheduler.ts and edgeai.ts each map raw setups to candidate rows independently; fix bugs in both.

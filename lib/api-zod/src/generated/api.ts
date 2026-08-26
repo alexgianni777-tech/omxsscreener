@@ -62,6 +62,7 @@ export const ImportSessionResponse = zod.object({
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
   "outcomeNotes": zod.string().nullish(),
+  "hasLinkedTrade": zod.boolean().optional().describe('Whether a Challenge Tracker trade is linked to this candidate\'s outcome'),
   "review": zod.object({
   "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
   "reasons": zod.array(zod.string())
@@ -72,7 +73,36 @@ export const ImportSessionResponse = zod.object({
   "reasons": zod.array(zod.string())
 }).and(zod.object({
   "tradableCount": zod.number()
-})).optional()
+})).optional(),
+  "importDiff": zod.object({
+  "added": zod.array(zod.object({
+  "identity": zod.string(),
+  "ticker": zod.string(),
+  "category": zod.string(),
+  "direction": zod.string(),
+  "market": zod.string().nullish()
+})),
+  "updated": zod.array(zod.object({
+  "identity": zod.string(),
+  "ticker": zod.string(),
+  "category": zod.string(),
+  "direction": zod.string(),
+  "market": zod.string().nullish()
+}).and(zod.object({
+  "changes": zod.array(zod.object({
+  "field": zod.string(),
+  "from": zod.unknown(),
+  "to": zod.unknown()
+}))
+}))),
+  "removed": zod.array(zod.object({
+  "identity": zod.string(),
+  "ticker": zod.string(),
+  "category": zod.string(),
+  "direction": zod.string(),
+  "market": zod.string().nullish()
+}))
+}).optional().describe('What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads.')
 })
 
 
@@ -150,6 +180,7 @@ export const ReimportSessionResponse = zod.object({
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
   "outcomeNotes": zod.string().nullish(),
+  "hasLinkedTrade": zod.boolean().optional().describe('Whether a Challenge Tracker trade is linked to this candidate\'s outcome'),
   "review": zod.object({
   "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
   "reasons": zod.array(zod.string())
@@ -160,7 +191,36 @@ export const ReimportSessionResponse = zod.object({
   "reasons": zod.array(zod.string())
 }).and(zod.object({
   "tradableCount": zod.number()
-})).optional()
+})).optional(),
+  "importDiff": zod.object({
+  "added": zod.array(zod.object({
+  "identity": zod.string(),
+  "ticker": zod.string(),
+  "category": zod.string(),
+  "direction": zod.string(),
+  "market": zod.string().nullish()
+})),
+  "updated": zod.array(zod.object({
+  "identity": zod.string(),
+  "ticker": zod.string(),
+  "category": zod.string(),
+  "direction": zod.string(),
+  "market": zod.string().nullish()
+}).and(zod.object({
+  "changes": zod.array(zod.object({
+  "field": zod.string(),
+  "from": zod.unknown(),
+  "to": zod.unknown()
+}))
+}))),
+  "removed": zod.array(zod.object({
+  "identity": zod.string(),
+  "ticker": zod.string(),
+  "category": zod.string(),
+  "direction": zod.string(),
+  "market": zod.string().nullish()
+}))
+}).optional().describe('What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads.')
 })
 
 
@@ -209,6 +269,7 @@ export const GetSessionResponse = zod.object({
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
   "outcomeNotes": zod.string().nullish(),
+  "hasLinkedTrade": zod.boolean().optional().describe('Whether a Challenge Tracker trade is linked to this candidate\'s outcome'),
   "review": zod.object({
   "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
   "reasons": zod.array(zod.string())
@@ -219,7 +280,36 @@ export const GetSessionResponse = zod.object({
   "reasons": zod.array(zod.string())
 }).and(zod.object({
   "tradableCount": zod.number()
-})).optional()
+})).optional(),
+  "importDiff": zod.object({
+  "added": zod.array(zod.object({
+  "identity": zod.string(),
+  "ticker": zod.string(),
+  "category": zod.string(),
+  "direction": zod.string(),
+  "market": zod.string().nullish()
+})),
+  "updated": zod.array(zod.object({
+  "identity": zod.string(),
+  "ticker": zod.string(),
+  "category": zod.string(),
+  "direction": zod.string(),
+  "market": zod.string().nullish()
+}).and(zod.object({
+  "changes": zod.array(zod.object({
+  "field": zod.string(),
+  "from": zod.unknown(),
+  "to": zod.unknown()
+}))
+}))),
+  "removed": zod.array(zod.object({
+  "identity": zod.string(),
+  "ticker": zod.string(),
+  "category": zod.string(),
+  "direction": zod.string(),
+  "market": zod.string().nullish()
+}))
+}).optional().describe('What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads.')
 })
 
 
@@ -269,6 +359,7 @@ export const ListCandidatesResponseItem = zod.object({
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
   "outcomeNotes": zod.string().nullish(),
+  "hasLinkedTrade": zod.boolean().optional().describe('Whether a Challenge Tracker trade is linked to this candidate\'s outcome'),
   "review": zod.object({
   "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
   "reasons": zod.array(zod.string())
@@ -319,6 +410,7 @@ export const UpdateCandidateOutcomeResponse = zod.object({
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
   "outcomeNotes": zod.string().nullish(),
+  "hasLinkedTrade": zod.boolean().optional().describe('Whether a Challenge Tracker trade is linked to this candidate\'s outcome'),
   "review": zod.object({
   "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
   "reasons": zod.array(zod.string())
@@ -340,6 +432,8 @@ export const GetQuotesResponseItem = zod.object({
   "change": zod.number().nullish().describe('Absolute price change from previous close'),
   "changePct": zod.number().nullish().describe('Percent change from previous close'),
   "marketState": zod.string().nullish().describe('REGULAR, PRE, POST, CLOSED'),
+  "asOf": zod.coerce.date().nullish().describe('Timestamp of the underlying market price itself (Yahoo\'s regularMarketTime); can lag well behind fetchedAt outside market hours'),
+  "fetchedAt": zod.coerce.date().optional().describe('Server time when this quote was fetched'),
   "earningsDate": zod.string().nullish().describe('Next earnings date in YYYY-MM-DD format when Yahoo provides it'),
   "earningsInDays": zod.number().nullish().describe('Calendar days until the next earnings date; negative means it has passed'),
   "error": zod.string().nullish()

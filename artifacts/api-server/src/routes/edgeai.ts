@@ -245,7 +245,7 @@ router.post(
           })
           .where(eq(screenerSessionsTable.id, existingId))
           .returning();
-        await synchronizeCandidates(
+        const { diff } = await synchronizeCandidates(
           tx,
           updated.id,
           mergeCandidateInputs(
@@ -253,6 +253,10 @@ router.post(
             existingCandidates.map(({ id, createdAt, ...candidate }) => candidate),
           ),
         );
+        await tx
+          .update(screenerSessionsTable)
+          .set({ lastImportDiff: diff, lastImportAt: new Date() })
+          .where(eq(screenerSessionsTable.id, updated.id));
         return updated.id;
       });
     } else {
@@ -288,6 +292,7 @@ router.post(
           })
           .returning();
         await synchronizeCandidates(tx, inserted.id, uniqueMappedSetups);
+        // Fresh insert: nothing existed before, so a diff would be all-"added" noise — skip it.
         return inserted.id;
       });
     }

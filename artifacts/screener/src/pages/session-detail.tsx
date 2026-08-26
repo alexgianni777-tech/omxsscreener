@@ -1,4 +1,4 @@
-import { useGetSession, getGetSessionQueryKey, useGetQuotes, getGetQuotesQueryKey, Candidate, CandidateOutcomeProperty, useUpdateCandidateOutcome, QuoteResult } from "@workspace/api-client-react";
+import { useGetSession, getGetSessionQueryKey, useGetQuotes, getGetQuotesQueryKey, Candidate, CandidateOutcomeProperty, useUpdateCandidateOutcome, QuoteResult, ImportDiff } from "@workspace/api-client-react";
 import { useParams, Link } from "wouter";
 import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
 import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity, AlertTriangle, Clock, ExternalLink, CandlestickChart as CandlestickIcon, Star } from "lucide-react";
@@ -20,6 +20,109 @@ function edgeScoreColor(score: number): string {
   if (score >= 0.15) return "text-success border-success/30 bg-success/10";
   if (score >= 0.05) return "text-amber-400 border-amber-500/30 bg-amber-500/10";
   return "text-destructive border-destructive/30 bg-destructive/10";
+}
+
+// ── Import diff banner — shows exactly what the last (re-)import changed ───────
+const FIELD_LABELS: Record<string, string> = {
+  entryPrice: "Entry",
+  stopPrice: "Stop",
+  targetPrice: "Mål",
+  rr: "R/R",
+  rsi: "RSI",
+  volMultiplier: "Volym",
+  oneR: "1R",
+  rank: "Rank",
+  distFrom20dH: "Avst 20dH",
+  pctB: "%B",
+  atr: "ATR",
+  perf1m: "Perf 1m",
+  rs3m: "RS3m",
+  gapWarning: "Gap-varning",
+  earningsInDays: "Dagar till rapport",
+  market: "Marknad",
+};
+
+function fmtDiffValue(v: unknown): string {
+  if (v === null || v === undefined) return "—";
+  if (typeof v === "number") return Number.isInteger(v) ? String(v) : v.toFixed(2);
+  return String(v);
+}
+
+function ImportDiffBanner({ diff, importedAt }: { diff: ImportDiff; importedAt?: string | null }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasChanges = diff.added.length > 0 || diff.updated.length > 0 || diff.removed.length > 0;
+  if (!hasChanges) return null;
+
+  return (
+    <div className="bg-card border border-blue-500/20 rounded-lg overflow-hidden">
+      <button
+        onClick={() => setExpanded((e) => !e)}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40 transition-colors text-left"
+        data-testid="btn-toggle-import-diff"
+      >
+        <div className="flex items-center gap-2 text-sm">
+          <RefreshCw className="w-4 h-4 text-blue-400 shrink-0" />
+          <span className="font-semibold">Senaste importen ändrade</span>
+          <span className="flex items-center gap-1.5 text-xs">
+            {diff.added.length > 0 && <span className="text-success">+{diff.added.length} nya</span>}
+            {diff.updated.length > 0 && <span className="text-amber-400">{diff.updated.length} uppdaterade</span>}
+            {diff.removed.length > 0 && <span className="text-destructive">-{diff.removed.length} borttagna</span>}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+          {importedAt && <span>{new Date(importedAt).toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" })}</span>}
+          <span>{expanded ? "Dölj" : "Visa detaljer"}</span>
+        </div>
+      </button>
+      {expanded && (
+        <div className="px-4 pb-4 space-y-3 text-sm border-t border-border pt-3">
+          {diff.added.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-success mb-1 uppercase tracking-wide">Nya kandidater</div>
+              <div className="flex flex-wrap gap-1.5">
+                {diff.added.map((c) => (
+                  <span key={c.identity} className="px-2 py-0.5 rounded bg-success/10 border border-success/20 text-xs font-mono">
+                    {c.ticker} <span className="text-muted-foreground">({c.category})</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {diff.updated.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-amber-400 mb-1 uppercase tracking-wide">Uppdaterade kandidater</div>
+              <div className="space-y-1.5">
+                {diff.updated.map((c) => (
+                  <div key={c.identity} className="rounded bg-muted/50 border border-border px-2.5 py-1.5 text-xs">
+                    <span className="font-mono font-medium">{c.ticker}</span>
+                    <span className="text-muted-foreground"> ({c.category}) — </span>
+                    {c.changes.map((ch, i) => (
+                      <span key={ch.field} className="font-mono">
+                        {i > 0 && ", "}
+                        {FIELD_LABELS[ch.field] ?? ch.field}: {fmtDiffValue(ch.from)} → {fmtDiffValue(ch.to)}
+                      </span>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {diff.removed.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-destructive mb-1 uppercase tracking-wide">Borttagna (obekräftade, saknades i importen)</div>
+              <div className="flex flex-wrap gap-1.5">
+                {diff.removed.map((c) => (
+                  <span key={c.identity} className="px-2 py-0.5 rounded bg-destructive/10 border border-destructive/20 text-xs font-mono">
+                    {c.ticker} <span className="text-muted-foreground">({c.category})</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -134,6 +237,11 @@ export function SessionDetail() {
           <h2 className="text-2xl font-bold tracking-tight">Session: {formatDate(session.date)}</h2>
         </div>
       </div>
+
+      {/* ── Import diff — exactly what the last (re-)import changed ── */}
+      {(session as any).importDiff && (
+        <ImportDiffBanner diff={(session as any).importDiff} importedAt={(session as any).lastImportAt} />
+      )}
 
       {/* Market Weather Banner */}
       <div className="bg-card border-l-4 border-l-primary border-y border-r border-border rounded-r-lg p-6 shadow-sm">
@@ -401,14 +509,15 @@ function CandidateRow({
   const [localExit, setLocalExit] = useState<string>(candidate.exitPrice ? String(candidate.exitPrice) : "");
   const [showChart, setShowChart] = useState(false);
   
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback((removeChallengeTrade?: boolean) => {
     mutateFnRef.current(
       { 
         id: candidate.id, 
         data: { 
           outcome: localOutcome as any, 
-          exitPrice: localExit ? parseFloat(localExit) : null 
-        } 
+          exitPrice: localExit ? parseFloat(localExit) : null,
+          ...(removeChallengeTrade ? { removeChallengeTrade: true } : {}),
+        } as any
       },
       {
         onSuccess: (updated) => {
@@ -419,10 +528,28 @@ function CandidateRow({
               candidates: old.candidates.map((c: Candidate) => c.id === updated.id ? updated : c)
             };
           });
-        }
+        },
+        onError: (err: any) => {
+          // 409 = outcome change would silently orphan/drop a logged Challenge
+          // Tracker trade; require the user's explicit confirmation.
+          if (err?.status === 409) {
+            const existing = err?.data?.existingChallengeTrade;
+            const pnl = existing?.pnlKr;
+            const confirmed = window.confirm(
+              pnl != null
+                ? `Detta utfall är kopplat till en loggad Challenge Tracker-trade (${pnl} kr). Ta bort den kopplade tradelogg-posten?`
+                : "Detta utfall är kopplat till en loggad Challenge Tracker-trade. Ta bort den kopplade tradelogg-posten?"
+            );
+            if (confirmed) {
+              handleSaveRef.current(true);
+            }
+          }
+        },
       }
     );
   }, [candidate.id, localOutcome, localExit, sessionId, queryClient]);
+  const handleSaveRef = useRef(handleSave);
+  handleSaveRef.current = handleSave;
 
   const isLong = candidate.direction === "LONG";
   const DirIcon = isLong ? TrendingUp : TrendingDown;
@@ -686,7 +813,20 @@ function CandidateRow({
 
       {/* Outcome Logger */}
       <div className="min-w-[280px] flex flex-col justify-center gap-2">
-        <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Log Outcome</div>
+        <div className="flex items-center gap-2">
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Log Outcome</div>
+          {(candidate.outcome === "WIN" || candidate.outcome === "LOSS") && (
+            candidate.hasLinkedTrade ? (
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-success/10 text-success border border-success/20" title="Loggad i Challenge Tracker">
+                🔗 loggad
+              </span>
+            ) : (
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20" title="Inget resultat loggat i Challenge Tracker">
+                ⚠ ej loggad
+              </span>
+            )
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <select 
             value={localOutcome}
@@ -714,7 +854,7 @@ function CandidateRow({
           />
           
           <button 
-            onClick={handleSave}
+            onClick={() => handleSave()}
             disabled={updateOutcome.isPending || (localOutcome === candidate.outcome && localExit === (candidate.exitPrice ? String(candidate.exitPrice) : ""))}
             className="h-8 w-8 flex items-center justify-center rounded-md bg-primary text-primary-foreground disabled:opacity-50 hover:bg-primary/90 transition-colors"
             title="Save Outcome"

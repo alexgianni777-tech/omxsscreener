@@ -96,8 +96,24 @@ type ChallengeData = {
 type LiveQuote = {
   livePrice: number | null;
   changePct: number | null;
+  asOf: string | null;
+  fetchedAt: string | null;
   error: string | null;
 };
+
+/** Human-readable "how long ago" for a timestamp, in Swedish. */
+function timeAgo(iso: string | null): string | null {
+  if (!iso) return null;
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!isFinite(ms) || ms < 0) return null;
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 1) return "just nu";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} tim`;
+  const days = Math.floor(hours / 24);
+  return `${days} dygn`;
+}
 
 // ── main ─────────────────────────────────────────────────────────────────────
 
@@ -241,7 +257,7 @@ export function Today() {
       const data = await res.json();
       const map: Record<string, LiveQuote> = {};
       for (const q of data) {
-        map[q.ticker] = { livePrice: q.livePrice, changePct: q.changePct, error: q.error };
+        map[q.ticker] = { livePrice: q.livePrice, changePct: q.changePct, asOf: q.asOf ?? null, fetchedAt: q.fetchedAt ?? null, error: q.error };
       }
       setQuotes(map);
     } finally {
@@ -609,14 +625,20 @@ export function Today() {
                       )}
                       {/* Live price badge */}
                       {quote?.livePrice != null && !isDone && (
-                        <span className={`text-xs font-mono px-2 py-0.5 rounded font-bold ${
-                          autoHit === "WIN" ? "bg-success text-success-foreground"
-                          : autoHit === "LOSS" ? "bg-destructive text-destructive-foreground"
-                          : "bg-muted text-muted-foreground"
-                        }`}>
+                        <span
+                          className={`text-xs font-mono px-2 py-0.5 rounded font-bold ${
+                            autoHit === "WIN" ? "bg-success text-success-foreground"
+                            : autoHit === "LOSS" ? "bg-destructive text-destructive-foreground"
+                            : "bg-muted text-muted-foreground"
+                          }`}
+                          title={quote.asOf ? `Kursen är från kl ${new Date(quote.asOf).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}` : undefined}
+                        >
                           {quote.livePrice.toFixed(2)}
                           {quote.changePct != null && (
                             <span className="ml-1 opacity-70">{pct(quote.changePct)}</span>
+                          )}
+                          {timeAgo(quote.asOf) && (
+                            <span className="ml-1 opacity-60 font-normal">· {timeAgo(quote.asOf)}</span>
                           )}
                         </span>
                       )}

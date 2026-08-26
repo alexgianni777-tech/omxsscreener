@@ -607,6 +607,9 @@ components:
           type: ["number", "null"]
         outcomeNotes:
           type: ["string", "null"]
+        hasLinkedTrade:
+          type: boolean
+          description: "Whether a Challenge Tracker trade is linked to this candidate's outcome"
         review:
           $ref: "#/components/schemas/SignalReview"
 
@@ -695,6 +698,59 @@ components:
             $ref: "#/components/schemas/Candidate"
         sessionReview:
           $ref: "#/components/schemas/SessionReview"
+        importDiff:
+          description: What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads.
+          $ref: "#/components/schemas/ImportDiff"
+
+    ImportDiffEntry:
+      type: object
+      required: [identity, ticker, category, direction]
+      properties:
+        identity:
+          type: string
+        ticker:
+          type: string
+        category:
+          type: string
+        direction:
+          type: string
+        market:
+          type: ["string", "null"]
+
+    ImportDiffFieldChange:
+      allOf:
+        - $ref: "#/components/schemas/ImportDiffEntry"
+        - type: object
+          required: [changes]
+          properties:
+            changes:
+              type: array
+              items:
+                type: object
+                required: [field, from, to]
+                properties:
+                  field:
+                    type: string
+                  from: {}
+                  to: {}
+
+    ImportDiff:
+      type: object
+      required: [added, updated, removed]
+      description: Exactly what the last import added, changed (excluding preserved outcome fields), or removed as stale PENDING candidates.
+      properties:
+        added:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportDiffEntry"
+        updated:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportDiffFieldChange"
+        removed:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportDiffEntry"
 
     CategoryStats:
       type: object
@@ -738,6 +794,14 @@ components:
         marketState:
           type: ["string", "null"]
           description: REGULAR, PRE, POST, CLOSED
+        asOf:
+          type: ["string", "null"]
+          format: date-time
+          description: Timestamp of the underlying market price itself (Yahoo's regularMarketTime); can lag well behind fetchedAt outside market hours
+        fetchedAt:
+          type: string
+          format: date-time
+          description: Server time when this quote was fetched
         earningsDate:
           type: ["string", "null"]
           description: Next earnings date in YYYY-MM-DD format when Yahoo provides it

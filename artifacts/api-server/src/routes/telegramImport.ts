@@ -179,11 +179,17 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
     const [stored] = existing
       ? await tx.update(screenerSessionsTable).set(sessionRow).where(eq(screenerSessionsTable.id, existing.id)).returning()
       : await tx.insert(screenerSessionsTable).values({ date, ...sessionRow }).returning();
-    const storedCandidates = await synchronizeCandidates(
+    const { candidates: storedCandidates, diff } = await synchronizeCandidates(
       tx,
       stored.id,
       candidates.map((candidate) => buildRow(stored.id, candidate)),
     );
+    if (existing) {
+      await tx
+        .update(screenerSessionsTable)
+        .set({ lastImportDiff: diff, lastImportAt: new Date() })
+        .where(eq(screenerSessionsTable.id, stored.id));
+    }
     return { stored, candidateCount: storedCandidates.length, updated: Boolean(existing) };
   });
 

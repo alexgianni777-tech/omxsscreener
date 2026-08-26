@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { Candidate } from './candidate';
+import type { ImportDiff } from './importDiff';
 import type { MarketWeather } from './marketWeather';
 import type { SessionReview } from './sessionReview';
 
@@ -16,4 +17,6 @@ export interface SessionDetail {
   marketWeather: MarketWeather;
   candidates: Candidate[];
   sessionReview?: SessionReview;
+  /** What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads. */
+  importDiff?: ImportDiff;
 }

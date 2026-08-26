@@ -17,6 +17,7 @@ type SurvivalTrade = {
   followedPlan: boolean;
   boughtBeforeReport: boolean;
   createdAt: string;
+  sourceCandidateId: number | null;
 };
 
 type Stats = {
@@ -692,6 +693,9 @@ export function ChallengeTracker() {
                   </span>
                   <span className="font-bold">{t.ticker || t.strategy}</span>
                   <span className="text-muted-foreground">{t.date} · {t.strategy} · {t.direction}{t.leverageX ? ` ${t.leverageX}x` : ""}</span>
+                  {t.sourceCandidateId != null && (
+                    <span className="text-emerald-400" title="Loggad från screener-förslag">🔗</span>
+                  )}
                   {!t.followedPlan && <span className="text-red-400 font-bold">✗plan</span>}
                   {t.boughtBeforeReport && <span className="text-amber-400 font-bold">· före rapport</span>}
                 </div>
