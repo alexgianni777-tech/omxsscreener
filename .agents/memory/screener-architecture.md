@@ -42,3 +42,10 @@ candidates-log.csv now includes entry, stop, target, rr, holdDays, dir columns. 
 
 ## holdDays not yet in DB schema
 candidates table does not have a hold_days column yet (Task #54). holdDays is computed at import time from BUCKET_PARAMS but not persisted.
+
+## Yahoo Finance calls need their own retry
+`yahoo-finance2`'s `yf.quote`/`yf.historical` have no built-in retry. A single transient failure used to zero-fill OMXS30 market weather (RSI/perf → 0, stored permanently on the session) or leave a candidate's `volMultiplier` at its 0 default (blocking the trade). All three import paths (scheduler.ts, edgeai.ts manual import, screener.ts telegram import) now wrap these calls in a small `withRetry` helper (`artifacts/api-server/src/lib/retry.ts`, 3 attempts with backoff) before falling back.
+
+**Why:** the fallback-to-zero behavior is a legitimate last resort (screeningReview correctly flags marketRsi≤0 / volMultiplier≤0), but a bare Yahoo blip shouldn't trigger it — that made "no-trade" and "data quality warning" banners fire far more often than the data actually warranted.
+
+**How to apply:** any new Yahoo Finance call added to an import/enrichment path should go through `withRetry` too, not a bare `await yf.*(...)`.
