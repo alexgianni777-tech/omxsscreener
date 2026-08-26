@@ -527,6 +527,27 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AffectedOutcome"
+        wouldRemove:
+          type: array
+          description: Still-pending candidates (no logged outcome) that are not present in the new import and would be deleted on a force re-import. Logged outcomes are never deleted.
+          items:
+            $ref: "#/components/schemas/RemovedCandidatePreview"
+
+    RemovedCandidatePreview:
+      type: object
+      required: [ticker, category, direction]
+      properties:
+        ticker:
+          type: string
+        category:
+          type: string
+          enum: [MOMENTUM, SQUEEZE, STUDS, WEAKEST]
+        direction:
+          type: string
+          enum: [LONG, SHORT]
+        market:
+          type: string
+          enum: [SE, US]
 
     MarketWeather:
       type: object
@@ -585,7 +606,8 @@ components:
         gapWarning:
           type: ["number", "null"]
         market:
-          type: ["string", "null"]
+          type: string
+          enum: [SE, US]
           description: "Origin market for the signal: SE or US"
         direction:
           type: string

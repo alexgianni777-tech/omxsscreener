@@ -9,25 +9,23 @@ import { eq } from "drizzle-orm";
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "../lib/omxs30TickerMap";
+import { calculateWilderRsi, volumeMultiplierFromQuote } from "../lib/marketIndicators";
 import {
-  calculateOpeningGapPct,
-  calculateWilderRsi,
-  volumeMultiplierFromQuote,
-} from "../lib/marketIndicators";
-import {
-  edgeAiDirection,
   edgeAiSessionDate,
   EdgeAiDataFreshnessError,
   fetchFreshEdgeAiData,
 } from "../lib/edgeAiSource";
 import { calendarDaysUntil } from "../lib/marketCalendar";
 import { logger } from "../lib/logger";
+import { withRetry } from "../lib/retry";
 import {
+  candidateIdentity,
   deduplicateCandidates,
   lockScreenerSession,
   mergeCandidateInputs,
   synchronizeCandidates,
 } from "../lib/candidateSynchronization";
+import { mapEdgeAiSetup } from "../lib/edgeAiMapping";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
@@ -35,19 +33,6 @@ const router: IRouter = Router();
 
 function daysUntil(date: Date | number | null | undefined): number | null {
   return calendarDaysUntil(date);
-}
-
-function mapSetupToCategory(
-  direction: "LONG" | "SHORT",
-  setupName: string,
-): "MOMENTUM" | "SQUEEZE" | "STUDS" | "WEAKEST" {
-  if (direction === "SHORT") return "WEAKEST";
-  const n = setupName.toLowerCase();
-  if (n.includes("squeeze") || n.includes("bollinger") || n.includes("reversion") || n.includes("mean"))
-    return "SQUEEZE";
-  if (n.includes("pullback") || n.includes("stud") || n.includes("reversal"))
-    return "STUDS";
-  return "MOMENTUM"; // breakout, momentum, flag, trend, default
 }
 
 router.post(
@@ -90,11 +75,11 @@ router.post(
     try {
       const now = new Date();
       const ninetyFiveDaysAgo = new Date(now.getTime() - 95 * 86_400_000);
-      const history = await yf.historical("^OMX", {
+      const history = await withRetry(() => yf.historical("^OMX", {
         period1: ninetyFiveDaysAgo,
         period2: now,
         interval: "1d",
-      }) as Array<{ close: number }>;
+      })) as Array<{ close: number }>;
       if (history.length > 0) {
         omxsValue = history[history.length - 1].close;
         if (history.length >= 6)  perf5d  = ((omxsValue - history[history.length - 6].close)  / history[history.length - 6].close)  * 100;
@@ -106,7 +91,23 @@ router.post(
       logger.warn({ err: err.message }, "Manual EdgeAI import could not calculate OMXS30 weather");
     }
 
-    // 3. Check for existing session (respect force flag)
+    // 3. Map setups → candidates (SE + US combined), rank each market separately.
+    //    mapEdgeAiSetup is the single shared mapping function (see edgeAiMapping.ts) —
+    //    also used by the scheduler auto-import, so both paths stay in sync. Computed
+    //    up front (pure, no I/O) so the 409 conflict check below can preview exactly
+    //    which pending candidates a force re-import would remove.
+    const usRaw: any[] = edgeData?.markets?.US?.setups ?? [];
+    const rankCounter: Record<string, number> = {};
+    const mappedSetups = [
+      ...setups.map((s: any) => mapEdgeAiSetup(s, "SE", rankCounter)),
+      ...usRaw.map((s: any) => mapEdgeAiSetup(s, "US", rankCounter)),
+    ];
+    const { candidates: uniqueMappedSetups, skipped } = deduplicateCandidates(mappedSetups);
+    if (skipped.length > 0) {
+      logger.warn({ skipped }, "EdgeAI import skipped duplicate candidate identities");
+    }
+
+    // 4. Check for existing session (respect force flag)
     const force = req.body?.force === true;
     const existing = await db
       .select({ id: screenerSessionsTable.id, source: screenerSessionsTable.source })
@@ -116,85 +117,33 @@ router.post(
     if (existing.length > 0 && !force) {
       // Return same 409 shape as the regular import endpoint
       const existingId = existing[0].id;
-      const affectedOutcomes = await db
+      const existingRows = await db
         .select({
           ticker: candidatesTable.ticker,
           category: candidatesTable.category,
+          direction: candidatesTable.direction,
+          market: candidatesTable.market,
           outcome: candidatesTable.outcome,
           exitPrice: candidatesTable.exitPrice,
         })
         .from(candidatesTable)
-        .where(eq(candidatesTable.sessionId, existingId))
-        .then((rows) => rows.filter((r) => r.outcome !== "PENDING"));
+        .where(eq(candidatesTable.sessionId, existingId));
+
+      const affectedOutcomes = existingRows.filter((r) => r.outcome !== "PENDING");
+
+      const incomingIdentities = new Set(uniqueMappedSetups.map((c) => candidateIdentity(c as any)));
+      const wouldRemove = existingRows
+        .filter((r) => r.outcome === "PENDING" && !incomingIdentities.has(candidateIdentity(r as any)))
+        .map(({ ticker, category, direction, market }) => ({ ticker, category, direction, market }));
 
       res.status(409).json({
         error: `A session for ${sessionDate} already exists`,
         sessionId: existingId,
         date: sessionDate,
         affectedOutcomes,
+        wouldRemove,
       });
       return;
-    }
-
-    // 4. Map setups → candidates (SE + US combined), rank each market separately.
-    //    Tag each setup with its market BEFORE combining so the market column is populated.
-    const usRaw: any[] = edgeData?.markets?.US?.setups ?? [];
-    const taggedSetups = [
-      ...setups.map((s: any) => ({ ...s, _market: "SE" as const })),
-      ...usRaw.map((s: any) => ({ ...s, _market: "US" as const })),
-    ];
-    const rankCounter: Record<string, number> = {};
-
-    const mappedSetups = taggedSetups.map((s: any) => {
-      const direction = edgeAiDirection(s.dir);
-      const category = mapSetupToCategory(direction, s.setup ?? "");
-      const rankKey = `${s._market}:${category}`;
-      rankCounter[rankKey] = (rankCounter[rankKey] ?? 0) + 1;
-      const entry = Number(s.entry ?? 0);
-      const stop = Number(s.stop ?? 0);
-      const target = Number(s.target ?? 0);
-      const oneR = Math.abs(entry - stop);
-      // Strip .ST so SE tickers are stored as base form (ALFA, ERIC-B).
-      // US tickers have no .ST so stripping is a no-op (AMD stays AMD).
-      // resolveYahooTicker() re-adds .ST for SE tickers via SE_BASE_TICKERS / hyphen rule.
-      const ticker = String(s.ticker ?? "").replace(/\.ST$/i, "").toUpperCase();
-      // barsAgo: how many bars (trading days) ago the signal was first triggered
-      const barsAgo = Number(s.barsAgo ?? 0);
-      const chart = Array.isArray(s.chart) ? s.chart : [];
-      const signalRsi = calculateWilderRsi(chart.map((bar: any) => Number(bar?.c)));
-      const signalGapPct = calculateOpeningGapPct(chart);
-      return {
-        market: s._market,                 // "SE" or "US" — drives the market split in today.tsx
-        category,
-        rank: rankCounter[rankKey],
-        ticker,
-        price: entry,
-        rs3m: Number(s.rs ?? 0),
-        // Normalize to decimal 0–1 (EdgeAI may send integer % like 51)
-        perf1m: (() => { const wr = Number(s.edge?.winRate ?? 0); return wr > 1 ? wr / 100 : wr; })(), // store winRate here for per-candidate display
-        // `rsi` is a legacy integer display field. Round the calculated
-        // expectancy percentage before storing it in the integer DB column.
-        rsi: Math.round(Number(s.edge?.expectancyR ?? 0) * 100),
-        pctB: Number(s.edge?.sample ?? 0),           // store N (sample size)
-        atr: oneR,
-        volMultiplier: 0,  // filled in by live Yahoo Finance fetch below
-        earningsInDays: null as number | null,
-        distFrom20dH: barsAgo,             // store signal age in trading days
-        signalRsi,
-        signalGapPct,
-        gapWarning: signalGapPct != null && Math.abs(signalGapPct) >= 2.5 ? signalGapPct : null,
-        direction,
-        entryPrice: entry,
-        stopPrice: stop,
-        targetPrice: target,
-        rr: Number(s.rr ?? 0),
-        oneR,
-        outcome: "PENDING" as const,
-      };
-    });
-    const { candidates: uniqueMappedSetups, skipped } = deduplicateCandidates(mappedSetups);
-    if (skipped.length > 0) {
-      logger.warn({ skipped }, "EdgeAI import skipped duplicate candidate identities");
     }
 
     const existingCandidates =
@@ -210,7 +159,7 @@ router.post(
     await Promise.allSettled(
       uniqueMappedSetups.map(async (c) => {
         try {
-          const q = (await yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false })) as any;
+          const q = (await withRetry(() => yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false }))) as any;
           const volumeMultiplier = volumeMultiplierFromQuote(q);
           if (volumeMultiplier != null) {
             c.volMultiplier = volumeMultiplier;

@@ -43,6 +43,13 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
   let wins = 0;
   let losses = 0;
 
+  // Per-direction (buy vs. sell picks) breakdown — same accounting as the
+  // aggregate totals above, split by whether the pick was a LONG or SHORT.
+  const byDirection = {
+    LONG: { totalTrades: 0, wins: 0, losses: 0, totalR: 0 },
+    SHORT: { totalTrades: 0, wins: 0, losses: 0, totalR: 0 },
+  };
+
   const sessionResults = sessions.map((session) => {
     const candidates = bySession.get(session.id) ?? [];
 
@@ -86,6 +93,8 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
       // Use the dedicated rr column (volMultiplier now stores volume ratio, not R:R)
       const rr = (c.rr ?? 0) > 0 ? (c.rr as number) : 1.5;
 
+      const dirBucket = c.direction === "SHORT" ? byDirection.SHORT : byDirection.LONG;
+
       let r: number | null = null;
       if (c.outcome === "WIN") {
         r = rr;
@@ -94,6 +103,9 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
         sessionHasResolved = true;
         sessionR += r;
         cumulativeR += r;
+        dirBucket.wins++;
+        dirBucket.totalTrades++;
+        dirBucket.totalR += r;
       } else if (c.outcome === "LOSS") {
         r = -1;
         losses++;
@@ -101,6 +113,9 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
         sessionHasResolved = true;
         sessionR += r;
         cumulativeR += r;
+        dirBucket.losses++;
+        dirBucket.totalTrades++;
+        dirBucket.totalR += r;
       }
 
       // earningsWarning: true when earningsInDays (stored at import time) is
@@ -150,6 +165,15 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
   const winRate = totalTrades > 0 ? wins / totalTrades : null;
   const avgRPerTrade = totalTrades > 0 ? cumulativeR / totalTrades : null;
 
+  const summarizeDirection = (b: { totalTrades: number; wins: number; losses: number; totalR: number }) => ({
+    totalTrades: b.totalTrades,
+    wins: b.wins,
+    losses: b.losses,
+    winRate: b.totalTrades > 0 ? b.wins / b.totalTrades : null,
+    totalR: b.totalR,
+    avgRPerTrade: b.totalTrades > 0 ? b.totalR / b.totalTrades : null,
+  });
+
   res.json({
     sessions: sessionResults,
     stats: {
@@ -161,6 +185,10 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
       winRate,
       totalR: cumulativeR,
       avgRPerTrade,
+      byDirection: {
+        LONG: summarizeDirection(byDirection.LONG),
+        SHORT: summarizeDirection(byDirection.SHORT),
+      },
     },
   });
 });
@@ -175,6 +203,10 @@ function emptyStats() {
     winRate: null,
     totalR: 0,
     avgRPerTrade: null,
+    byDirection: {
+      LONG: { totalTrades: 0, wins: 0, losses: 0, winRate: null, totalR: 0, avgRPerTrade: null },
+      SHORT: { totalTrades: 0, wins: 0, losses: 0, winRate: null, totalR: 0, avgRPerTrade: null },
+    },
   };
 }
 

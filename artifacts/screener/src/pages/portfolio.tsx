@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Briefcase, TrendingUp, TrendingDown, RefreshCw, Plus, Trash2,
-  AlertTriangle, Target, ShieldAlert, ChevronUp, ChevronDown, ClipboardPaste, CheckCircle2,
+  AlertTriangle, Target, ShieldAlert, ChevronUp, ChevronDown, ClipboardPaste, CheckCircle2, Pencil, X,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -271,12 +271,153 @@ function PriceBar({ pos }: { pos: Position }) {
   );
 }
 
+// ── edit-position form (in-place, no delete + re-add) ───────────────────────────
+function EditPositionForm({ pos, onCancel, onSuccess }: { pos: Position; onCancel: () => void; onSuccess: () => void }) {
+  const [form, setForm] = useState({
+    ticker: pos.ticker,
+    instrument: pos.instrument ?? "",
+    direction: pos.direction,
+    entryPrice: String(pos.entryPrice),
+    shares: String(pos.shares),
+    stopPrice: pos.stopPrice != null ? String(pos.stopPrice) : "",
+    targetPrice: pos.targetPrice != null ? String(pos.targetPrice) : "",
+    market: (pos.market as "SE" | "US" | null) ?? "SE",
+    notes: pos.notes ?? "",
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const submit = async () => {
+    if (!form.ticker.trim() || !form.entryPrice || !form.shares) {
+      setError("Ticker, entrypris och antal aktier krävs.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(api(`/portfolio/${pos.id}`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ticker: form.ticker.trim().toUpperCase(),
+          instrument: form.instrument.trim() || null,
+          direction: form.direction,
+          entryPrice: parseFloat(form.entryPrice),
+          shares: parseFloat(form.shares),
+          stopPrice: form.stopPrice ? parseFloat(form.stopPrice) : null,
+          targetPrice: form.targetPrice ? parseFloat(form.targetPrice) : null,
+          market: form.market || null,
+          notes: form.notes.trim() || null,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? `Fel ${res.status}`);
+        return;
+      }
+      onSuccess();
+    } catch (e: any) {
+      setError(e.message ?? "Nätverksfel");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const inp = "w-full bg-background border border-border rounded-md px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary";
+  const label = "text-[10px] uppercase tracking-wider text-muted-foreground mb-1 block";
+
+  return (
+    <div className="bg-card border border-primary/30 rounded-lg p-5 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <Pencil className="h-4 w-4 text-primary" /> Redigera {pos.ticker}
+        </h3>
+        <button onClick={onCancel} className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+        <div>
+          <label className={label}>Ticker</label>
+          <input className={inp} value={form.ticker} onChange={e => set("ticker", e.target.value)} />
+        </div>
+        <div className="col-span-2 sm:col-span-2">
+          <label className={label}>Köpt verktyg</label>
+          <input className={inp} value={form.instrument} onChange={e => set("instrument", e.target.value)} />
+        </div>
+        <div>
+          <label className={label}>Riktning</label>
+          <select className={inp} value={form.direction} onChange={e => set("direction", e.target.value as "LONG" | "SHORT")}>
+            <option value="LONG">▲ LONG</option>
+            <option value="SHORT">▼ SHORT</option>
+          </select>
+        </div>
+        <div>
+          <label className={label}>Marknad</label>
+          <select className={inp} value={form.market ?? "SE"} onChange={e => set("market", e.target.value as "SE" | "US")}>
+            <option value="SE">SE</option>
+            <option value="US">US</option>
+          </select>
+        </div>
+        <div>
+          <label className={label}>Antal aktier</label>
+          <input className={inp} type="number" value={form.shares} onChange={e => set("shares", e.target.value)} />
+        </div>
+        <div>
+          <label className={label}>Entry-pris</label>
+          <input className={inp} type="number" step="0.01" value={form.entryPrice} onChange={e => set("entryPrice", e.target.value)} />
+        </div>
+        <div>
+          <label className={label}>Stop-pris</label>
+          <input className={inp} type="number" step="0.01" value={form.stopPrice} onChange={e => set("stopPrice", e.target.value)} />
+        </div>
+        <div>
+          <label className={label}>Målkurs (target)</label>
+          <input className={inp} type="number" step="0.01" value={form.targetPrice} onChange={e => set("targetPrice", e.target.value)} />
+        </div>
+        <div className="sm:col-span-1">
+          <label className={label}>Anteckning</label>
+          <input className={inp} value={form.notes} onChange={e => set("notes", e.target.value)} />
+        </div>
+      </div>
+      {error && (
+        <div className="mb-3 text-xs text-destructive flex items-center gap-2">
+          <AlertTriangle className="h-3 w-3 shrink-0" />{error}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <button
+          onClick={submit}
+          disabled={submitting}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors"
+        >
+          {submitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+          Spara ändringar
+        </button>
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 text-sm rounded-md text-muted-foreground hover:bg-muted transition-colors"
+        >
+          Avbryt
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── single position card ───────────────────────────────────────────────────────
-function PositionCard({ pos, onDelete }: { pos: Position; onDelete: (id: number) => void }) {
+function PositionCard({ pos, onDelete, onEdited }: { pos: Position; onDelete: (id: number) => void; onEdited: () => void }) {
   const isShort = pos.direction === "SHORT";
   const pnlUp = (pos.unrealisedKr ?? 0) >= 0;
   const rVal = pos.currentR ?? 0;
   const rColor = rVal >= 1 ? "text-success" : rVal <= -0.5 ? "text-destructive" : "text-amber-500";
+  const [editing, setEditing] = useState(false);
+
+  if (editing) {
+    return <EditPositionForm pos={pos} onCancel={() => setEditing(false)} onSuccess={() => { setEditing(false); onEdited(); }} />;
+  }
 
   return (
     <div className={`bg-card border rounded-lg p-5 shadow-sm transition-colors ${
@@ -339,6 +480,13 @@ function PositionCard({ pos, onDelete }: { pos: Position; onDelete: (id: number)
               )}
             </div>
           )}
+          <button
+            onClick={() => setEditing(true)}
+            className="p-1.5 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+            title="Redigera position"
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
           <button
             onClick={() => onDelete(pos.id)}
             className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
@@ -705,6 +853,10 @@ export function Portfolio() {
     qc.invalidateQueries({ queryKey: ["portfolio"] });
   }, [qc]);
 
+  const onEdited = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ["portfolio"] });
+  }, [qc]);
+
   const positions = data?.positions ?? [];
   const longs = positions.filter(p => p.direction === "LONG");
   const shorts = positions.filter(p => p.direction === "SHORT");
@@ -792,7 +944,7 @@ export function Portfolio() {
             <TrendingUp className="h-4 w-4 text-success" /> Köp-positioner ({longs.length})
           </h3>
           {longs.map(pos => (
-            <PositionCard key={pos.id} pos={pos} onDelete={id => deleteMutation.mutate(id)} />
+            <PositionCard key={pos.id} pos={pos} onDelete={id => deleteMutation.mutate(id)} onEdited={onEdited} />
           ))}
         </section>
       )}
@@ -804,7 +956,7 @@ export function Portfolio() {
             <TrendingDown className="h-4 w-4 text-destructive" /> Sälj-positioner ({shorts.length})
           </h3>
           {shorts.map(pos => (
-            <PositionCard key={pos.id} pos={pos} onDelete={id => deleteMutation.mutate(id)} />
+            <PositionCard key={pos.id} pos={pos} onDelete={id => deleteMutation.mutate(id)} onEdited={onEdited} />
           ))}
         </section>
       )}

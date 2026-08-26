@@ -6,10 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { AffectedOutcome } from './affectedOutcome';
+import type { RemovedCandidatePreview } from './removedCandidatePreview';
 
 export interface ImportConflict {
   error: string;
   sessionId: number;
   date: string;
   affectedOutcomes: AffectedOutcome[];
+  /** Still-pending candidates (no logged outcome) that are not present in the new import and would be deleted on a force re-import. Logged outcomes are never deleted. */
+  wouldRemove?: RemovedCandidatePreview[];
 }

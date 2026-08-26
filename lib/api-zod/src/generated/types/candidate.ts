@@ -7,6 +7,7 @@
  */
 import type { CandidateCategory } from './candidateCategory';
 import type { CandidateDirection } from './candidateDirection';
+import type { CandidateMarket } from './candidateMarket';
 import type { CandidateOutcomeProperty } from './candidateOutcomeProperty';
 import type { SignalReview } from './signalReview';
 
@@ -36,11 +37,8 @@ export interface Candidate {
   distFrom20dH: number;
   /** @nullable */
   gapWarning?: number | null;
-  /**
-     * Origin market for the signal: SE or US
-     * @nullable
-     */
-  market?: string | null;
+  /** Origin market for the signal: SE or US */
+  market?: CandidateMarket;
   direction: CandidateDirection;
   entryPrice: number;
   stopPrice: number;

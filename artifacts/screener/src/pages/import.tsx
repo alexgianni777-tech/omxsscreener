@@ -14,10 +14,18 @@ type AffectedOutcome = {
   exitPrice: number | null;
 };
 
+type RemovedCandidatePreview = {
+  ticker: string;
+  category: string;
+  direction: string;
+  market?: string | null;
+};
+
 type ConflictInfo = {
   sessionId: number;
   date: string;
   affectedOutcomes: AffectedOutcome[];
+  wouldRemove: RemovedCandidatePreview[];
   rawText: string;
 };
 
@@ -71,6 +79,7 @@ export function Import() {
               sessionId: body.sessionId,
               date: body.date,
               affectedOutcomes: body.affectedOutcomes,
+              wouldRemove: body.wouldRemove ?? [],
               rawText: text,
             });
           } else {
@@ -133,6 +142,7 @@ export function Import() {
           sessionId: data.sessionId,
           date: data.date,
           affectedOutcomes: data.affectedOutcomes,
+          wouldRemove: data.wouldRemove ?? [],
           rawText: "__edgeai__", // sentinel — not used for edge import
         });
         setEdgeStatus({ kind: "idle" });
@@ -334,6 +344,31 @@ MARKNADSVÄDER  OMXS30 3305.0 | 5d  2.7% | 1m  1.8% | 3m  8.9% | RSI  79
                     </p>
                   )}
                 </>
+              )}
+
+              {conflict.wouldRemove.length > 0 && (
+                <div className="space-y-1.5 pt-1 border-t border-border">
+                  <p className="text-sm text-muted-foreground pt-3">
+                    These still-pending picks are{" "}
+                    <span className="text-foreground font-medium">not present</span>{" "}
+                    in the new import and will be{" "}
+                    <span className="text-destructive font-medium">removed</span> (no outcome
+                    was logged for them, so nothing tracked is lost):
+                  </p>
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                    {conflict.wouldRemove.map((c) => (
+                      <div
+                        key={`${c.ticker}-${c.category}-${c.direction}`}
+                        className="flex items-center justify-between rounded-md px-3 py-2 bg-destructive/5 border border-destructive/20 text-sm"
+                      >
+                        <span className="font-mono font-medium">{c.ticker}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {c.category} · {c.direction}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
 

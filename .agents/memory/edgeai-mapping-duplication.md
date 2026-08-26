@@ -1,10 +1,10 @@
 ---
-name: EdgeAI candidate mapping is duplicated across two files
-description: scheduler.ts (auto-import) and edgeai.ts (manual EdgeAI import) each maintain their own separate mapping from raw EdgeAI setup JSON to candidate DB rows.
+name: EdgeAI candidate mapping — now a single shared module
+description: Raw EdgeAI setup JSON → candidate DB row mapping used to be duplicated between scheduler.ts and edgeai.ts; it is now one shared function.
 ---
 
-The scheduled auto-importer (`artifacts/api-server/src/lib/scheduler.ts`) and the manual "Importera från EdgeAI" endpoint (`artifacts/api-server/src/routes/edgeai.ts`) do not share one mapping function. Each independently converts raw EdgeAI setup JSON into the fields written to `candidatesTable`.
+**Resolved.** The scheduled auto-importer (`artifacts/api-server/src/lib/scheduler.ts`) and the manual "Importera från EdgeAI" endpoint (`artifacts/api-server/src/routes/edgeai.ts`) both now import `mapEdgeAiCategory()` / `mapEdgeAiSetup()` from the single shared module `artifacts/api-server/src/lib/edgeAiMapping.ts`. Neither file keeps its own copy of the mapping anymore.
 
-**Why:** A rounding/type fix applied to one file's mapping does not propagate to the other. This already caused a real incident: `edgeai.ts` rounded the `rsi` field before insert (it maps to an `integer` Postgres column) but `scheduler.ts` didn't, so the daily auto-import silently rolled back its entire transaction every time a fractional RSI value appeared — invisible until someone checked whether a session existed for that date.
+**Why this used to matter:** when the mapping was duplicated, a rounding/type fix applied to one file didn't propagate to the other. That caused a real incident — `edgeai.ts` rounded `rsi` before insert (an `integer` column) but `scheduler.ts` didn't, so the daily auto-import silently rolled back every time a fractional RSI value appeared.
 
-**How to apply:** When fixing a field-mapping, rounding, null-handling, or type-coercion bug in one of these two files, check the same logic in the other file before considering the fix done. Ideally future work should extract a single shared mapping function, but until then, treat any candidate-field bug fix here as needing a duplicate check.
+**How to apply now:** any change to raw-setup→candidate-row mapping (new field, rounding, null-handling, direction logic) belongs in `edgeAiMapping.ts` only. There is no second copy to keep in sync — if you find yourself editing mapping logic directly inside `scheduler.ts` or `edgeai.ts` again, that's a regression back toward the old duplication; move it into the shared module instead.

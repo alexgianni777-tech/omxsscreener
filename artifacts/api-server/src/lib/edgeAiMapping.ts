@@ -1,0 +1,92 @@
+/**
+ * Single source of truth for mapping a raw EdgeAI setup object to a candidate
+ * row's fields. Used by BOTH the scheduled auto-import (scheduler.ts) and the
+ * manual "Importera från EdgeAI" endpoint (routes/edgeai.ts).
+ *
+ * IMPORTANT: never re-implement this mapping in either caller. A rounding/type
+ * mismatch between two separate copies of this logic has already caused a real
+ * incident: one copy rounded `rsi` before insert (the column is an integer)
+ * while the other didn't, so the daily auto-import silently rolled back its
+ * transaction whenever a fractional value appeared — invisible until someone
+ * checked whether a session existed for that date. Keep this the only copy.
+ */
+import { calculateOpeningGapPct, calculateWilderRsi } from "./marketIndicators";
+import { edgeAiDirection } from "./edgeAiSource";
+
+export type EdgeAiCategory = "MOMENTUM" | "SQUEEZE" | "STUDS" | "WEAKEST";
+export type EdgeAiMarket = "SE" | "US";
+
+export function mapEdgeAiCategory(
+  direction: "LONG" | "SHORT",
+  setupName: string,
+): EdgeAiCategory {
+  if (direction === "SHORT") return "WEAKEST";
+  const n = setupName.toLowerCase();
+  if (n.includes("squeeze") || n.includes("bollinger") || n.includes("reversion") || n.includes("mean"))
+    return "SQUEEZE";
+  if (n.includes("pullback") || n.includes("stud") || n.includes("reversal"))
+    return "STUDS";
+  return "MOMENTUM"; // breakout, momentum, flag, trend, default
+}
+
+/**
+ * Maps one raw EdgeAI setup to a candidate row. `rankCounter` is a caller-owned
+ * dict used to assign a 1-based rank within each `${market}:${category}` bucket
+ * — pass a fresh dict per session, and the same dict across markets is safe
+ * since the key already includes the market.
+ */
+export function mapEdgeAiSetup(
+  s: any,
+  market: EdgeAiMarket,
+  rankCounter: Record<string, number>,
+) {
+  const direction = edgeAiDirection(s.dir);
+  const category = mapEdgeAiCategory(direction, s.setup ?? "");
+  const rankKey = `${market}:${category}`;
+  rankCounter[rankKey] = (rankCounter[rankKey] ?? 0) + 1;
+
+  const entry = Number(s.entry ?? 0);
+  const stop = Number(s.stop ?? 0);
+  const oneR = Math.abs(entry - stop);
+  // Use EdgeAI's own calibrated target — it reflects the system's actual back-tested level.
+  // Forcing a fixed R:R would reduce win rate below the system's calibration.
+  const targetPrice = Number(s.target ?? 0);
+  const rr = Number(s.rr ?? 0);
+  // Strip .ST so resolveYahooTicker can re-add it correctly for SE stocks;
+  // US tickers have no .ST so this is a no-op for them.
+  const ticker = String(s.ticker ?? "").replace(/\.ST$/i, "").toUpperCase();
+  // barsAgo: how many bars (trading days) ago the signal was first triggered
+  const barsAgo = Number(s.barsAgo ?? 0);
+  const chart = Array.isArray(s.chart) ? s.chart : [];
+  const signalRsi = calculateWilderRsi(chart.map((bar: any) => Number(bar?.c)));
+  const signalGapPct = calculateOpeningGapPct(chart);
+
+  return {
+    market,
+    category,
+    rank: rankCounter[rankKey],
+    ticker,
+    price: entry,
+    rs3m: Number(s.rs ?? 0),
+    // Normalize to decimal 0–1 (EdgeAI may send integer % like 51).
+    perf1m: (() => { const wr = Number(s.edge?.winRate ?? 0); return wr > 1 ? wr / 100 : wr; })(),
+    // `rsi` is a legacy integer display field mapped from EdgeAI's expectancy —
+    // the column is a Postgres integer, so this MUST be rounded before insert.
+    rsi: Math.round(Number(s.edge?.expectancyR ?? 0) * 100),
+    pctB: Number(s.edge?.sample ?? 0), // store N (sample size)
+    atr: oneR,
+    volMultiplier: 0, // filled in by live Yahoo Finance fetch by the caller
+    earningsInDays: null as number | null,
+    distFrom20dH: barsAgo, // store signal age in trading days
+    signalRsi,
+    signalGapPct,
+    gapWarning: signalGapPct != null && Math.abs(signalGapPct) >= 2.5 ? signalGapPct : null,
+    direction,
+    entryPrice: entry,
+    stopPrice: stop,
+    targetPrice,
+    rr,
+    oneR,
+    outcome: "PENDING" as const,
+  };
+}

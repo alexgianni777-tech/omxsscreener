@@ -13,13 +13,14 @@ import { logger } from "./logger";
 import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "./omxs30TickerMap";
 import {
-  calculateOpeningGapPct,
   calculateWilderRsi,
   volumeMultiplierFromQuote,
 } from "./marketIndicators";
-import { edgeAiDirection, fetchFreshEdgeAiData } from "./edgeAiSource";
+import { fetchFreshEdgeAiData } from "./edgeAiSource";
 import { lockScreenerSession, synchronizeCandidates } from "./candidateSynchronization";
 import { calendarDaysUntil } from "./marketCalendar";
+import { mapEdgeAiSetup } from "./edgeAiMapping";
+import { withRetry } from "./retry";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -64,24 +65,16 @@ async function sessionExistsForDate(date: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-function mapCategory(direction: "LONG" | "SHORT", setupName: string): "MOMENTUM" | "SQUEEZE" | "STUDS" | "WEAKEST" {
-  if (direction === "SHORT") return "WEAKEST";
-  const n = setupName.toLowerCase();
-  if (n.includes("squeeze") || n.includes("bollinger") || n.includes("reversion")) return "SQUEEZE";
-  if (n.includes("pullback") || n.includes("stud") || n.includes("reversal")) return "STUDS";
-  return "MOMENTUM";
-}
-
 async function fetchOmxsMarketWeather(): Promise<{
   omxsValue: number; perf5d: number; perf1m: number; perf3m: number; marketRsi: number;
 }> {
   const now = new Date();
   const ninetyFiveDaysAgo = new Date(now.getTime() - 95 * 86_400_000);
-  const history = await yf.historical("^OMX", {
+  const history = await withRetry(() => yf.historical("^OMX", {
     period1: ninetyFiveDaysAgo,
     period2: now,
     interval: "1d",
-  }) as Array<{ close: number }>;
+  })) as Array<{ close: number }>;
 
   if (history.length === 0) return { omxsValue: 0, perf5d: 0, perf1m: 0, perf3m: 0, marketRsi: 0 };
 
@@ -91,50 +84,6 @@ async function fetchOmxsMarketWeather(): Promise<{
   const perf3m  = history.length >= 64 ? ((omxsValue - history[history.length - 64].close) / history[history.length - 64].close) * 100 : 0;
   const marketRsi = calculateWilderRsi(history.map((bar) => Number(bar.close))) ?? 0;
   return { omxsValue, perf5d, perf1m, perf3m, marketRsi };
-}
-
-function mapSetup(s: any, rankCounter: Record<string, number>) {
-  const direction = edgeAiDirection(s.dir);
-  const category = mapCategory(direction, s.setup ?? "");
-  rankCounter[category] = (rankCounter[category] ?? 0) + 1;
-  const entry      = Number(s.entry  ?? 0);
-  const stop       = Number(s.stop   ?? 0);
-  const oneR       = Math.abs(entry - stop);
-  // Use EdgeAI's own calibrated target — it reflects the system's actual back-tested level.
-  // Forcing a fixed R:R would reduce win rate below the system's calibration.
-  const targetPrice = Number(s.target ?? 0);
-  const rr          = Number(s.rr    ?? 0);
-  // Strip .ST so resolveYahooTicker can re-add it correctly for SE stocks;
-  // US tickers have no .ST so this is a no-op for them.
-  const ticker  = String(s.ticker ?? "").replace(/\.ST$/i, "").toUpperCase();
-  const barsAgo = Number(s.barsAgo ?? 0);
-  const chart = Array.isArray(s.chart) ? s.chart : [];
-  const signalRsi = calculateWilderRsi(chart.map((bar: any) => Number(bar?.c)));
-  const signalGapPct = calculateOpeningGapPct(chart);
-  return {
-    category,
-    rank: rankCounter[category],
-    ticker,
-    price: entry,
-    rs3m: Number(s.rs ?? 0),
-    perf1m: (() => { const winRate = Number(s.edge?.winRate ?? 0); return winRate > 1 ? winRate / 100 : winRate; })(),
-    rsi: Math.round(Number(s.edge?.expectancyR ?? 0) * 100),
-    pctB: Number(s.edge?.sample ?? 0),
-    atr: oneR,
-    volMultiplier: 0, // filled in by live fetch below
-    earningsInDays: null as number | null,
-    distFrom20dH: barsAgo,
-    signalRsi,
-    signalGapPct,
-    gapWarning: signalGapPct != null && Math.abs(signalGapPct) >= 2.5 ? signalGapPct : null,
-    direction,
-    entryPrice: entry,
-    stopPrice: stop,
-    targetPrice,
-    rr,
-    oneR,
-    outcome: "PENDING" as const,
-  };
 }
 
 async function runImport(date: string): Promise<void> {
@@ -164,8 +113,8 @@ async function runImport(date: string): Promise<void> {
 
   const rankCounterSE: Record<string, number> = {};
   const rankCounterUS: Record<string, number> = {};
-  const seMapped = seSetups.map((s) => ({ ...mapSetup(s, rankCounterSE), market: "SE" as const }));
-  const usMapped = usSetups.map((s) => ({ ...mapSetup(s, rankCounterUS), market: "US" as const }));
+  const seMapped = seSetups.map((s) => mapEdgeAiSetup(s, "SE", rankCounterSE));
+  const usMapped = usSetups.map((s) => mapEdgeAiSetup(s, "US", rankCounterUS));
   const mapped = [...seMapped, ...usMapped];
 
   // Enrich volume from live Yahoo Finance data. A missing result is retained as
@@ -174,7 +123,7 @@ async function runImport(date: string): Promise<void> {
   await Promise.allSettled(
     mapped.map(async (c) => {
       try {
-        const q = (await yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false })) as any;
+        const q = (await withRetry(() => yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false }))) as any;
         const volumeMultiplier = volumeMultiplierFromQuote(q);
         if (volumeMultiplier != null) {
           c.volMultiplier = volumeMultiplier;

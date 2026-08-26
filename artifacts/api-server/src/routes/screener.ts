@@ -19,7 +19,9 @@ import { volumeMultiplierFromQuote } from "../lib/marketIndicators";
 import { calendarDaysBetween } from "../lib/marketCalendar";
 import { reviewCandidate, reviewSession } from "../lib/screeningReview";
 import { logger } from "../lib/logger";
+import { withRetry } from "../lib/retry";
 import {
+  candidateIdentity,
   deduplicateCandidates,
   lockScreenerSession,
   mergeCandidateInputs,
@@ -65,24 +67,37 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
 
   if (existing.length > 0 && !force) {
     // Return 409 with details about any logged outcomes so the UI can show
-    // exactly what would be preserved on a force re-import.
+    // exactly what would be preserved on a force re-import — and which
+    // still-pending candidates would be REMOVED because they're absent from
+    // this new import (logged outcomes are never removed).
     const existingId = existing[0].id;
-    const affectedOutcomes = await db
+    const existingRows = await db
       .select({
         ticker: candidatesTable.ticker,
         category: candidatesTable.category,
+        direction: candidatesTable.direction,
+        market: candidatesTable.market,
         outcome: candidatesTable.outcome,
         exitPrice: candidatesTable.exitPrice,
       })
       .from(candidatesTable)
-      .where(eq(candidatesTable.sessionId, existingId))
-      .then((rows) => rows.filter((r) => r.outcome !== "PENDING"));
+      .where(eq(candidatesTable.sessionId, existingId));
+
+    const affectedOutcomes = existingRows.filter((r) => r.outcome !== "PENDING");
+
+    const incomingIdentities = new Set(
+      session.candidates.map((c) => candidateIdentity({ ...c, market: "SE" })),
+    );
+    const wouldRemove = existingRows
+      .filter((r) => r.outcome === "PENDING" && !incomingIdentities.has(candidateIdentity(r as any)))
+      .map(({ ticker, category, direction, market }) => ({ ticker, category, direction, market }));
 
     res.status(409).json({
       error: `A session for ${session.date} already exists`,
       sessionId: existingId,
       date: session.date,
       affectedOutcomes,
+      wouldRemove,
     });
     return;
   }
@@ -322,8 +337,9 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
 
   let updatedSession: typeof existingSession;
   let resultCandidates: (typeof candidatesTable.$inferSelect)[];
+  let diff: import("../lib/candidateSynchronization").CandidateSyncDiff;
   try {
-    ({ updatedSession, resultCandidates } = await db.transaction(async (tx) => {
+    ({ updatedSession, resultCandidates, diff } = await db.transaction(async (tx) => {
       await lockScreenerSession(tx, existingSession.date);
       const [updatedSession] = await tx
         .update(screenerSessionsTable)
@@ -389,6 +405,7 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
         trendLabel: updatedSession.trendLabel,
       },
       candidates: resultCandidates.map((c) => mapCandidate(c, linkedIds.has(c.id))),
+      importDiff: diff,
     })
   );
 });
@@ -627,7 +644,7 @@ function mapCandidate(c: {
   distFrom20dH: number;
   gapWarning: number | null;
   earningsInDays: number | null;
-  market: string | null;
+  market: string;
   direction: string;
   entryPrice: number;
   stopPrice: number;
@@ -657,7 +674,7 @@ function mapCandidate(c: {
     distFrom20dH: c.distFrom20dH,
     gapWarning: c.gapWarning ?? null,
     earningsInDays: c.earningsInDays ?? null,
-    market: c.market ?? null,
+    market: c.market,
     direction: c.direction,
     entryPrice: c.entryPrice,
     stopPrice: c.stopPrice,
@@ -750,7 +767,7 @@ async function enrichVolMultiplier(
   await Promise.allSettled(
     [...new Set(tickers)].map(async (ticker) => {
       try {
-        const q = (await yf.quote(resolveYahooTicker(ticker), {}, { validateResult: false })) as any;
+        const q = (await withRetry(() => yf.quote(resolveYahooTicker(ticker), {}, { validateResult: false }))) as any;
         const volumeMultiplier = volumeMultiplierFromQuote(q);
         if (volumeMultiplier != null) {
           volMap.set(ticker, volumeMultiplier);

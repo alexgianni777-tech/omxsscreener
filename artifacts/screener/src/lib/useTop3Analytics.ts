@@ -23,6 +23,15 @@ export interface Top3Session {
   cumulativeR: number;
 }
 
+export interface Top3DirectionStats {
+  totalTrades: number;
+  wins: number;
+  losses: number;
+  winRate: number | null;
+  totalR: number;
+  avgRPerTrade: number | null;
+}
+
 export interface Top3Stats {
   totalSessions: number;
   completedSessions: number;
@@ -32,6 +41,10 @@ export interface Top3Stats {
   winRate: number | null;
   totalR: number;
   avgRPerTrade: number | null;
+  byDirection: {
+    LONG: Top3DirectionStats;
+    SHORT: Top3DirectionStats;
+  };
 }
 
 export interface Top3Analytics {

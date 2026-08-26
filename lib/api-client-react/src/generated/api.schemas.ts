@@ -95,11 +95,46 @@ export interface AffectedOutcome {
   exitPrice?: number | null;
 }
 
+export type RemovedCandidatePreviewCategory = typeof RemovedCandidatePreviewCategory[keyof typeof RemovedCandidatePreviewCategory];
+
+
+export const RemovedCandidatePreviewCategory = {
+  MOMENTUM: 'MOMENTUM',
+  SQUEEZE: 'SQUEEZE',
+  STUDS: 'STUDS',
+  WEAKEST: 'WEAKEST',
+} as const;
+
+export type RemovedCandidatePreviewDirection = typeof RemovedCandidatePreviewDirection[keyof typeof RemovedCandidatePreviewDirection];
+
+
+export const RemovedCandidatePreviewDirection = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
+export type RemovedCandidatePreviewMarket = typeof RemovedCandidatePreviewMarket[keyof typeof RemovedCandidatePreviewMarket];
+
+
+export const RemovedCandidatePreviewMarket = {
+  SE: 'SE',
+  US: 'US',
+} as const;
+
+export interface RemovedCandidatePreview {
+  ticker: string;
+  category: RemovedCandidatePreviewCategory;
+  direction: RemovedCandidatePreviewDirection;
+  market?: RemovedCandidatePreviewMarket;
+}
+
 export interface ImportConflict {
   error: string;
   sessionId: number;
   date: string;
   affectedOutcomes: AffectedOutcome[];
+  /** Still-pending candidates (no logged outcome) that are not present in the new import and would be deleted on a force re-import. Logged outcomes are never deleted. */
+  wouldRemove?: RemovedCandidatePreview[];
 }
 
 export interface MarketWeather {
@@ -119,6 +154,17 @@ export const CandidateCategory = {
   SQUEEZE: 'SQUEEZE',
   STUDS: 'STUDS',
   WEAKEST: 'WEAKEST',
+} as const;
+
+/**
+ * Origin market for the signal: SE or US
+ */
+export type CandidateMarket = typeof CandidateMarket[keyof typeof CandidateMarket];
+
+
+export const CandidateMarket = {
+  SE: 'SE',
+  US: 'US',
 } as const;
 
 export type CandidateDirection = typeof CandidateDirection[keyof typeof CandidateDirection];
@@ -179,11 +225,8 @@ export interface Candidate {
   distFrom20dH: number;
   /** @nullable */
   gapWarning?: number | null;
-  /**
-     * Origin market for the signal: SE or US
-     * @nullable
-     */
-  market?: string | null;
+  /** Origin market for the signal: SE or US */
+  market?: CandidateMarket;
   direction: CandidateDirection;
   entryPrice: number;
   stopPrice: number;

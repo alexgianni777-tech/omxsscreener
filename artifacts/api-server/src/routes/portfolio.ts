@@ -167,6 +167,62 @@ router.post("/portfolio", async (req, res): Promise<void> => {
   res.status(201).json(pos);
 });
 
+// PATCH /portfolio/:id — edit an existing open position in place (no delete + re-add).
+router.patch("/portfolio/:id", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Ogiltigt id" }); return; }
+
+  const [existing] = await db.select().from(openPositionsTable).where(eq(openPositionsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Position hittades inte" }); return; }
+
+  const { ticker, instrument, direction, entryPrice, shares, stopPrice, targetPrice, market, notes } = req.body ?? {};
+  const updates: Partial<typeof openPositionsTable.$inferInsert> = {};
+
+  if (ticker !== undefined) {
+    if (typeof ticker !== "string" || !ticker.trim()) { res.status(400).json({ error: "Ogiltig ticker." }); return; }
+    updates.ticker = ticker.trim().toUpperCase();
+  }
+  if (instrument !== undefined) {
+    updates.instrument = typeof instrument === "string" && instrument.trim() ? instrument.trim() : null;
+  }
+  if (direction !== undefined) {
+    if (!["LONG", "SHORT"].includes(direction)) { res.status(400).json({ error: "Ogiltig riktning." }); return; }
+    updates.direction = direction;
+  }
+  if (entryPrice !== undefined) {
+    if (typeof entryPrice !== "number" || !isFinite(entryPrice) || entryPrice <= 0) { res.status(400).json({ error: "Ogiltigt entry-pris." }); return; }
+    updates.entryPrice = entryPrice;
+  }
+  if (shares !== undefined) {
+    if (typeof shares !== "number" || !isFinite(shares) || shares <= 0) { res.status(400).json({ error: "Ogiltigt antal aktier." }); return; }
+    updates.shares = shares;
+  }
+  if (stopPrice !== undefined) {
+    updates.stopPrice = typeof stopPrice === "number" && isFinite(stopPrice) && stopPrice > 0 ? stopPrice : null;
+  }
+  if (targetPrice !== undefined) {
+    updates.targetPrice = typeof targetPrice === "number" && isFinite(targetPrice) && targetPrice > 0 ? targetPrice : null;
+  }
+  if (market !== undefined) {
+    updates.market = typeof market === "string" && market ? market.toUpperCase() : null;
+  }
+  if (notes !== undefined) {
+    updates.notes = typeof notes === "string" && notes.trim() ? notes.trim() : null;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "Inga fält att uppdatera." });
+    return;
+  }
+
+  const [updated] = await db
+    .update(openPositionsTable)
+    .set(updates)
+    .where(eq(openPositionsTable.id, id))
+    .returning();
+  res.json(updated);
+});
+
 // POST /portfolio/import — update positions from a pasted broker export.
 // Existing positions are matched by underlying ticker + instrument, so repeating
 // an import refreshes the position instead of creating another row.

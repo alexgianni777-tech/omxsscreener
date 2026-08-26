@@ -1,10 +1,11 @@
 import { useGetSession, getGetSessionQueryKey, useGetQuotes, getGetQuotesQueryKey, Candidate, CandidateOutcomeProperty, useUpdateCandidateOutcome, QuoteResult, ImportDiff } from "@workspace/api-client-react";
 import { useParams, Link } from "wouter";
 import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
-import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity, AlertTriangle, Clock, ExternalLink, CandlestickChart as CandlestickIcon, Star } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity, AlertTriangle, Clock, ExternalLink, CandlestickChart as CandlestickIcon, Star, Briefcase } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { CandlestickChart } from "../components/CandlestickChart";
+import { AddToPortfolioModal } from "../components/AddToPortfolioModal";
 
 // ── Edge score helpers ────────────────────────────────────────────────────────
 // For EdgeAI sessions: rsi field stores expectancyR × 100; perf1m stores winRate.
@@ -263,6 +264,25 @@ export function SessionDetail() {
         </div>
       </div>
 
+      {/* ── Data-quality / no-trade banner — same volume & market-RSI reliability
+           checks as "Idag", surfaced here too so historical sessions show why
+           a setup was blocked or flagged. ── */}
+      {(session as any).sessionReview && (session as any).sessionReview.reasons.length > 0 && (
+        <div className={`flex items-start gap-3 p-4 rounded-lg border ${
+          (session as any).sessionReview.status === "BLOCKED"
+            ? "border-destructive/30 bg-destructive/5"
+            : "border-amber-500/30 bg-amber-500/5"
+        }`}>
+          <ShieldAlert className={`w-4 h-4 shrink-0 mt-0.5 ${(session as any).sessionReview.status === "BLOCKED" ? "text-destructive" : "text-amber-400"}`} />
+          <div>
+            <span className={`font-semibold text-sm ${(session as any).sessionReview.status === "BLOCKED" ? "text-destructive" : "text-amber-400"}`}>
+              {(session as any).sessionReview.status === "BLOCKED" ? "No-trade" : "Kontroll före trade"}
+            </span>
+            <p className="text-xs text-muted-foreground mt-0.5">{(session as any).sessionReview.reasons.join(" ")}</p>
+          </div>
+        </div>
+      )}
+
       {/* ── Stale signal warning ── */}
       {daysOld === 1 && (
         <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-500/30 bg-amber-500/5">
@@ -343,6 +363,13 @@ export function SessionDetail() {
           // For EdgeAI sessions: sort by composite edge score (winRate × expectancyR) descending
           if (isEdgeAI) {
             catCandidates = [...catCandidates].sort((a, b) => edgeScore(b) - edgeScore(a));
+          } else if (cat === "MOMENTUM") {
+            // #58: Momentum should reward stocks with actual price gains, not just
+            // the source list's own line order — sort by relative strength (rs3m)
+            // then 1-month performance, both descending, before falling back to rank.
+            catCandidates = [...catCandidates].sort(
+              (a, b) => (b.rs3m - a.rs3m) || (b.perf1m - a.perf1m) || (a.rank - b.rank),
+            );
           } else {
             catCandidates = catCandidates.sort((a, b) => a.rank - b.rank);
           }
@@ -508,6 +535,7 @@ function CandidateRow({
   const [localOutcome, setLocalOutcome] = useState<CandidateOutcomeProperty>(candidate.outcome);
   const [localExit, setLocalExit] = useState<string>(candidate.exitPrice ? String(candidate.exitPrice) : "");
   const [showChart, setShowChart] = useState(false);
+  const [showAddToPortfolio, setShowAddToPortfolio] = useState(false);
   
   const handleSave = useCallback((removeChallengeTrade?: boolean) => {
     mutateFnRef.current(
@@ -640,8 +668,30 @@ function CandidateRow({
             >
               <Star className={`w-3.5 h-3.5 ${isPicked ? "fill-amber-400" : ""}`} />
             </button>
+            <button
+              onClick={() => setShowAddToPortfolio(true)}
+              title="Lägg till som portföljposition"
+              className="p-1 rounded transition-colors text-muted-foreground hover:text-primary hover:bg-primary/10"
+            >
+              <Briefcase className="w-3.5 h-3.5" />
+            </button>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap justify-end">
+            {/* Data-quality / risk review badge — volume, market-RSI and other
+                screeningReview checks (same rules as "Idag") */}
+            {(candidate as any).review && (candidate as any).review.status !== "APPROVED" && (
+              <div
+                className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold ${
+                  (candidate as any).review.status === "BLOCKED"
+                    ? "text-destructive bg-destructive/10 border-destructive/30"
+                    : "text-amber-500 bg-amber-500/10 border-amber-500/30"
+                }`}
+                title={(candidate as any).review.reasons.join(" ")}
+              >
+                <ShieldAlert className="w-3 h-3" />
+                {(candidate as any).review.status === "BLOCKED" ? "Stoppad" : "Kontroll"}
+              </div>
+            )}
             {/* Earnings warning badge */}
             {hasEarningsWarning && (
               <div
@@ -877,6 +927,21 @@ function CandidateRow({
           height={320}
         />
       </div>
+    )}
+
+    {showAddToPortfolio && (
+      <AddToPortfolioModal
+        prefill={{
+          ticker: candidate.ticker,
+          direction: candidate.direction as "LONG" | "SHORT",
+          market: candidate.market,
+          entryPrice: candidate.entryPrice,
+          stopPrice: candidate.stopPrice,
+          targetPrice: candidate.targetPrice,
+        }}
+        onClose={() => setShowAddToPortfolio(false)}
+        onSuccess={() => {}}
+      />
     )}
     </div>
   );

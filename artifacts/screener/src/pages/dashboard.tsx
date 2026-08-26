@@ -1068,16 +1068,32 @@ function Top3MarketCard({
         if (longRes.length === 0 && shortRes.length === 0) return null;
         const longWR = longRes.length > 0 ? longRes.filter((p) => p.outcome === "WIN").length / longRes.length : null;
         const shortWR = shortRes.length > 0 ? shortRes.filter((p) => p.outcome === "WIN").length / shortRes.length : null;
+        const avgR = (pool: typeof longRes) => {
+          const rs = pool.map((p) => p.r).filter((r): r is number => r != null);
+          return rs.length > 0 ? rs.reduce((a, b) => a + b, 0) / rs.length : null;
+        };
+        const longAvgR = avgR(longRes);
+        const shortAvgR = avgR(shortRes);
         return (
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="bg-success/5 border border-success/15 rounded-md p-2">
               <div className="text-[10px] text-success font-semibold mb-0.5">📈 Köp-picks</div>
-              <div className="font-mono">{longWR != null ? formatPercent(longWR) : "—"} hitrate</div>
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono">{longWR != null ? formatPercent(longWR) : "—"} hitrate</span>
+                <span className={`font-mono font-bold ${longAvgR != null ? (longAvgR >= 0 ? "text-success" : "text-destructive") : ""}`}>
+                  {longAvgR != null ? `${longAvgR >= 0 ? "+" : ""}${formatNumber(longAvgR, 2)}R` : "—"} snitt
+                </span>
+              </div>
               <div className="text-[10px] text-muted-foreground">{longRes.length}/{allLong.length} avslutade</div>
             </div>
             <div className="bg-destructive/5 border border-destructive/15 rounded-md p-2">
               <div className="text-[10px] text-destructive font-semibold mb-0.5">📉 Sälj-picks</div>
-              <div className="font-mono">{shortWR != null ? formatPercent(shortWR) : "—"} hitrate</div>
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono">{shortWR != null ? formatPercent(shortWR) : "—"} hitrate</span>
+                <span className={`font-mono font-bold ${shortAvgR != null ? (shortAvgR >= 0 ? "text-success" : "text-destructive") : ""}`}>
+                  {shortAvgR != null ? `${shortAvgR >= 0 ? "+" : ""}${formatNumber(shortAvgR, 2)}R` : "—"} snitt
+                </span>
+              </div>
               <div className="text-[10px] text-muted-foreground">{shortRes.length}/{allShort.length} avslutade</div>
             </div>
           </div>

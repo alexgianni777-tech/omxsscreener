@@ -48,10 +48,31 @@ I `lib/db/package.json` scripts:
 "check": "drizzle-kit check --config ./drizzle.config.ts"
 ```
 
-## Automatisk check via GitHub Actions
+## Automatiskt skydd vid produktionsdeploy
 
-Se `.github/workflows/check-schema.yml` (TODO: skapa) för en workflow som
-körs vid PR och varnar om kolumner bytt namn eller droppats.
+`pnpm --filter @workspace/db run push` (som körs av `railway.toml` vid varje
+publicering) kör numera `check-destructive-push` FÖRST. Det scriptet
+(`lib/db/scripts/check-destructive-push.ts`) jämför schemat i kod mot den
+LIVE produktionsdatabasen och avbryter deployen (exit code 1, appen startar
+aldrig) om det upptäcker:
+
+- En kolumn som finns i databasen men saknas i schemat (skulle droppas)
+- En hel tabell som finns i databasen men saknas i schemat (skulle droppas)
+- En kolumn vars typ i databasen inte matchar vad schemat förväntar sig
+
+Detta är exakt scenarierna i tabellen ovan — de som annars skulle lösas tyst
+av `drizzle-kit push` eftersom det inte finns någon interaktiv terminal i en
+produktionsdeploy.
+
+**Avsiktlig borttagning (steg 3 i tre-stegsprocessen ovan):** sätt miljövariabeln
+`ALLOW_SCHEMA_DATA_LOSS=true` för den specifika deployen för att hoppa över
+kontrollen. Ta bort variabeln igen direkt efteråt.
+
+Kör kontrollen manuellt när som helst med:
+
+```bash
+pnpm --filter @workspace/db run check-destructive-push
+```
 
 ## Kolumnreferenser (aktuell schema → DB-kolumn)
 
