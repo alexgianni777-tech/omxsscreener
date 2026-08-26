@@ -90,7 +90,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     );
     const wouldRemove = existingRows
       .filter((r) => r.outcome === "PENDING" && !incomingIdentities.has(candidateIdentity(r as any)))
-      .map(({ ticker, category, direction, market }) => ({ ticker, category, direction, market }));
+      .map(({ ticker, category, direction, market }) => ({ ticker, category, direction, market: market ?? "SE" }));
 
     res.status(409).json({
       error: `A session for ${session.date} already exists`,
@@ -644,7 +644,7 @@ function mapCandidate(c: {
   distFrom20dH: number;
   gapWarning: number | null;
   earningsInDays: number | null;
-  market: string;
+  market: string | null;
   direction: string;
   entryPrice: number;
   stopPrice: number;
@@ -674,7 +674,7 @@ function mapCandidate(c: {
     distFrom20dH: c.distFrom20dH,
     gapWarning: c.gapWarning ?? null,
     earningsInDays: c.earningsInDays ?? null,
-    market: c.market,
+    market: c.market ?? "SE",
     direction: c.direction,
     entryPrice: c.entryPrice,
     stopPrice: c.stopPrice,

@@ -24,10 +24,13 @@ export const candidatesTable = pgTable("candidates", {
   distFrom20dH: real("dist_from_20d_h").notNull(),
   gapWarning: real("gap_warning"),
   earningsInDays: integer("earnings_in_days"),
-  // Legacy rows imported before market tagging existed are backfilled to SE (this
-  // screener's history predates EdgeAI's US support, so any untagged legacy row is
-  // Swedish by construction) — see lib/db/SCHEMA-SAFETY.md history and #52.
-  market: text("market", { enum: ["SE", "US"] }).notNull().default("SE"),
+  // Nullable: legacy rows imported before market tagging existed can still be NULL
+  // in production (this screener's history predates EdgeAI's US support, so any
+  // untagged legacy row is Swedish by construction, but we can't force-backfill
+  // production data from here). API responses coalesce null -> "SE" at the
+  // mapCandidate boundary instead of enforcing NOT NULL at the DB level — see
+  // lib/db/SCHEMA-SAFETY.md history and #52.
+  market: text("market", { enum: ["SE", "US"] }).default("SE"),
   direction: text("direction", { enum: ["LONG", "SHORT"] }).notNull(),
   entryPrice: real("entry_price").notNull(),
   stopPrice: real("stop_price").notNull(),

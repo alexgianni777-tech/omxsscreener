@@ -134,7 +134,7 @@ router.post(
       const incomingIdentities = new Set(uniqueMappedSetups.map((c) => candidateIdentity(c as any)));
       const wouldRemove = existingRows
         .filter((r) => r.outcome === "PENDING" && !incomingIdentities.has(candidateIdentity(r as any)))
-        .map(({ ticker, category, direction, market }) => ({ ticker, category, direction, market }));
+        .map(({ ticker, category, direction, market }) => ({ ticker, category, direction, market: market ?? "SE" }));
 
       res.status(409).json({
         error: `A session for ${sessionDate} already exists`,
