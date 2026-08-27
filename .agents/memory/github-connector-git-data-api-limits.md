@@ -1,0 +1,10 @@
+---
+name: GitHub connector Git Data API limits
+description: The Replit GitHub connector's proxyFetch unreliably 404s on POST /git/trees once the request body crosses a small size threshold — batch small.
+---
+
+When pushing many files to GitHub via the low-level Git Data API (blobs → tree → commit → ref) through the Replit GitHub connector's `conn.proxyFetch`, `POST /repos/{owner}/{repo}/git/trees` becomes unreliable once the JSON body grows past roughly **1.4KB** (around 10-12 tree entries with typical path lengths). Below that threshold it consistently returns `201`; above it, it intermittently (and sometimes very persistently, surviving many retries with backoff and fresh connections) returns a `404 Not Found` with a normal-looking GitHub error body and real `x-github-request-id` headers — it is not an auth or payload-correctness problem, and retrying the identical request can fail many times in a row before succeeding.
+
+**Why:** root cause not fully confirmed — behaves like a proxy-side or GitHub-side abuse/rate throttle on this specific endpoint that masks itself as a 404 rather than 429, since a much larger single blob-creation loop (same connector, same session) succeeded fine at high volume, and multiple isolated small tree requests succeeded reliably in a row.
+
+**How to apply:** when scripting a bulk push this way, chain many small tree-creation calls (~10 entries each) using each result's `sha` as the next call's `base_tree`, rather than one large tree call. Even then, expect occasional 404s requiring retry with a fresh `listConnections()` call and a real delay (several seconds, not milliseconds) before retrying — don't assume a 404 here means the request was malformed. The GitHub Contents API (`PUT /repos/{owner}/{repo}/contents/{path}`) is a simpler alternative for a handful of files, but was observed being blocked entirely by a Cloudflare WAF 403 challenge page through this same connector — it is not a safe fallback either. Prefer chaining small `git/trees` calls with generous retries as the most reliable path found so far.
