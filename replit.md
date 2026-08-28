@@ -38,7 +38,9 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- **Schema migrations run automatically on startup.** The API server applies all pending Drizzle migration files (`lib/db/migrations/*.sql`) before accepting any requests, using a PostgreSQL advisory lock so concurrent instances don't race. If migrations fail the server refuses to start and logs the error clearly.
+- **Adding a column or table**: (1) update `lib/db/src/schema/`, (2) run `pnpm --filter @workspace/db run generate` to produce a new SQL file in `lib/db/migrations/`, (3) commit the SQL file — the next deploy applies it automatically.
+- **Manual migration** (e.g. against a specific DB from the shell): `pnpm --filter @workspace/db run push` (interactive) or `pnpm --filter @workspace/db run push-force` (skip confirmations). Prefer the migration-file workflow for production.
 
 ## Pointers
 
