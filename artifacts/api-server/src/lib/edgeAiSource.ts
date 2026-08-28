@@ -1,5 +1,5 @@
-const EDGEAI_RAW_DATA_URL =
-  "https://raw.githubusercontent.com/alexgianni777-tech/edgeai/main/public/data.json";
+const EDGEAI_CONTENTS_API_URL =
+  "https://api.github.com/repos/alexgianni777-tech/edgeai/contents/public/data.json?ref=main";
 
 const MAX_EDGEAI_DATA_AGE_MS = 30 * 60 * 60 * 1_000;
 
@@ -14,15 +14,17 @@ export class EdgeAiDataFreshnessError extends Error {
 }
 
 /**
- * GitHub Pages may keep data.json cached after EdgeAI has committed fresh data.
- * Fetch the canonical repository file with a cache-busting query instead, then
- * refuse to turn an old signal file into a new daily session.
+ * raw.githubusercontent.com can keep serving yesterday's file after EdgeAI has
+ * committed fresh data. Fetch the canonical repository content through GitHub's
+ * API instead, then refuse to turn an old signal file into a new daily session.
  */
 export async function fetchFreshEdgeAiData(timeoutMs: number): Promise<any> {
-  const response = await fetch(`${EDGEAI_RAW_DATA_URL}?v=${Date.now()}`, {
+  const response = await fetch(EDGEAI_CONTENTS_API_URL, {
     headers: {
-      Accept: "application/json",
+      Accept: "application/vnd.github.raw+json",
       "Cache-Control": "no-cache",
+      "User-Agent": "omxs30-screener",
+      "X-GitHub-Api-Version": "2022-11-28",
     },
     signal: AbortSignal.timeout(timeoutMs),
   });
@@ -46,9 +48,19 @@ export async function fetchFreshEdgeAiData(timeoutMs: number): Promise<any> {
   const generatedDate = new Date(generatedAtMs).toISOString().slice(0, 10);
   const currentDate = new Date().toISOString().slice(0, 10);
   if (ageMs < -5 * 60 * 1_000 || ageMs > MAX_EDGEAI_DATA_AGE_MS || generatedDate !== currentDate) {
-    const ageDays = Math.floor(ageMs / 86_400_000);
+    const generatedDayMs = Date.parse(`${generatedDate}T00:00:00.000Z`);
+    const currentDayMs = Date.parse(`${currentDate}T00:00:00.000Z`);
+    const calendarDaysOld = Math.round((currentDayMs - generatedDayMs) / 86_400_000);
+    const ageDescription =
+      calendarDaysOld === 1
+        ? "från igår"
+        : calendarDaysOld > 1
+          ? `${calendarDaysOld} kalenderdagar gammal`
+          : generatedDate === currentDate
+            ? "med en ogiltig tidsstämpel"
+            : `från ${generatedDate}`;
     throw new EdgeAiDataFreshnessError(
-      `EdgeAI data is from ${generatedDate} (${ageDays} days old) and will not be imported as today's session`,
+      `EdgeAI-data är ${ageDescription} (${generatedDate}) och importeras inte som dagens session`,
       generatedAt,
     );
   }
