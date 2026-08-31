@@ -1,5 +1,7 @@
 const EDGEAI_CONTENTS_API_URL =
   "https://api.github.com/repos/alexgianni777-tech/edgeai/contents/public/data.json?ref=main";
+const EDGEAI_RAW_URL =
+  "https://raw.githubusercontent.com/alexgianni777-tech/edgeai/main/public/data.json";
 
 const MAX_EDGEAI_DATA_AGE_MS = 30 * 60 * 60 * 1_000;
 
@@ -19,7 +21,7 @@ export class EdgeAiDataFreshnessError extends Error {
  * API instead, then refuse to turn an old signal file into a new daily session.
  */
 export async function fetchFreshEdgeAiData(timeoutMs: number): Promise<any> {
-  const response = await fetch(EDGEAI_CONTENTS_API_URL, {
+  let response = await fetch(EDGEAI_CONTENTS_API_URL, {
     headers: {
       Accept: "application/vnd.github.raw+json",
       "Cache-Control": "no-cache",
@@ -30,7 +32,20 @@ export async function fetchFreshEdgeAiData(timeoutMs: number): Promise<any> {
   });
 
   if (!response.ok) {
-    throw new Error(`EdgeAI fetch HTTP ${response.status}`);
+    const contentsStatus = response.status;
+    response = await fetch(`${EDGEAI_RAW_URL}?fallback=${Date.now()}`, {
+      headers: {
+        Accept: "application/json",
+        "Cache-Control": "no-cache",
+        "User-Agent": "omxs30-screener",
+      },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) {
+      throw new Error(
+        `EdgeAI fetch failed (GitHub API HTTP ${contentsStatus}, raw fallback HTTP ${response.status})`,
+      );
+    }
   }
 
   const data: any = await response.json();
