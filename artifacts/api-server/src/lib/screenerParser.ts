@@ -46,6 +46,22 @@ export class ScreenerParseError extends Error {
 }
 
 /**
+ * Telegram and chat clients sometimes replace ASCII separators with box-drawing
+ * characters and collapse adjacent lines when copying a code block. Normalize
+ * those presentation differences before parsing, while keeping the original
+ * raw text untouched in the stored session.
+ */
+function normalizeScreenerText(rawText: string): string {
+  return rawText
+    .replace(/\r\n?/g, "\n")
+    .replace(/═{2,}/g, "===")
+    .replace(/(?<!\n)(?=={3,}\s*\d+\s*[·•])/g, "\n")
+    .replace(/(?<!\n)(?=(?:={3,}\s*)?\d+\.\s+[A-ZÅÄÖ])/g, "\n")
+    .replace(/(?<!\n)\s*(?=plan\((?:LONG|SHORT)\):)/g, "\n")
+    .replace(/\n{2,}/g, "\n");
+}
+
+/**
  * Extracts the date from the screener text.
  * Looks for "SCREENER · YYYY-MM-DD" or "SCREENER · YYYY-MM-DD" or similar patterns.
  */
@@ -168,8 +184,9 @@ function parseCandidate(
  * Main parser function. Parses the full raw screener text.
  */
 export function parseScreenerText(rawText: string): ParsedSession {
-  const date = parseDate(rawText);
-  const marketWeather = parseMarketWeather(rawText);
+  const normalizedText = normalizeScreenerText(rawText);
+  const date = parseDate(normalizedText);
+  const marketWeather = parseMarketWeather(normalizedText);
 
   const candidates: ParsedCandidate[] = [];
 
@@ -181,7 +198,7 @@ export function parseScreenerText(rawText: string): ParsedSession {
     "SVAGAST": "WEAKEST",
   };
 
-  const lines = rawText.split("\n");
+  const lines = normalizedText.split("\n");
   let currentCategory: Category | null = null;
 
   for (let i = 0; i < lines.length; i++) {
