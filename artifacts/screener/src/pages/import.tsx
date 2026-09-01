@@ -38,7 +38,14 @@ const OUTCOME_COLORS: Record<string, string> = {
 type EdgeAIStatus =
   | { kind: "idle" }
   | { kind: "loading" }
-  | { kind: "success"; setupCount: number; date: string; generatedAt: string }
+  | {
+      kind: "success";
+      setupCount: number;
+      date: string;
+      generatedAt: string;
+      stale?: boolean;
+      ageDescription?: string;
+    }
   | { kind: "auth"; message: string }
   | { kind: "error"; message: string };
 
@@ -153,7 +160,14 @@ export function Import() {
         return;
       }
       queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
-      setEdgeStatus({ kind: "success", setupCount: data.setupCount, date: data.date, generatedAt: data.generatedAt });
+      setEdgeStatus({
+        kind: "success",
+        setupCount: data.setupCount,
+        date: data.date,
+        generatedAt: data.generatedAt,
+        stale: data.stale,
+        ageDescription: data.ageDescription,
+      });
       setTimeout(() => setLocation(`/sessions/${data.id}`), 1200);
     } catch (e: any) {
       setEdgeStatus({ kind: "error", message: e.message ?? "Nätverksfel" });
@@ -190,11 +204,17 @@ export function Import() {
           <div className="min-w-0">
             <p className="text-sm font-medium">Importera från EdgeAI</p>
             <p className="text-xs text-muted-foreground truncate">
-              Hämtar dagens SE-setups direkt från{" "}
+              Hämtar senaste SE/US-setups direkt från{" "}
               <span className="font-mono text-blue-400/80">edgeai/public/data.json</span>
               {edgeStatus.kind === "success" && (
                 <span className="text-emerald-400 ml-1">
                   · {edgeStatus.setupCount} setups ({edgeStatus.date})
+                  {edgeStatus.stale && (
+                    <span className="text-amber-400">
+                      {" "}
+                      · {edgeStatus.ageDescription ?? "äldre snapshot"}
+                    </span>
+                  )}
                 </span>
               )}
               {edgeStatus.kind === "error" && (

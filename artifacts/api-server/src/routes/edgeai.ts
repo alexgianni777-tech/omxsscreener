@@ -12,6 +12,7 @@ import { resolveYahooTicker } from "../lib/omxs30TickerMap";
 import { calculateWilderRsi, volumeMultiplierFromQuote } from "../lib/marketIndicators";
 import {
   edgeAiSessionDate,
+  edgeAiDataFreshness,
   EdgeAiDataFreshnessError,
   fetchFreshEdgeAiData,
 } from "../lib/edgeAiSource";
@@ -41,7 +42,10 @@ router.post(
     // 1. Fetch latest EdgeAI data
     let edgeData: any;
     try {
-      edgeData = await fetchFreshEdgeAiData(10_000);
+      // A manual click should use the latest valid EdgeAI snapshot even when it
+      // is from yesterday or a weekend. The freshness is returned to the UI as
+      // a warning; the strict scheduler still uses the default behavior.
+      edgeData = await fetchFreshEdgeAiData(10_000, { allowStale: true });
     } catch (err: any) {
       if (err instanceof EdgeAiDataFreshnessError) {
         res.status(422).json({ error: err.message, generatedAt: err.generatedAt });
@@ -51,24 +55,28 @@ router.post(
       return;
     }
 
-    const se = edgeData?.markets?.SE;
-    if (!se) {
+    const markets = edgeData?.markets;
+    const se = markets?.SE ?? {};
+    const us = markets?.US ?? {};
+    if (!markets || (!markets.SE && !markets.US)) {
       res.status(502).json({ error: "EdgeAI response missing SE market data" });
       return;
     }
 
-    const setups: any[] = se.setups ?? [];
-    if (setups.length === 0) {
+    const setups: any[] = Array.isArray(se.setups) ? se.setups : [];
+    const usRaw: any[] = Array.isArray(us.setups) ? us.setups : [];
+    if (setups.length === 0 && usRaw.length === 0) {
       res.status(422).json({
-        error: "EdgeAI has no SE setups today — screener may not have run yet.",
+        error: "EdgeAI has no SE or US setups in the latest snapshot.",
         generatedAt: edgeData.generatedAt,
       });
       return;
     }
 
-    // The stored session date is the verified EdgeAI signal day, never the
-    // browser/server clock. fetchFreshEdgeAiData has already required today.
+    // The stored session date is the EdgeAI signal day, never the browser/server
+    // clock. A manual import may intentionally use the latest prior trading day.
     const sessionDate = edgeAiSessionDate(edgeData);
+    const freshness = edgeAiDataFreshness(edgeData);
 
     // 2b. Fetch real OMXS30 market weather from Yahoo Finance
     let omxsValue = 0, perf5d = 0, perf1m = 0, perf3m = 0, marketRsi = 0;
@@ -96,7 +104,6 @@ router.post(
     //    also used by the scheduler auto-import, so both paths stay in sync. Computed
     //    up front (pure, no I/O) so the 409 conflict check below can preview exactly
     //    which pending candidates a force re-import would remove.
-    const usRaw: any[] = edgeData?.markets?.US?.setups ?? [];
     const rankCounter: Record<string, number> = {};
     const mappedSetups = [
       ...setups.map((s: any) => mapEdgeAiSetup(s, "SE", rankCounter)),
@@ -251,6 +258,8 @@ router.post(
       date: sessionDate,
       setupCount: uniqueMappedSetups.length,
       generatedAt: edgeData.generatedAt,
+      stale: freshness.isDifferentUtcDate || freshness.ageMs > 30 * 60 * 60 * 1_000,
+      ageDescription: freshness.ageDescription,
       regime: se.regime,
     });
   },

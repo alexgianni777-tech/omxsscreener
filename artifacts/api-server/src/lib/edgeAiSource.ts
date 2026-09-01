@@ -3,7 +3,8 @@ const EDGEAI_CONTENTS_API_URL =
 const EDGEAI_RAW_URL =
   "https://raw.githubusercontent.com/alexgianni777-tech/edgeai/main/public/data.json";
 
-const MAX_EDGEAI_DATA_AGE_MS = 30 * 60 * 60 * 1_000;
+const WARN_EDGEAI_DATA_AGE_MS = 30 * 60 * 60 * 1_000;
+const MAX_EDGEAI_IMPORT_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 
 export class EdgeAiDataFreshnessError extends Error {
   constructor(
@@ -18,9 +19,14 @@ export class EdgeAiDataFreshnessError extends Error {
 /**
  * raw.githubusercontent.com can keep serving yesterday's file after EdgeAI has
  * committed fresh data. Fetch the canonical repository content through GitHub's
- * API instead, then refuse to turn an old signal file into a new daily session.
+ * API instead. The manual button may import the latest valid signal file when
+ * it is older than today (for example after a weekend), while the scheduler
+ * keeps the strict default and waits for today's file.
  */
-export async function fetchFreshEdgeAiData(timeoutMs: number): Promise<any> {
+export async function fetchFreshEdgeAiData(
+  timeoutMs: number,
+  options: { allowStale?: boolean } = {},
+): Promise<any> {
   let response = await fetch(EDGEAI_CONTENTS_API_URL, {
     headers: {
       Accept: "application/vnd.github.raw+json",
@@ -59,28 +65,65 @@ export async function fetchFreshEdgeAiData(timeoutMs: number): Promise<any> {
     );
   }
 
-  const ageMs = Date.now() - generatedAtMs;
-  const generatedDate = new Date(generatedAtMs).toISOString().slice(0, 10);
-  const currentDate = new Date().toISOString().slice(0, 10);
-  if (ageMs < -5 * 60 * 1_000 || ageMs > MAX_EDGEAI_DATA_AGE_MS || generatedDate !== currentDate) {
-    const generatedDayMs = Date.parse(`${generatedDate}T00:00:00.000Z`);
-    const currentDayMs = Date.parse(`${currentDate}T00:00:00.000Z`);
-    const calendarDaysOld = Math.round((currentDayMs - generatedDayMs) / 86_400_000);
-    const ageDescription =
-      calendarDaysOld === 1
-        ? "från igår"
-        : calendarDaysOld > 1
-          ? `${calendarDaysOld} kalenderdagar gammal`
-          : generatedDate === currentDate
-            ? "med en ogiltig tidsstämpel"
-            : `från ${generatedDate}`;
+  const freshness = edgeAiDataFreshness(data);
+  const tooFarInFuture = freshness.ageMs < -5 * 60 * 1_000;
+  const tooOld = freshness.ageMs > MAX_EDGEAI_IMPORT_AGE_MS;
+  const staleForStrictImport = freshness.ageMs > WARN_EDGEAI_DATA_AGE_MS || freshness.isDifferentUtcDate;
+  if (tooFarInFuture || tooOld || (staleForStrictImport && !options.allowStale)) {
+    const ageDescription = freshness.ageDescription;
     throw new EdgeAiDataFreshnessError(
-      `EdgeAI-data är ${ageDescription} (${generatedDate}) och importeras inte som dagens session`,
+      tooFarInFuture
+        ? `EdgeAI-data har en framtida tidsstämpel (${generatedDateLabel(generatedAtMs)})`
+        : tooOld
+          ? `EdgeAI-data är ${ageDescription} (${generatedDateLabel(generatedAtMs)}) och för gammal för import`
+          : `EdgeAI-data är ${ageDescription} (${generatedDateLabel(generatedAtMs)}) och importeras inte som dagens session`,
       generatedAt,
     );
   }
 
   return data;
+}
+
+function generatedDateLabel(timestamp: number): string {
+  return new Date(timestamp).toISOString().slice(0, 10);
+}
+
+export function edgeAiDataFreshness(data: { generatedAt?: unknown }): {
+  ageMs: number;
+  isDifferentUtcDate: boolean;
+  calendarDaysOld: number;
+  ageDescription: string;
+} {
+  const generatedAt = typeof data.generatedAt === "string" ? data.generatedAt : "";
+  const generatedAtMs = Date.parse(generatedAt);
+  if (!Number.isFinite(generatedAtMs)) {
+    throw new EdgeAiDataFreshnessError(
+      "EdgeAI response has no valid generatedAt timestamp",
+      generatedAt || null,
+    );
+  }
+
+  const ageMs = Date.now() - generatedAtMs;
+  const generatedDate = generatedDateLabel(generatedAtMs);
+  const currentDate = new Date().toISOString().slice(0, 10);
+  const generatedDayMs = Date.parse(`${generatedDate}T00:00:00.000Z`);
+  const currentDayMs = Date.parse(`${currentDate}T00:00:00.000Z`);
+  const calendarDaysOld = Math.round((currentDayMs - generatedDayMs) / 86_400_000);
+  const ageDescription =
+    calendarDaysOld === 0
+      ? "från i dag"
+      : calendarDaysOld === 1
+        ? "från igår"
+        : calendarDaysOld > 1
+          ? `${calendarDaysOld} kalenderdagar gammal`
+          : `från ${generatedDate}`;
+
+  return {
+    ageMs,
+    isDifferentUtcDate: generatedDate !== currentDate,
+    calendarDaysOld,
+    ageDescription,
+  };
 }
 
 export function edgeAiSessionDate(data: { generatedAt?: unknown }): string {
