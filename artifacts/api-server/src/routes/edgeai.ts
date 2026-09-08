@@ -78,14 +78,22 @@ router.post(
     const sessionDate = edgeAiSessionDate(edgeData);
     const freshness = edgeAiDataFreshness(edgeData);
 
-    // 2b. Fetch real OMXS30 market weather from Yahoo Finance
+    // 2b. Fetch OMXS30 market weather as it existed on the signal date.
+    // A stale/manual EdgeAI import must not attach today's later market context
+    // to an older signal, because that creates look-ahead bias in history.
     let omxsValue = 0, perf5d = 0, perf1m = 0, perf3m = 0, marketRsi = 0;
     try {
       const now = new Date();
-      const ninetyFiveDaysAgo = new Date(now.getTime() - 95 * 86_400_000);
+      const todayUtc = now.toISOString().slice(0, 10);
+      const signalDayStartMs = Date.parse(`${sessionDate}T00:00:00.000Z`);
+      const historyEnd =
+        sessionDate < todayUtc
+          ? new Date(signalDayStartMs + 86_400_000)
+          : now;
+      const ninetyFiveDaysAgo = new Date(historyEnd.getTime() - 95 * 86_400_000);
       const history = await withRetry(() => yf.historical("^OMX", {
         period1: ninetyFiveDaysAgo,
-        period2: now,
+        period2: historyEnd,
         interval: "1d",
       })) as Array<{ close: number }>;
       if (history.length > 0) {
