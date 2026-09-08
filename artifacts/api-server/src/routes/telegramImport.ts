@@ -132,7 +132,12 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
   const buildRow = (
     sessionId: number,
     c: (typeof candidates)[number],
-    preserved?: { outcome: string; exitPrice: number | null; outcomeNotes: string | null },
+    preserved?: {
+      outcome: string; exitPrice: number | null; outcomeNotes: string | null;
+      resolutionMethod: "MANUAL_EXIT" | "TARGET_HIT" | "STOP_HIT" | null;
+      resolutionQuality: "RECORDED_EXIT" | "ASSUMED_LEVEL" | "LEGACY_UNKNOWN" | null;
+      realizedR: number | null;
+    },
   ) => ({
     sessionId,
     market: "SE" as const,   // Telegram screener always imports SE stocks
@@ -157,6 +162,9 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
     outcome: (preserved?.outcome ?? "PENDING") as "WIN" | "LOSS" | "SKIP" | "PENDING",
     exitPrice: preserved?.exitPrice ?? null,
     outcomeNotes: preserved?.outcomeNotes ?? null,
+    resolutionMethod: preserved?.resolutionMethod ?? null,
+    resolutionQuality: preserved?.resolutionQuality ?? null,
+    realizedR: preserved?.realizedR ?? null,
   });
 
   // ── Upsert ──────────────────────────────────────────────────────────────────

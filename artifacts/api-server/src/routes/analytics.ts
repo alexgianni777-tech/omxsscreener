@@ -9,8 +9,8 @@
  * Manual top-3 overrides (isTop3Pick === true) take precedence over auto-rank.
  * Each pick includes `earningsWarning: true` when the stock had an earnings
  * report within 0–5 calendar days of the session date (Rule 7 exclusion zone).
- * The `earningsInDays` value is stored at import time, so it reflects the
- * earnings calendar that existed when the session was imported.
+ * It is flagged only for a verified SIGNAL_TIME observation; legacy values
+ * have unknown provenance and must not be treated as Rule 7 evidence.
  */
 import { Router, type IRouter } from "express";
 import { asc } from "drizzle-orm";
@@ -90,14 +90,27 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
     let sessionHasResolved = false;
 
     const picks = top3.map((c) => {
-      // Use the dedicated rr column (volMultiplier now stores volume ratio, not R:R)
-      const rr = (c.rr ?? 0) > 0 ? (c.rr as number) : 1.5;
-
       const dirBucket = c.direction === "SHORT" ? byDirection.SHORT : byDirection.LONG;
 
       let r: number | null = null;
-      if (c.outcome === "WIN") {
-        r = rr;
+      // Resolutions written after realized-R support persist the authoritative
+      // value. For old rows, only use a conservatively reconstructable exit;
+      // never turn a planned R:R or a bare WIN/LOSS label into a performance
+      // number.
+      const legacyR = c.exitPrice != null
+        ? (() => {
+            const entry = c.resolutionEntryPrice ?? c.entryPrice;
+            const stop = c.resolutionStopPrice ?? c.stopPrice;
+            const direction = c.resolutionDirection ?? c.direction;
+            const oneR = Math.abs(entry - stop);
+            return oneR > 0
+              ? (direction === "LONG" ? (c.exitPrice! - entry) / oneR : (entry - c.exitPrice!) / oneR)
+              : null;
+          })()
+        : null;
+      const persistedR = c.realizedR ?? legacyR;
+      if (c.outcome === "WIN" && persistedR != null && persistedR > 0) {
+        r = persistedR;
         wins++;
         totalTrades++;
         sessionHasResolved = true;
@@ -106,8 +119,8 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
         dirBucket.wins++;
         dirBucket.totalTrades++;
         dirBucket.totalR += r;
-      } else if (c.outcome === "LOSS") {
-        r = -1;
+      } else if (c.outcome === "LOSS" && persistedR != null && persistedR < 0) {
+        r = persistedR;
         losses++;
         totalTrades++;
         sessionHasResolved = true;
@@ -118,10 +131,8 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
         dirBucket.totalR += r;
       }
 
-      // earningsWarning: true when earningsInDays (stored at import time) is
-      // within the 0–5 day Rule 7 exclusion window.
       const eid = c.earningsInDays;
-      const earningsWarning = eid != null && eid >= 0 && eid <= 5;
+      const earningsWarning = c.earningsKnowledge === "SIGNAL_TIME" && eid != null && eid >= 0 && eid <= 5;
 
       return {
         ticker: c.ticker,
@@ -137,15 +148,25 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
 
     // Direction split — informational picks per direction, not counted in cumulative R
     const mapInfoPick = (c: (typeof allCandidates)[0]) => {
-      const rr = (c.rr ?? 0) > 0 ? (c.rr as number) : 1.5;
       const eid = c.earningsInDays;
+      const entry = c.resolutionEntryPrice ?? c.entryPrice;
+      const stop = c.resolutionStopPrice ?? c.stopPrice;
+      const direction = c.resolutionDirection ?? c.direction;
+      const oneR = Math.abs(entry - stop);
+      const legacyR = c.exitPrice != null && oneR > 0
+        ? (direction === "LONG" ? (c.exitPrice - entry) / oneR : (entry - c.exitPrice) / oneR)
+        : null;
+      const persistedR = c.realizedR ?? legacyR;
       return {
         ticker: c.ticker,
         direction: c.direction,
         edgeScore: Number((((c.perf1m ?? 0) / 100) * ((c.rsi ?? 0) / 100)).toFixed(4)),
         outcome: c.outcome,
-        r: c.outcome === "WIN" ? rr : c.outcome === "LOSS" ? -1 : null,
-        earningsWarning: eid != null && eid >= 0 && eid <= 5,
+        r: (c.outcome === "WIN" && persistedR != null && persistedR > 0) ||
+          (c.outcome === "LOSS" && persistedR != null && persistedR < 0)
+          ? persistedR
+          : null,
+        earningsWarning: c.earningsKnowledge === "SIGNAL_TIME" && eid != null && eid >= 0 && eid <= 5,
       };
     };
 

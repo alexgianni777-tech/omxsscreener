@@ -124,13 +124,21 @@ async function runImport(date: string): Promise<void> {
     mapped.map(async (c) => {
       try {
         const q = (await withRetry(() => yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false }))) as any;
-        const volumeMultiplier = volumeMultiplierFromQuote(q);
-        if (volumeMultiplier != null) {
-          c.volMultiplier = volumeMultiplier;
-        } else {
-          logger.warn({ ticker: c.ticker }, "[scheduler] Volume enrichment missing Yahoo volume or average fields");
+        const isSignalDay = date === new Date().toISOString().slice(0, 10);
+        if (isSignalDay) {
+          const volumeMultiplier = volumeMultiplierFromQuote(q);
+          if (volumeMultiplier != null) {
+            c.volMultiplier = volumeMultiplier;
+          } else {
+            logger.warn({ ticker: c.ticker }, "[scheduler] Volume enrichment missing Yahoo volume or average fields");
+          }
+          const earningsInDays = daysUntil(q.earningsTimestamp);
+          if (earningsInDays != null) {
+            c.earningsInDays = earningsInDays;
+            c.earningsKnowledge = "SIGNAL_TIME";
+            c.earningsObservedAt = new Date();
+          }
         }
-        c.earningsInDays = daysUntil(q.earningsTimestamp);
       } catch (err: any) {
         logger.warn({ ticker: c.ticker, err: err.message }, "[scheduler] Volume enrichment failed");
       }

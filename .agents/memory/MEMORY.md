@@ -10,3 +10,4 @@
 - [Import Conflict Preview](import-conflict-wouldremove.md) — 409 re-import conflict responses preview which still-pending candidates would be deleted, not just which outcomes are preserved.
 - [EdgeAI Pipeline Topology](edgeai-pipeline-topology.md) — three separate GitHub repos feed this app; each has its own cron that can silently miss independently of the others.
 - [GitHub Connector Git Data API Limits](github-connector-git-data-api-limits.md) — the Replit GitHub connector's proxyFetch unreliably 404s POST /git/trees above ~1.4KB body size; batch small and expect flakiness.
+- [Trading Outcome Integrity](trading-outcome-integrity.md) — actual fills, immutable R inputs, Rule 7 provenance, Challenge sync, and import/outcome locking rules.

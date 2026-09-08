@@ -161,27 +161,31 @@ router.post(
       return;
     }
 
-    const existingCandidates =
-      existing.length > 0 && force
-        ? await db
-            .select()
-            .from(candidatesTable)
-            .where(eq(candidatesTable.sessionId, existing[0].id))
-        : [];
-
     // 5. Enrich volume. Missing Yahoo fields stay at 0 but are logged and are
     //    presented as "saknas", never as a silently valid 0,0x metric.
     await Promise.allSettled(
       uniqueMappedSetups.map(async (c) => {
         try {
           const q = (await withRetry(() => yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false }))) as any;
-          const volumeMultiplier = volumeMultiplierFromQuote(q);
-          if (volumeMultiplier != null) {
-            c.volMultiplier = volumeMultiplier;
-          } else {
-            logger.warn({ ticker: c.ticker }, "Volume enrichment missing Yahoo volume or average fields");
+          const isSignalDay = sessionDate === new Date().toISOString().slice(0, 10);
+          if (isSignalDay) {
+            const volumeMultiplier = volumeMultiplierFromQuote(q);
+            if (volumeMultiplier != null) {
+              c.volMultiplier = volumeMultiplier;
+            } else {
+              logger.warn({ ticker: c.ticker }, "Volume enrichment missing Yahoo volume or average fields");
+            }
           }
-          c.earningsInDays = daysUntil(q.earningsTimestamp);
+          // Yahoo only exposes its current calendar. It is signal-time evidence
+          // exclusively for an import whose signal day is today.
+          if (isSignalDay) {
+            const earningsInDays = daysUntil(q.earningsTimestamp);
+            if (earningsInDays != null) {
+              c.earningsInDays = earningsInDays;
+              c.earningsKnowledge = "SIGNAL_TIME";
+              c.earningsObservedAt = new Date();
+            }
+          }
         } catch (err: any) {
           logger.warn({ ticker: c.ticker, err: err.message }, "Volume enrichment failed");
         }
@@ -195,6 +199,10 @@ router.post(
       const existingId = existing[0].id;
       sessionId = await db.transaction(async (tx) => {
         await lockScreenerSession(tx, sessionDate);
+        const existingCandidates = await tx
+          .select()
+          .from(candidatesTable)
+          .where(eq(candidatesTable.sessionId, existingId));
         const [updated] = await tx
           .update(screenerSessionsTable)
           .set({

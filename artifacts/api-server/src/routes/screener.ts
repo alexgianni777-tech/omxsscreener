@@ -17,7 +17,7 @@ import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "../lib/omxs30TickerMap";
 import { volumeMultiplierFromQuote } from "../lib/marketIndicators";
 import { calendarDaysBetween } from "../lib/marketCalendar";
-import { reviewCandidate, reviewSession } from "../lib/screeningReview";
+import { decideCandidate, reviewCandidate, reviewSession } from "../lib/screeningReview";
 import { logger } from "../lib/logger";
 import { withRetry } from "../lib/retry";
 import {
@@ -105,16 +105,22 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
   // ---------- helpers shared by both insert and force-update paths ----------
   // Fetch live vol ratio (current / 10-day avg) from Yahoo Finance.
   // Overrides the Telegram bot's broken "vol 0.0x" field when it fails.
-  const volMap = await enrichVolMultiplier(
-    session.candidates.map((c) => c.ticker),
-    _yf,
-  );
+  // A current Yahoo quote cannot revise a historical signal's stored review.
+  // For historical imports use the submitted signal value instead.
+  const volMap = session.date === new Date().toISOString().slice(0, 10)
+    ? await enrichVolMultiplier(session.candidates.map((c) => c.ticker), _yf)
+    : new Map<string, number>();
 
   const buildCandidateRow = (
     sessionId: number,
     c: (typeof session.candidates)[number],
-    earningsInDays: number | null,
-    preserved?: { outcome: string; exitPrice: number | null; outcomeNotes: string | null },
+    earnings: EarningsObservation,
+    preserved?: {
+      outcome: string; exitPrice: number | null; outcomeNotes: string | null;
+      resolutionMethod: "MANUAL_EXIT" | "TARGET_HIT" | "STOP_HIT" | null;
+      resolutionQuality: "RECORDED_EXIT" | "ASSUMED_LEVEL" | "LEGACY_UNKNOWN" | null;
+      realizedR: number | null;
+    },
   ) => ({
     sessionId,
     market: "SE" as const,   // screener text is always SE stocks
@@ -132,7 +138,9 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     signalGapPct: c.gapWarning ?? null,
     distFrom20dH: c.distFrom20dH,
     gapWarning: c.gapWarning ?? undefined,
-    earningsInDays: earningsInDays ?? undefined,
+    earningsInDays: earnings.earningsInDays ?? undefined,
+    earningsKnowledge: earnings.knowledge,
+    earningsObservedAt: earnings.observedAt,
     direction: c.direction,
     entryPrice: c.entryPrice,
     stopPrice: c.stopPrice,
@@ -142,6 +150,9 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     outcome: (preserved?.outcome ?? "PENDING") as "WIN" | "LOSS" | "SKIP" | "PENDING",
     exitPrice: preserved?.exitPrice ?? null,
     outcomeNotes: preserved?.outcomeNotes ?? null,
+    resolutionMethod: preserved?.resolutionMethod ?? null,
+    resolutionQuality: preserved?.resolutionQuality ?? null,
+    realizedR: preserved?.realizedR ?? null,
   });
 
   const earningsBatch = await fetchEarningsBatch(
@@ -154,42 +165,14 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     const existingId = existing[0].id;
     const isEdgeAISession = existing[0].source === "edgeai";
 
-    const existingCandidates = await db
-      .select({
-        id: candidatesTable.id,
-        sessionId: candidatesTable.sessionId,
-        category: candidatesTable.category,
-        rank: candidatesTable.rank,
-        ticker: candidatesTable.ticker,
-        market: candidatesTable.market,
-        price: candidatesTable.price,
-        rs3m: candidatesTable.rs3m,
-        perf1m: candidatesTable.perf1m,
-        rsi: candidatesTable.rsi,
-        pctB: candidatesTable.pctB,
-        atr: candidatesTable.atr,
-        volMultiplier: candidatesTable.volMultiplier,
-        signalRsi: candidatesTable.signalRsi,
-        signalGapPct: candidatesTable.signalGapPct,
-        distFrom20dH: candidatesTable.distFrom20dH,
-        gapWarning: candidatesTable.gapWarning,
-        earningsInDays: candidatesTable.earningsInDays,
-        direction: candidatesTable.direction,
-        entryPrice: candidatesTable.entryPrice,
-        stopPrice: candidatesTable.stopPrice,
-        targetPrice: candidatesTable.targetPrice,
-        rr: candidatesTable.rr,
-        oneR: candidatesTable.oneR,
-        outcome: candidatesTable.outcome,
-        exitPrice: candidatesTable.exitPrice,
-        outcomeNotes: candidatesTable.outcomeNotes,
-        isTop3Pick: candidatesTable.isTop3Pick,
-      })
-      .from(candidatesTable)
-      .where(eq(candidatesTable.sessionId, existingId));
-
     const { updatedSession, updatedCandidates, diff } = await db.transaction(async (tx) => {
       await lockScreenerSession(tx, session.date);
+      // Re-read under the same lock used by outcome mutation; a pre-lock copy
+      // could otherwise merge stale PENDING/null resolution fields.
+      const existingCandidates = await tx
+        .select()
+        .from(candidatesTable)
+        .where(eq(candidatesTable.sessionId, existingId));
       const [updatedSession] = await tx
         .update(screenerSessionsTable)
         .set({
@@ -206,7 +189,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
         .returning();
       const incomingRows = mergeCandidateInputs(
         session.candidates.map((candidate) =>
-          buildCandidateRow(updatedSession.id, candidate, earningsBatch.get(candidate.ticker) ?? null),
+          buildCandidateRow(updatedSession.id, candidate, earningsBatch.get(candidate.ticker) ?? UNKNOWN_EARNINGS),
         ),
         existingCandidates.map(({ id, ...candidate }) => candidate as any),
       );
@@ -265,7 +248,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
       tx,
       insertedSession.id,
       session.candidates.map((c) =>
-        buildCandidateRow(insertedSession.id, c, earningsBatch.get(c.ticker) ?? null),
+        buildCandidateRow(insertedSession.id, c, earningsBatch.get(c.ticker) ?? UNKNOWN_EARNINGS),
       ),
     );
     return { insertedSession, insertedCandidates };
@@ -530,10 +513,14 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     .orderBy(candidatesTable.category, candidatesTable.rank);
 
   const linkedIds = await fetchLinkedTradeIds(candidates.map((c) => c.id));
-  const candidatesWithReview = candidates.map((candidate) => ({
-    ...mapCandidate(candidate, linkedIds.has(candidate.id)),
-    review: reviewCandidate(candidate, session.source ?? null),
-  }));
+  const candidatesWithReview = candidates.map((candidate) => {
+    const review = reviewCandidate(candidate, session.source ?? null);
+    return {
+      ...mapCandidate(candidate, linkedIds.has(candidate.id)),
+      review,
+      decision: decideCandidate(candidate, review, session.date),
+    };
+  });
   const sessionReview = reviewSession(
     candidatesWithReview.map((candidate) => candidate.review),
     session.marketRsi,
@@ -644,6 +631,8 @@ function mapCandidate(c: {
   distFrom20dH: number;
   gapWarning: number | null;
   earningsInDays: number | null;
+  earningsKnowledge: "SIGNAL_TIME" | "UNKNOWN" | null;
+  earningsObservedAt: Date | null;
   market: string | null;
   direction: string;
   entryPrice: number;
@@ -654,6 +643,9 @@ function mapCandidate(c: {
   outcome: string;
   exitPrice: number | null;
   outcomeNotes: string | null;
+  resolutionMethod: "MANUAL_EXIT" | "TARGET_HIT" | "STOP_HIT" | null;
+  resolutionQuality: "RECORDED_EXIT" | "ASSUMED_LEVEL" | "LEGACY_UNKNOWN" | null;
+  realizedR: number | null;
   isTop3Pick?: boolean | null;
 }, hasLinkedTrade = false) {
   return {
@@ -674,6 +666,10 @@ function mapCandidate(c: {
     distFrom20dH: c.distFrom20dH,
     gapWarning: c.gapWarning ?? null,
     earningsInDays: c.earningsInDays ?? null,
+    // Pre-provenance rows are intentionally UNKNOWN even if they have a legacy
+    // number: that number cannot establish what was known on signal day.
+    earningsKnowledge: c.earningsKnowledge === "SIGNAL_TIME" ? "SIGNAL_TIME" : "UNKNOWN",
+    earningsObservedAt: c.earningsObservedAt ?? null,
     market: c.market ?? "SE",
     direction: c.direction,
     entryPrice: c.entryPrice,
@@ -684,6 +680,9 @@ function mapCandidate(c: {
     outcome: c.outcome,
     exitPrice: c.exitPrice ?? null,
     outcomeNotes: c.outcomeNotes ?? null,
+    resolutionMethod: c.resolutionMethod ?? null,
+    resolutionQuality: c.resolutionQuality ?? null,
+    realizedR: c.realizedR ?? null,
     isTop3Pick: c.isTop3Pick ?? false,
     hasLinkedTrade,
   };
@@ -734,14 +733,29 @@ export default router;
 
 const _yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
-/** Fetch earningsInDays for all unique tickers in parallel, keyed by ticker. */
+type EarningsObservation = {
+  earningsInDays: number | null;
+  knowledge: "SIGNAL_TIME" | "UNKNOWN";
+  observedAt: Date | null;
+};
+
+const UNKNOWN_EARNINGS: EarningsObservation = {
+  earningsInDays: null,
+  knowledge: "UNKNOWN",
+  observedAt: null,
+};
+
+/** Fetch Rule 7 data only when a Yahoo observation is contemporaneous with the signal. */
 async function fetchEarningsBatch(
   tickers: string[],
   sessionDate: string,
-): Promise<Map<string, number | null>> {
+): Promise<Map<string, EarningsObservation>> {
+  if (sessionDate !== new Date().toISOString().slice(0, 10)) {
+    return new Map(tickers.map((ticker) => [ticker, UNKNOWN_EARNINGS]));
+  }
   const unique = [...new Set(tickers)];
   const results = await Promise.all(
-    unique.map(async (t) => [t, await fetchEarningsInDaysAt(t, sessionDate)] as const),
+    unique.map(async (t) => [t, await fetchEarningsAtSignalTime(t, sessionDate)] as const),
   );
   return new Map(results);
 }
@@ -782,16 +796,20 @@ async function enrichVolMultiplier(
   return volMap;
 }
 
-/** Fetch earningsInDays for a ticker at a given session date (YYYY-MM-DD).
- *  Returns null on any error. */
-async function fetchEarningsInDaysAt(ticker: string, sessionDate: string): Promise<number | null> {
+/** Current Yahoo data is signal-time evidence only after fetchEarningsBatch's date guard. */
+async function fetchEarningsAtSignalTime(ticker: string, sessionDate: string): Promise<EarningsObservation> {
+  const observedAt = new Date();
   try {
     const quote = await _yf.quote(resolveYahooTicker(ticker));
     const earningsTs: Date | null = (quote as any).earningsTimestamp ?? null;
-    if (!earningsTs || !(earningsTs instanceof Date)) return null;
+    if (!earningsTs || !(earningsTs instanceof Date)) return UNKNOWN_EARNINGS;
     const sessionStart = new Date(`${sessionDate}T00:00:00.000Z`);
-    return calendarDaysBetween(earningsTs, sessionStart);
+    return {
+      earningsInDays: calendarDaysBetween(earningsTs, sessionStart),
+      knowledge: "SIGNAL_TIME",
+      observedAt,
+    };
   } catch {
-    return null;
+    return UNKNOWN_EARNINGS;
   }
 }

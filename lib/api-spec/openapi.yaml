@@ -265,6 +265,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/DashboardSummary"
 
+  /portfolio:
+    get:
+      operationId: getPortfolio
+      tags: [portfolio]
+      summary: Open positions enriched with valuation, stop risk, and exposure
+      responses:
+        "200":
+          description: Portfolio positions and aggregate risk summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioResponse"
+
   /auth/user:
     get:
       tags: [Auth]
@@ -477,6 +490,67 @@ components:
         error:
           type: string
 
+    PortfolioPosition:
+      type: object
+      required: [id, ticker, instrument, direction, market, notes, entryPrice, lastPrice, stopPrice, targetPrice, shares, positionSizeKr, risk1R, riskToStopKr, riskToStopPct, stopPnlKr, stopPnlPct, createdAt, livePrice, changePct, quoteAsOf, unrealisedPct, unrealisedKr, currentR, marketValueKr, distToStop, distToTarget]
+      properties:
+        id: { type: number }
+        ticker: { type: string }
+        instrument: { type: ["string", "null"] }
+        direction: { type: string, enum: [LONG, SHORT] }
+        market: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        entryPrice: { type: number }
+        lastPrice: { type: ["number", "null"] }
+        stopPrice: { type: ["number", "null"] }
+        targetPrice: { type: ["number", "null"] }
+        shares: { type: number }
+        positionSizeKr: { type: number }
+        risk1R: { type: ["number", "null"], description: Entry-to-stop risk in SEK; retained for compatibility. }
+        riskToStopKr: { type: ["number", "null"], description: Maximum loss in SEK from entry to a protective stop; null when no protective stop is set. }
+        riskToStopPct: { type: ["number", "null"], description: Maximum loss from entry to a protective stop, as a percentage of entry value. }
+        stopPnlKr: { type: ["number", "null"], description: Signed P&L in SEK if the position exits at its stop; null when no stop is set. }
+        stopPnlPct: { type: ["number", "null"], description: Signed P&L at stop as a percentage of entry value; null when no stop is set. }
+        createdAt: { type: string, format: date-time }
+        livePrice: { type: ["number", "null"] }
+        changePct: { type: ["number", "null"] }
+        quoteAsOf: { type: ["string", "null"], format: date-time }
+        unrealisedPct: { type: ["number", "null"] }
+        unrealisedKr: { type: ["number", "null"] }
+        currentR: { type: ["number", "null"] }
+        marketValueKr: { type: ["number", "null"] }
+        distToStop: { type: ["number", "null"] }
+        distToTarget: { type: ["number", "null"] }
+
+    PortfolioSummary:
+      type: object
+      required: [count, totalInvestedKr, totalMarketValueKr, totalUnrealisedKr, totalUnrealisedPct, maxStopLossKr, longExposureKr, shortExposureKr, grossExposureKr, netExposureKr]
+      properties:
+        count: { type: number }
+        totalInvestedKr: { type: number }
+        totalMarketValueKr: { type: number }
+        totalUnrealisedKr: { type: number }
+        totalUnrealisedPct: { type: number }
+        maxStopLossKr: { type: number, description: Sum of negative stop P&L amounts only, expressed as a positive maximum-loss amount. }
+        longExposureKr: { type: number, description: Current long market exposure. }
+        shortExposureKr: { type: number, description: Current short market exposure, reported as a positive amount. }
+        grossExposureKr: { type: number, description: Long exposure plus short exposure. }
+        netExposureKr: { type: number, description: Long exposure minus short exposure. }
+
+    PortfolioResponse:
+      type: object
+      required: [positions, summary, fetchedAt]
+      properties:
+        positions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortfolioPosition"
+        summary:
+          $ref: "#/components/schemas/PortfolioSummary"
+        fetchedAt:
+          type: string
+          format: date-time
+
     SessionConflictError:
       type: object
       required: [error, existingSessionId]
@@ -595,6 +669,17 @@ components:
           type: number
         volMultiplier:
           type: number
+        earningsInDays:
+          type: ["number", "null"]
+          description: "Days to earnings only when earningsKnowledge is SIGNAL_TIME; otherwise not assessable"
+        earningsKnowledge:
+          type: string
+          enum: [SIGNAL_TIME, UNKNOWN]
+          description: "Whether Rule 7 has a verified observation from the signal date"
+        earningsObservedAt:
+          type: ["string", "null"]
+          format: date-time
+          description: "When the Yahoo earnings calendar was observed for the stored signal-time value"
         signalRsi:
           type: ["number", "null"]
           description: "Wilder RSI(14) calculated from the signal chart when available"
@@ -629,11 +714,34 @@ components:
           type: ["number", "null"]
         outcomeNotes:
           type: ["string", "null"]
+        resolutionMethod:
+          type: ["string", "null"]
+          enum: [MANUAL_EXIT, TARGET_HIT, STOP_HIT, null]
+          description: "How the outcome was resolved. MANUAL_EXIT uses a recorded exit price; TARGET_HIT and STOP_HIT are explicit planned-level assumptions."
+        resolutionQuality:
+          type: ["string", "null"]
+          enum: [RECORDED_EXIT, ASSUMED_LEVEL, LEGACY_UNKNOWN, null]
+          description: "Confidence/provenance of the resolution. Null is retained for legacy rows."
+        realizedR:
+          type: ["number", "null"]
+          description: "Signed realized R, calculated from the recorded or assumed exit price and the original entry/stop risk."
+        resolutionEntryPrice:
+          type: ["number", "null"]
+          description: "Immutable entry price captured on first resolution; used as the realized-R numerator baseline."
+        resolutionStopPrice:
+          type: ["number", "null"]
+          description: "Immutable stop price captured on first resolution; used as the realized-R denominator baseline."
+        resolutionDirection:
+          type: ["string", "null"]
+          enum: [LONG, SHORT, null]
+          description: "Immutable direction captured on first resolution."
         hasLinkedTrade:
           type: boolean
           description: "Whether a Challenge Tracker trade is linked to this candidate's outcome"
         review:
           $ref: "#/components/schemas/SignalReview"
+        decision:
+          $ref: "#/components/schemas/CandidateDecision"
 
     SignalReview:
       type: object
@@ -642,6 +750,18 @@ components:
         status:
           type: string
           enum: [APPROVED, WARN, BLOCKED]
+        reasons:
+          type: array
+          items:
+            type: string
+
+    CandidateDecision:
+      type: object
+      required: [status, reasons]
+      properties:
+        status:
+          type: string
+          enum: [TRADEABLE, WAIT, BLOCKED, INVALID, STALE]
         reasons:
           type: array
           items:
@@ -677,6 +797,52 @@ components:
           type: ["number", "null"]
         outcomeNotes:
           type: ["string", "null"]
+        resolutionMethod:
+          type: ["string", "null"]
+          enum: [MANUAL_EXIT, TARGET_HIT, STOP_HIT, null]
+          description: "Required for a planned-level assumption. MANUAL_EXIT is accepted only with actualExitConfirmed=true."
+        actualExitConfirmed:
+          type: boolean
+          description: "Explicit confirmation that exitPrice is an entered, executed fill. A Yahoo/live quote alone must not set this."
+        challengeTrade:
+          $ref: "#/components/schemas/CandidateChallengeTrade"
+        removeChallengeTrade:
+          type: boolean
+          description: "Explicitly remove an existing linked Challenge Tracker trade when reverting to PENDING or SKIP."
+
+    CandidateChallengeTrade:
+      type: object
+      required: [date, ticker, strategy, direction, pnlKr, flag, followedPlan]
+      properties:
+        date:
+          type: string
+          format: date
+          description: "Validated against and persisted from the candidate session date."
+        ticker:
+          type: string
+          maxLength: 32
+          description: "Validated against and persisted from the candidate ticker."
+        strategy:
+          type: string
+          maxLength: 120
+        direction:
+          type: string
+          enum: [LONG, SHORT]
+          description: "Validated against and persisted from the candidate direction."
+        pnlKr:
+          type: number
+          description: "Validated against realized R and riskAllocationKr; retained for older clients."
+        riskAllocationKr:
+          type: number
+          exclusiveMinimum: 0
+          description: "Cash allocated to one R. The server derives P&L as round(riskAllocationKr × realizedR)."
+        flag:
+          type: string
+          enum: [LAST, REFLEX]
+        followedPlan:
+          type: boolean
+        boughtBeforeReport:
+          type: boolean
 
     SessionSummary:
       type: object

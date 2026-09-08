@@ -48,7 +48,22 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
   const fetchedAt = new Date().toISOString();
 
   if (positions.length === 0) {
-    res.json({ positions: [], summary: { totalUnrealisedKr: 0, totalMarketValueKr: 0 }, fetchedAt });
+    res.json({
+      positions: [],
+      summary: {
+        count: 0,
+        totalInvestedKr: 0,
+        totalMarketValueKr: 0,
+        totalUnrealisedKr: 0,
+        totalUnrealisedPct: 0,
+        maxStopLossKr: 0,
+        longExposureKr: 0,
+        shortExposureKr: 0,
+        grossExposureKr: 0,
+        netExposureKr: 0,
+      },
+      fetchedAt,
+    });
     return;
   }
 
@@ -64,6 +79,21 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
 
     const isShort = p.direction === "SHORT";
     const risk1R = p.stopPrice != null ? Math.abs(p.entryPrice - p.stopPrice) : null;
+    // Stop P&L is signed and applies to every valid stop, including
+    // break-even, profit-locking, and trailing stops.
+    const stopPnlKr = p.stopPrice != null
+      ? (isShort ? p.entryPrice - p.stopPrice : p.stopPrice - p.entryPrice) * p.shares
+      : null;
+    const stopPnlPct = p.stopPrice != null
+      ? (isShort ? p.entryPrice - p.stopPrice : p.stopPrice - p.entryPrice) / p.entryPrice * 100
+      : null;
+    // Only a stop on the loss side is a protective stop. Do not present a
+    // profit-locking or incorrectly placed stop as a maximum potential loss.
+    const hasProtectiveStop = stopPnlKr != null && stopPnlKr < 0;
+    const riskToStopKr = hasProtectiveStop ? Math.abs(p.entryPrice - p.stopPrice!) * p.shares : null;
+    const riskToStopPct = hasProtectiveStop
+      ? (Math.abs(p.entryPrice - p.stopPrice!) / p.entryPrice) * 100
+      : null;
 
     // Unrealised P&L
     let unrealisedPct: number | null = null;
@@ -107,6 +137,10 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
       shares: p.shares,
       positionSizeKr,
       risk1R: risk1R != null ? risk1R * p.shares : null,
+      riskToStopKr: riskToStopKr != null ? +riskToStopKr.toFixed(0) : null,
+      riskToStopPct: riskToStopPct != null ? +riskToStopPct.toFixed(2) : null,
+      stopPnlKr: stopPnlKr != null ? +stopPnlKr.toFixed(0) : null,
+      stopPnlPct: stopPnlPct != null ? +stopPnlPct.toFixed(2) : null,
       createdAt: p.createdAt,
       livePrice: live,
       changePct,
@@ -123,6 +157,16 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
   const totalUnrealisedKr = enriched.reduce((s, p) => s + (p.unrealisedKr ?? 0), 0);
   const totalMarketValueKr = enriched.reduce((s, p) => s + (p.marketValueKr ?? p.positionSizeKr), 0);
   const totalInvestedKr = enriched.reduce((s, p) => s + p.positionSizeKr, 0);
+  const maxStopLossKr = enriched.reduce(
+    (sum, position) => sum + Math.max(0, -(position.stopPnlKr ?? 0)),
+    0,
+  );
+  const longExposureKr = enriched
+    .filter((p) => p.direction === "LONG")
+    .reduce((s, p) => s + (p.marketValueKr ?? p.positionSizeKr), 0);
+  const shortExposureKr = enriched
+    .filter((p) => p.direction === "SHORT")
+    .reduce((s, p) => s + (p.marketValueKr ?? p.positionSizeKr), 0);
 
   res.json({
     positions: enriched,
@@ -132,6 +176,11 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
       totalMarketValueKr: +totalMarketValueKr.toFixed(0),
       totalUnrealisedKr: +totalUnrealisedKr.toFixed(0),
       totalUnrealisedPct: totalInvestedKr > 0 ? +((totalUnrealisedKr / totalInvestedKr) * 100).toFixed(2) : 0,
+      maxStopLossKr: +maxStopLossKr.toFixed(0),
+      longExposureKr: +longExposureKr.toFixed(0),
+      shortExposureKr: +shortExposureKr.toFixed(0),
+      grossExposureKr: +(longExposureKr + shortExposureKr).toFixed(0),
+      netExposureKr: +(longExposureKr - shortExposureKr).toFixed(0),
     },
     fetchedAt,
   });

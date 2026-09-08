@@ -6,9 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CandidateCategory } from './candidateCategory';
+import type { CandidateDecision } from './candidateDecision';
 import type { CandidateDirection } from './candidateDirection';
+import type { CandidateEarningsKnowledge } from './candidateEarningsKnowledge';
 import type { CandidateMarket } from './candidateMarket';
 import type { CandidateOutcomeProperty } from './candidateOutcomeProperty';
+import type { CandidateResolutionDirection } from './candidateResolutionDirection';
+import type { CandidateResolutionMethod } from './candidateResolutionMethod';
+import type { CandidateResolutionQuality } from './candidateResolutionQuality';
 import type { SignalReview } from './signalReview';
 
 export interface Candidate {
@@ -24,6 +29,18 @@ export interface Candidate {
   pctB: number;
   atr: number;
   volMultiplier: number;
+  /**
+     * Days to earnings only when earningsKnowledge is SIGNAL_TIME; otherwise not assessable
+     * @nullable
+     */
+  earningsInDays?: number | null;
+  /** Whether Rule 7 has a verified observation from the signal date */
+  earningsKnowledge?: CandidateEarningsKnowledge;
+  /**
+     * When the Yahoo earnings calendar was observed for the stored signal-time value
+     * @nullable
+     */
+  earningsObservedAt?: Date | null;
   /**
      * Wilder RSI(14) calculated from the signal chart when available
      * @nullable
@@ -50,7 +67,38 @@ export interface Candidate {
   exitPrice?: number | null;
   /** @nullable */
   outcomeNotes?: string | null;
+  /**
+     * How the outcome was resolved. MANUAL_EXIT uses a recorded exit price; TARGET_HIT and STOP_HIT are explicit planned-level assumptions.
+     * @nullable
+     */
+  resolutionMethod?: CandidateResolutionMethod;
+  /**
+     * Confidence/provenance of the resolution. Null is retained for legacy rows.
+     * @nullable
+     */
+  resolutionQuality?: CandidateResolutionQuality;
+  /**
+     * Signed realized R, calculated from the recorded or assumed exit price and the original entry/stop risk.
+     * @nullable
+     */
+  realizedR?: number | null;
+  /**
+     * Immutable entry price captured on first resolution; used as the realized-R numerator baseline.
+     * @nullable
+     */
+  resolutionEntryPrice?: number | null;
+  /**
+     * Immutable stop price captured on first resolution; used as the realized-R denominator baseline.
+     * @nullable
+     */
+  resolutionStopPrice?: number | null;
+  /**
+     * Immutable direction captured on first resolution.
+     * @nullable
+     */
+  resolutionDirection?: CandidateResolutionDirection;
   /** Whether a Challenge Tracker trade is linked to this candidate's outcome */
   hasLinkedTrade?: boolean;
   review?: SignalReview;
+  decision?: CandidateDecision;
 }

@@ -69,6 +69,7 @@ type Candidate = {
   signalRsi?: number | null;
   signalGapPct?: number | null;
   review?: { status: "APPROVED" | "WARN" | "BLOCKED"; reasons: string[] };
+  decision?: { status: "TRADEABLE" | "WAIT" | "BLOCKED" | "INVALID" | "STALE"; reasons: string[] };
 };
 
 type Session = {
@@ -203,7 +204,14 @@ export function Today() {
   // top picks: prefer starred, fallback to edge-score rank — split by market if data exists
   // Deduplicates by ticker: if a stock appears in multiple setups, keep only the best-ranked.
   function selectPicks(cands: Candidate[], n = 3): Candidate[] {
-    const eligible = cands.filter((candidate) => candidate.review?.status !== "BLOCKED");
+    // A legacy session may not have a decision yet. Keep its previous review
+    // behavior, but never promote a current signal that is explicitly WAIT,
+    // STALE, INVALID, or BLOCKED into today's actionable picks.
+    const eligible = cands.filter((candidate) =>
+      candidate.decision
+        ? candidate.decision.status === "TRADEABLE"
+        : candidate.review?.status !== "BLOCKED",
+    );
     const starred = eligible.filter(c => c.isTop3Pick);
     const pool = starred.length > 0 ? starred : [...eligible].sort((a, b) => b.perf1m * b.rsi - a.perf1m * a.rsi);
     const seen = new Set<string>();
@@ -289,18 +297,26 @@ export function Today() {
     try {
       // Candidate outcome and the optional Challenge Tracker trade are one
       // idempotent server operation. A retry cannot create a duplicate trade.
+      // Yahoo can signal that a level is currently crossed, but it is not an
+      // execution report. Quick actions therefore always record the relevant
+      // planned level as an explicit assumption, never the live quote as an
+      // actual/manual exit.
+      const exitPrice = outcome === "WIN" ? candidate.targetPrice : candidate.stopPrice;
+      const realizedR = candidate.direction === "LONG"
+        ? (exitPrice - candidate.entryPrice) / Math.abs(candidate.entryPrice - candidate.stopPrice)
+        : (candidate.entryPrice - exitPrice) / Math.abs(candidate.entryPrice - candidate.stopPrice);
+      const resolutionMethod = outcome === "WIN" ? "TARGET_HIT" : "STOP_HIT";
       const allocatedRisk = riskForCandidate(candidate);
       const challengeTrade = allocatedRisk != null
         ? (() => {
-        const pnlKr = outcome === "WIN"
-          ? Math.round(allocatedRisk * candidate.rr)
-          : Math.round(-allocatedRisk);
+        const pnlKr = Math.round(allocatedRisk * realizedR);
           return {
             date: session.date,
             ticker: candidate.ticker.replace(/\.ST$/i, ""),
             strategy: "trend pullback",
             direction: candidate.direction,
             pnlKr,
+            riskAllocationKr: allocatedRisk,
             flag: "LAST",
             followedPlan: true,
           };
@@ -311,7 +327,8 @@ export function Today() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           outcome,
-          exitPrice: outcome === "WIN" ? candidate.targetPrice : candidate.stopPrice,
+          exitPrice,
+          resolutionMethod,
           challengeTrade,
         }),
       });

@@ -1,5 +1,9 @@
 import { useState, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  getGetPortfolioQueryKey, useGetPortfolio,
+  type PortfolioPosition, type PortfolioResponse,
+} from "@workspace/api-client-react";
 import {
   Briefcase, TrendingUp, TrendingDown, RefreshCw, Plus, Trash2,
   AlertTriangle, Target, ShieldAlert, ChevronUp, ChevronDown, ClipboardPaste, CheckCircle2, Pencil, X,
@@ -9,43 +13,8 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const api = (path: string) => `${BASE}/api${path}`;
 
 // ── types ──────────────────────────────────────────────────────────────────────
-interface Position {
-  id: number;
-  ticker: string;
-  instrument: string | null;
-  direction: "LONG" | "SHORT";
-  market: string | null;
-  notes: string | null;
-  entryPrice: number;
-  lastPrice: number | null;
-  stopPrice: number | null;
-  targetPrice: number | null;
-  shares: number;
-  positionSizeKr: number;
-  risk1R: number | null;
-  createdAt: string;
-  livePrice: number | null;
-  changePct: number | null;
-  quoteAsOf: string | null;
-  unrealisedPct: number | null;
-  unrealisedKr: number | null;
-  currentR: number | null;
-  marketValueKr: number | null;
-  distToStop: number | null;
-  distToTarget: number | null;
-}
-
-interface PortfolioData {
-  positions: Position[];
-  summary: {
-    count: number;
-    totalInvestedKr: number;
-    totalMarketValueKr: number;
-    totalUnrealisedKr: number;
-    totalUnrealisedPct: number;
-  };
-  fetchedAt: string;
-}
+type Position = PortfolioPosition;
+type PortfolioData = PortfolioResponse;
 
 interface BrokerImportRow {
   id: string;
@@ -186,12 +155,13 @@ function FreshnessBadge({ iso, label }: { iso: string | null; label: string }) {
 
 function SummaryBar({ summary, fetchedAt }: { summary: PortfolioData["summary"]; fetchedAt: string }) {
   const isUp = summary.totalUnrealisedKr >= 0;
+  const netLong = summary.netExposureKr >= 0;
   return (
     <div className="space-y-2">
       <div className="flex justify-end">
         <FreshnessBadge iso={fetchedAt} label="Portföljvärdet beräknat" />
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
         <Tile label="Positioner" value={String(summary.count)} />
         <Tile label="Investerat" value={`${fmt(summary.totalInvestedKr)} kr`} />
         <Tile
@@ -203,6 +173,21 @@ function SummaryBar({ summary, fetchedAt }: { summary: PortfolioData["summary"];
           value={`${sgn(summary.totalUnrealisedKr, 0)} kr`}
           sub={`${sgn(summary.totalUnrealisedPct, 2)}%`}
           valueClass={isUp ? "text-success" : "text-destructive"}
+        />
+        <Tile
+          label="Max stopförlust"
+          value={`${sgn(-summary.maxStopLossKr, 0)} kr`}
+          sub="Endast negativ nedsida vid stop"
+          valueClass="text-destructive"
+        />
+        <Tile label="Long-exponering" value={`${fmt(summary.longExposureKr)} kr`} valueClass="text-success" />
+        <Tile label="Short-exponering" value={`${fmt(summary.shortExposureKr)} kr`} valueClass="text-destructive" />
+        <Tile label="Bruttoexponering" value={`${fmt(summary.grossExposureKr)} kr`} />
+        <Tile
+          label="Nettoexponering"
+          value={`${sgn(summary.netExposureKr, 0)} kr`}
+          sub={netLong ? "Netto long" : "Netto short"}
+          valueClass={netLong ? "text-success" : "text-destructive"}
         />
       </div>
     </div>
@@ -501,7 +486,7 @@ function PositionCard({ pos, onDelete, onEdited }: { pos: Position; onDelete: (i
       <PriceBar pos={pos} />
 
       {/* metrics grid */}
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-x-4 gap-y-2 mt-3 text-xs">
+      <div className="grid grid-cols-3 sm:grid-cols-7 gap-x-4 gap-y-2 mt-3 text-xs">
         <MetricCell label="Entry" value={fmt(pos.entryPrice, 2)} />
         <MetricCell
           label="Stop"
@@ -519,6 +504,13 @@ function PositionCard({ pos, onDelete, onEdited }: { pos: Position; onDelete: (i
         />
         <MetricCell label="Antal" value={fmt(pos.shares, 0)} />
         <MetricCell label="Investerat" value={`${fmt(pos.positionSizeKr, 0)} kr`} />
+        <MetricCell
+          label="P&L vid stop"
+          value={pos.stopPnlKr != null ? `${sgn(pos.stopPnlKr, 0)} kr` : "Ingen stop"}
+          sub={pos.stopPnlPct != null ? `${sgn(pos.stopPnlPct, 1)}% av entry` : undefined}
+          valueClass={pos.stopPnlKr != null ? (pos.stopPnlKr >= 0 ? "text-success" : "text-destructive") : "text-muted-foreground"}
+          icon={<ShieldAlert className="h-3 w-3 text-destructive/60" />}
+        />
         <MetricCell
           label="Nuv. R"
           value={pos.currentR != null ? `${sgn(pos.currentR, 2)}R` : "–"}
@@ -825,14 +817,8 @@ export function Portfolio() {
   const [showForm, setShowForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
 
-  const { data, isLoading, isError, refetch, isFetching } = useQuery<PortfolioData>({
-    queryKey: ["portfolio"],
-    queryFn: async () => {
-      const res = await fetch(api("/portfolio"));
-      if (!res.ok) throw new Error("Kunde inte hämta portfölj");
-      return res.json();
-    },
-    staleTime: 60_000,
+  const { data, isLoading, isError, refetch, isFetching } = useGetPortfolio({
+    query: { queryKey: getGetPortfolioQueryKey(), staleTime: 60_000 },
   });
 
   const deleteMutation = useMutation({
@@ -840,21 +826,21 @@ export function Portfolio() {
       const res = await fetch(api(`/portfolio/${id}`), { method: "DELETE" });
       if (!res.ok) throw new Error("Borttagning misslyckades");
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["portfolio"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: getGetPortfolioQueryKey() }),
   });
 
   const onAdded = useCallback(() => {
     setShowForm(false);
-    qc.invalidateQueries({ queryKey: ["portfolio"] });
+    qc.invalidateQueries({ queryKey: getGetPortfolioQueryKey() });
   }, [qc]);
 
   const onImported = useCallback(() => {
     setShowImport(false);
-    qc.invalidateQueries({ queryKey: ["portfolio"] });
+    qc.invalidateQueries({ queryKey: getGetPortfolioQueryKey() });
   }, [qc]);
 
   const onEdited = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ["portfolio"] });
+    qc.invalidateQueries({ queryKey: getGetPortfolioQueryKey() });
   }, [qc]);
 
   const positions = data?.positions ?? [];

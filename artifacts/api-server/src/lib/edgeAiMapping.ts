@@ -77,6 +77,8 @@ export function mapEdgeAiSetup(
     atr: oneR,
     volMultiplier: 0, // filled in by live Yahoo Finance fetch by the caller
     earningsInDays: null as number | null,
+    earningsKnowledge: "UNKNOWN" as "SIGNAL_TIME" | "UNKNOWN",
+    earningsObservedAt: null as Date | null,
     distFrom20dH: barsAgo, // store signal age in trading days
     signalRsi,
     signalGapPct,

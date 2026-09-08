@@ -18,6 +18,9 @@ export const survivalTradesTable = pgTable("survival_trades", {
   direction: text("direction", { enum: ["LONG", "SHORT"] }).notNull(),
   leverageX: real("leverage_x"),
   pnlKr: real("pnl_kr").notNull(),
+  // Authoritative cash amount allocated to one R. New candidate-linked trades
+  // persist it so later outcome corrections can recompute P&L without drift.
+  riskAllocationKr: real("risk_allocation_kr"),
   flag: text("flag", { enum: ["LAST", "REFLEX"] }).notNull(),
   followedPlan: boolean("followed_plan").notNull(),
   boughtBeforeReport: boolean("bought_before_report").notNull().default(false),

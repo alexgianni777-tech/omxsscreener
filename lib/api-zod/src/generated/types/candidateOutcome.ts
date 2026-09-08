@@ -5,7 +5,9 @@
  * OMXS30 Screener API
  * OpenAPI spec version: 0.1.0
  */
+import type { CandidateChallengeTrade } from './candidateChallengeTrade';
 import type { CandidateOutcomeOutcome } from './candidateOutcomeOutcome';
+import type { CandidateOutcomeResolutionMethod } from './candidateOutcomeResolutionMethod';
 
 export interface CandidateOutcome {
   outcome: CandidateOutcomeOutcome;
@@ -13,4 +15,14 @@ export interface CandidateOutcome {
   exitPrice?: number | null;
   /** @nullable */
   outcomeNotes?: string | null;
+  /**
+     * Required for a planned-level assumption. MANUAL_EXIT is accepted only with actualExitConfirmed=true.
+     * @nullable
+     */
+  resolutionMethod?: CandidateOutcomeResolutionMethod;
+  /** Explicit confirmation that exitPrice is an entered, executed fill. A Yahoo/live quote alone must not set this. */
+  actualExitConfirmed?: boolean;
+  challengeTrade?: CandidateChallengeTrade;
+  /** Explicitly remove an existing linked Challenge Tracker trade when reverting to PENDING or SKIP. */
+  removeChallengeTrade?: boolean;
 }

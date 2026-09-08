@@ -87,6 +87,10 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
       entryPrice: candidatesTable.entryPrice,
       stopPrice: candidatesTable.stopPrice,
       exitPrice: candidatesTable.exitPrice,
+      realizedR: candidatesTable.realizedR,
+      resolutionEntryPrice: candidatesTable.resolutionEntryPrice,
+      resolutionStopPrice: candidatesTable.resolutionStopPrice,
+      resolutionDirection: candidatesTable.resolutionDirection,
       sessionDate: screenerSessionsTable.date,
     })
     .from(candidatesTable)
@@ -111,16 +115,17 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
     ) {
       continue;
     }
-    const oneRUnit = Math.abs(row.entryPrice - row.stopPrice);
+    // New resolutions persist R at the time they are recorded, so later
+    // signal re-imports cannot rewrite their realized performance. Keep the
+    // calculation as a fallback for all legacy outcome rows.
+    const entryPrice = row.resolutionEntryPrice ?? row.entryPrice;
+    const stopPrice = row.resolutionStopPrice ?? row.stopPrice;
+    const direction = row.resolutionDirection ?? row.direction;
+    const oneRUnit = Math.abs(entryPrice - stopPrice);
     if (oneRUnit === 0) continue;
-
-    let r: number;
-    if (row.direction === "LONG") {
-      r = (row.exitPrice - row.entryPrice) / oneRUnit;
-    } else {
-      // SHORT
-      r = (row.entryPrice - row.exitPrice) / oneRUnit;
-    }
+    const r = row.realizedR ?? (direction === "LONG"
+      ? (row.exitPrice - entryPrice) / oneRUnit
+      : (entryPrice - row.exitPrice) / oneRUnit);
 
     tradeRs.push({
       r,

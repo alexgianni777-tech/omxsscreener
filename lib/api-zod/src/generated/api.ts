@@ -48,6 +48,9 @@ export const ImportSessionResponse = zod.object({
   "pctB": zod.number(),
   "atr": zod.number(),
   "volMultiplier": zod.number(),
+  "earningsInDays": zod.number().nullish().describe('Days to earnings only when earningsKnowledge is SIGNAL_TIME; otherwise not assessable'),
+  "earningsKnowledge": zod.enum(['SIGNAL_TIME', 'UNKNOWN']).optional().describe('Whether Rule 7 has a verified observation from the signal date'),
+  "earningsObservedAt": zod.coerce.date().nullish().describe('When the Yahoo earnings calendar was observed for the stored signal-time value'),
   "signalRsi": zod.number().nullish().describe('Wilder RSI(14) calculated from the signal chart when available'),
   "signalGapPct": zod.number().nullish().describe('Opening gap from previous close in percent when available'),
   "distFrom20dH": zod.number(),
@@ -62,9 +65,19 @@ export const ImportSessionResponse = zod.object({
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
   "outcomeNotes": zod.string().nullish(),
+  "resolutionMethod": zod.union([zod.literal('MANUAL_EXIT'),zod.literal('TARGET_HIT'),zod.literal('STOP_HIT'),zod.literal(null)]).nullish().describe('How the outcome was resolved. MANUAL_EXIT uses a recorded exit price; TARGET_HIT and STOP_HIT are explicit planned-level assumptions.'),
+  "resolutionQuality": zod.union([zod.literal('RECORDED_EXIT'),zod.literal('ASSUMED_LEVEL'),zod.literal('LEGACY_UNKNOWN'),zod.literal(null)]).nullish().describe('Confidence\/provenance of the resolution. Null is retained for legacy rows.'),
+  "realizedR": zod.number().nullish().describe('Signed realized R, calculated from the recorded or assumed exit price and the original entry\/stop risk.'),
+  "resolutionEntryPrice": zod.number().nullish().describe('Immutable entry price captured on first resolution; used as the realized-R numerator baseline.'),
+  "resolutionStopPrice": zod.number().nullish().describe('Immutable stop price captured on first resolution; used as the realized-R denominator baseline.'),
+  "resolutionDirection": zod.union([zod.literal('LONG'),zod.literal('SHORT'),zod.literal(null)]).nullish().describe('Immutable direction captured on first resolution.'),
   "hasLinkedTrade": zod.boolean().optional().describe('Whether a Challenge Tracker trade is linked to this candidate\'s outcome'),
   "review": zod.object({
   "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}).optional(),
+  "decision": zod.object({
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
   "reasons": zod.array(zod.string())
 }).optional()
 })),
@@ -166,6 +179,9 @@ export const ReimportSessionResponse = zod.object({
   "pctB": zod.number(),
   "atr": zod.number(),
   "volMultiplier": zod.number(),
+  "earningsInDays": zod.number().nullish().describe('Days to earnings only when earningsKnowledge is SIGNAL_TIME; otherwise not assessable'),
+  "earningsKnowledge": zod.enum(['SIGNAL_TIME', 'UNKNOWN']).optional().describe('Whether Rule 7 has a verified observation from the signal date'),
+  "earningsObservedAt": zod.coerce.date().nullish().describe('When the Yahoo earnings calendar was observed for the stored signal-time value'),
   "signalRsi": zod.number().nullish().describe('Wilder RSI(14) calculated from the signal chart when available'),
   "signalGapPct": zod.number().nullish().describe('Opening gap from previous close in percent when available'),
   "distFrom20dH": zod.number(),
@@ -180,9 +196,19 @@ export const ReimportSessionResponse = zod.object({
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
   "outcomeNotes": zod.string().nullish(),
+  "resolutionMethod": zod.union([zod.literal('MANUAL_EXIT'),zod.literal('TARGET_HIT'),zod.literal('STOP_HIT'),zod.literal(null)]).nullish().describe('How the outcome was resolved. MANUAL_EXIT uses a recorded exit price; TARGET_HIT and STOP_HIT are explicit planned-level assumptions.'),
+  "resolutionQuality": zod.union([zod.literal('RECORDED_EXIT'),zod.literal('ASSUMED_LEVEL'),zod.literal('LEGACY_UNKNOWN'),zod.literal(null)]).nullish().describe('Confidence\/provenance of the resolution. Null is retained for legacy rows.'),
+  "realizedR": zod.number().nullish().describe('Signed realized R, calculated from the recorded or assumed exit price and the original entry\/stop risk.'),
+  "resolutionEntryPrice": zod.number().nullish().describe('Immutable entry price captured on first resolution; used as the realized-R numerator baseline.'),
+  "resolutionStopPrice": zod.number().nullish().describe('Immutable stop price captured on first resolution; used as the realized-R denominator baseline.'),
+  "resolutionDirection": zod.union([zod.literal('LONG'),zod.literal('SHORT'),zod.literal(null)]).nullish().describe('Immutable direction captured on first resolution.'),
   "hasLinkedTrade": zod.boolean().optional().describe('Whether a Challenge Tracker trade is linked to this candidate\'s outcome'),
   "review": zod.object({
   "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}).optional(),
+  "decision": zod.object({
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
   "reasons": zod.array(zod.string())
 }).optional()
 })),
@@ -255,6 +281,9 @@ export const GetSessionResponse = zod.object({
   "pctB": zod.number(),
   "atr": zod.number(),
   "volMultiplier": zod.number(),
+  "earningsInDays": zod.number().nullish().describe('Days to earnings only when earningsKnowledge is SIGNAL_TIME; otherwise not assessable'),
+  "earningsKnowledge": zod.enum(['SIGNAL_TIME', 'UNKNOWN']).optional().describe('Whether Rule 7 has a verified observation from the signal date'),
+  "earningsObservedAt": zod.coerce.date().nullish().describe('When the Yahoo earnings calendar was observed for the stored signal-time value'),
   "signalRsi": zod.number().nullish().describe('Wilder RSI(14) calculated from the signal chart when available'),
   "signalGapPct": zod.number().nullish().describe('Opening gap from previous close in percent when available'),
   "distFrom20dH": zod.number(),
@@ -269,9 +298,19 @@ export const GetSessionResponse = zod.object({
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
   "outcomeNotes": zod.string().nullish(),
+  "resolutionMethod": zod.union([zod.literal('MANUAL_EXIT'),zod.literal('TARGET_HIT'),zod.literal('STOP_HIT'),zod.literal(null)]).nullish().describe('How the outcome was resolved. MANUAL_EXIT uses a recorded exit price; TARGET_HIT and STOP_HIT are explicit planned-level assumptions.'),
+  "resolutionQuality": zod.union([zod.literal('RECORDED_EXIT'),zod.literal('ASSUMED_LEVEL'),zod.literal('LEGACY_UNKNOWN'),zod.literal(null)]).nullish().describe('Confidence\/provenance of the resolution. Null is retained for legacy rows.'),
+  "realizedR": zod.number().nullish().describe('Signed realized R, calculated from the recorded or assumed exit price and the original entry\/stop risk.'),
+  "resolutionEntryPrice": zod.number().nullish().describe('Immutable entry price captured on first resolution; used as the realized-R numerator baseline.'),
+  "resolutionStopPrice": zod.number().nullish().describe('Immutable stop price captured on first resolution; used as the realized-R denominator baseline.'),
+  "resolutionDirection": zod.union([zod.literal('LONG'),zod.literal('SHORT'),zod.literal(null)]).nullish().describe('Immutable direction captured on first resolution.'),
   "hasLinkedTrade": zod.boolean().optional().describe('Whether a Challenge Tracker trade is linked to this candidate\'s outcome'),
   "review": zod.object({
   "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}).optional(),
+  "decision": zod.object({
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
   "reasons": zod.array(zod.string())
 }).optional()
 })),
@@ -345,6 +384,9 @@ export const ListCandidatesResponseItem = zod.object({
   "pctB": zod.number(),
   "atr": zod.number(),
   "volMultiplier": zod.number(),
+  "earningsInDays": zod.number().nullish().describe('Days to earnings only when earningsKnowledge is SIGNAL_TIME; otherwise not assessable'),
+  "earningsKnowledge": zod.enum(['SIGNAL_TIME', 'UNKNOWN']).optional().describe('Whether Rule 7 has a verified observation from the signal date'),
+  "earningsObservedAt": zod.coerce.date().nullish().describe('When the Yahoo earnings calendar was observed for the stored signal-time value'),
   "signalRsi": zod.number().nullish().describe('Wilder RSI(14) calculated from the signal chart when available'),
   "signalGapPct": zod.number().nullish().describe('Opening gap from previous close in percent when available'),
   "distFrom20dH": zod.number(),
@@ -359,9 +401,19 @@ export const ListCandidatesResponseItem = zod.object({
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
   "outcomeNotes": zod.string().nullish(),
+  "resolutionMethod": zod.union([zod.literal('MANUAL_EXIT'),zod.literal('TARGET_HIT'),zod.literal('STOP_HIT'),zod.literal(null)]).nullish().describe('How the outcome was resolved. MANUAL_EXIT uses a recorded exit price; TARGET_HIT and STOP_HIT are explicit planned-level assumptions.'),
+  "resolutionQuality": zod.union([zod.literal('RECORDED_EXIT'),zod.literal('ASSUMED_LEVEL'),zod.literal('LEGACY_UNKNOWN'),zod.literal(null)]).nullish().describe('Confidence\/provenance of the resolution. Null is retained for legacy rows.'),
+  "realizedR": zod.number().nullish().describe('Signed realized R, calculated from the recorded or assumed exit price and the original entry\/stop risk.'),
+  "resolutionEntryPrice": zod.number().nullish().describe('Immutable entry price captured on first resolution; used as the realized-R numerator baseline.'),
+  "resolutionStopPrice": zod.number().nullish().describe('Immutable stop price captured on first resolution; used as the realized-R denominator baseline.'),
+  "resolutionDirection": zod.union([zod.literal('LONG'),zod.literal('SHORT'),zod.literal(null)]).nullish().describe('Immutable direction captured on first resolution.'),
   "hasLinkedTrade": zod.boolean().optional().describe('Whether a Challenge Tracker trade is linked to this candidate\'s outcome'),
   "review": zod.object({
   "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}).optional(),
+  "decision": zod.object({
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
   "reasons": zod.array(zod.string())
 }).optional()
 }).and(zod.object({
@@ -377,10 +429,32 @@ export const UpdateCandidateOutcomeParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const updateCandidateOutcomeBodyChallengeTradeTickerMax = 32;
+
+export const updateCandidateOutcomeBodyChallengeTradeStrategyMax = 120;
+
+export const updateCandidateOutcomeBodyChallengeTradeRiskAllocationKrExclusiveMin = 0;
+
+
+
 export const UpdateCandidateOutcomeBody = zod.object({
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
-  "outcomeNotes": zod.string().nullish()
+  "outcomeNotes": zod.string().nullish(),
+  "resolutionMethod": zod.union([zod.literal('MANUAL_EXIT'),zod.literal('TARGET_HIT'),zod.literal('STOP_HIT'),zod.literal(null)]).nullish().describe('Required for a planned-level assumption. MANUAL_EXIT is accepted only with actualExitConfirmed=true.'),
+  "actualExitConfirmed": zod.boolean().optional().describe('Explicit confirmation that exitPrice is an entered, executed fill. A Yahoo\/live quote alone must not set this.'),
+  "challengeTrade": zod.object({
+  "date": zod.coerce.date().describe('Validated against and persisted from the candidate session date.'),
+  "ticker": zod.string().max(updateCandidateOutcomeBodyChallengeTradeTickerMax).describe('Validated against and persisted from the candidate ticker.'),
+  "strategy": zod.string().max(updateCandidateOutcomeBodyChallengeTradeStrategyMax),
+  "direction": zod.enum(['LONG', 'SHORT']).describe('Validated against and persisted from the candidate direction.'),
+  "pnlKr": zod.number().describe('Validated against realized R and riskAllocationKr; retained for older clients.'),
+  "riskAllocationKr": zod.number().gt(updateCandidateOutcomeBodyChallengeTradeRiskAllocationKrExclusiveMin).optional().describe('Cash allocated to one R. The server derives P&L as round(riskAllocationKr × realizedR).'),
+  "flag": zod.enum(['LAST', 'REFLEX']),
+  "followedPlan": zod.boolean(),
+  "boughtBeforeReport": zod.boolean().optional()
+}).optional(),
+  "removeChallengeTrade": zod.boolean().optional().describe('Explicitly remove an existing linked Challenge Tracker trade when reverting to PENDING or SKIP.')
 })
 
 export const UpdateCandidateOutcomeResponse = zod.object({
@@ -396,6 +470,9 @@ export const UpdateCandidateOutcomeResponse = zod.object({
   "pctB": zod.number(),
   "atr": zod.number(),
   "volMultiplier": zod.number(),
+  "earningsInDays": zod.number().nullish().describe('Days to earnings only when earningsKnowledge is SIGNAL_TIME; otherwise not assessable'),
+  "earningsKnowledge": zod.enum(['SIGNAL_TIME', 'UNKNOWN']).optional().describe('Whether Rule 7 has a verified observation from the signal date'),
+  "earningsObservedAt": zod.coerce.date().nullish().describe('When the Yahoo earnings calendar was observed for the stored signal-time value'),
   "signalRsi": zod.number().nullish().describe('Wilder RSI(14) calculated from the signal chart when available'),
   "signalGapPct": zod.number().nullish().describe('Opening gap from previous close in percent when available'),
   "distFrom20dH": zod.number(),
@@ -410,9 +487,19 @@ export const UpdateCandidateOutcomeResponse = zod.object({
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
   "outcomeNotes": zod.string().nullish(),
+  "resolutionMethod": zod.union([zod.literal('MANUAL_EXIT'),zod.literal('TARGET_HIT'),zod.literal('STOP_HIT'),zod.literal(null)]).nullish().describe('How the outcome was resolved. MANUAL_EXIT uses a recorded exit price; TARGET_HIT and STOP_HIT are explicit planned-level assumptions.'),
+  "resolutionQuality": zod.union([zod.literal('RECORDED_EXIT'),zod.literal('ASSUMED_LEVEL'),zod.literal('LEGACY_UNKNOWN'),zod.literal(null)]).nullish().describe('Confidence\/provenance of the resolution. Null is retained for legacy rows.'),
+  "realizedR": zod.number().nullish().describe('Signed realized R, calculated from the recorded or assumed exit price and the original entry\/stop risk.'),
+  "resolutionEntryPrice": zod.number().nullish().describe('Immutable entry price captured on first resolution; used as the realized-R numerator baseline.'),
+  "resolutionStopPrice": zod.number().nullish().describe('Immutable stop price captured on first resolution; used as the realized-R denominator baseline.'),
+  "resolutionDirection": zod.union([zod.literal('LONG'),zod.literal('SHORT'),zod.literal(null)]).nullish().describe('Immutable direction captured on first resolution.'),
   "hasLinkedTrade": zod.boolean().optional().describe('Whether a Challenge Tracker trade is linked to this candidate\'s outcome'),
   "review": zod.object({
   "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}).optional(),
+  "decision": zod.object({
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
   "reasons": zod.array(zod.string())
 }).optional()
 })
@@ -472,6 +559,55 @@ export const GetDashboardSummaryResponse = zod.object({
   "ticker": zod.string(),
   "outcome": zod.enum(['WIN', 'LOSS'])
 })).describe('Chronological sequence of resolved trades for equity curve chart')
+})
+
+
+/**
+ * @summary Open positions enriched with valuation, stop risk, and exposure
+ */
+export const GetPortfolioResponse = zod.object({
+  "positions": zod.array(zod.object({
+  "id": zod.number(),
+  "ticker": zod.string(),
+  "instrument": zod.string().nullable(),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "market": zod.string().nullable(),
+  "notes": zod.string().nullable(),
+  "entryPrice": zod.number(),
+  "lastPrice": zod.number().nullable(),
+  "stopPrice": zod.number().nullable(),
+  "targetPrice": zod.number().nullable(),
+  "shares": zod.number(),
+  "positionSizeKr": zod.number(),
+  "risk1R": zod.number().nullable().describe('Entry-to-stop risk in SEK; retained for compatibility.'),
+  "riskToStopKr": zod.number().nullable().describe('Maximum loss in SEK from entry to a protective stop; null when no protective stop is set.'),
+  "riskToStopPct": zod.number().nullable().describe('Maximum loss from entry to a protective stop'),
+  "stopPnlKr": zod.number().nullable().describe('Signed P&L in SEK if the position exits at its stop; null when no stop is set.'),
+  "stopPnlPct": zod.number().nullable().describe('Signed P&L at stop as a percentage of entry value; null when no stop is set.'),
+  "createdAt": zod.coerce.date(),
+  "livePrice": zod.number().nullable(),
+  "changePct": zod.number().nullable(),
+  "quoteAsOf": zod.coerce.date().nullable(),
+  "unrealisedPct": zod.number().nullable(),
+  "unrealisedKr": zod.number().nullable(),
+  "currentR": zod.number().nullable(),
+  "marketValueKr": zod.number().nullable(),
+  "distToStop": zod.number().nullable(),
+  "distToTarget": zod.number().nullable()
+})),
+  "summary": zod.object({
+  "count": zod.number(),
+  "totalInvestedKr": zod.number(),
+  "totalMarketValueKr": zod.number(),
+  "totalUnrealisedKr": zod.number(),
+  "totalUnrealisedPct": zod.number(),
+  "maxStopLossKr": zod.number().describe('Sum of negative stop P&L amounts only'),
+  "longExposureKr": zod.number().describe('Current long market exposure.'),
+  "shortExposureKr": zod.number().describe('Current short market exposure'),
+  "grossExposureKr": zod.number().describe('Long exposure plus short exposure.'),
+  "netExposureKr": zod.number().describe('Long exposure minus short exposure.')
+}),
+  "fetchedAt": zod.coerce.date()
 })
 
 

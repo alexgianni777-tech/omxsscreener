@@ -10,6 +10,7 @@ export type CandidateReviewInput = {
   signalGapPct: number | null;
   volMultiplier: number;
   earningsInDays: number | null;
+  earningsKnowledge: "SIGNAL_TIME" | "UNKNOWN" | null;
   entryPrice: number;
   stopPrice: number;
   targetPrice: number;
@@ -18,6 +19,13 @@ export type CandidateReviewInput = {
 
 export type SignalReview = {
   status: ReviewStatus;
+  reasons: string[];
+};
+
+export type CandidateDecisionStatus = "TRADEABLE" | "WAIT" | "BLOCKED" | "INVALID" | "STALE";
+
+export type CandidateDecision = {
+  status: CandidateDecisionStatus;
   reasons: string[];
 };
 
@@ -58,7 +66,9 @@ export function reviewCandidate(
   }
 
   if (candidate.rr < 1.2) blockers.push(`R:R ${candidate.rr.toFixed(2)} är under miniminivån 1,2.`);
-  if (candidate.earningsInDays != null && candidate.earningsInDays >= 0 && candidate.earningsInDays <= 5) {
+  if (candidate.earningsKnowledge !== "SIGNAL_TIME") {
+    warnings.push("Regel 7 ej bedömbar: rapportkalender saknar verifierad signal-tidsobservation.");
+  } else if (candidate.earningsInDays != null && candidate.earningsInDays >= 0 && candidate.earningsInDays <= 5) {
     blockers.push(`Rapport inom ${candidate.earningsInDays} dagar — exkluderas enligt Regel 7.`);
   }
 
@@ -87,6 +97,57 @@ export function reviewCandidate(
 
   const reasons = [...blockers, ...warnings];
   return { status: statusFor(warnings, blockers), reasons };
+}
+
+/**
+ * A trader-facing decision derived from the already persisted signal and its
+ * review.  This deliberately does not infer whether a Yahoo request succeeded:
+ * that provenance is not stored with legacy candidates.  It only reports
+ * missing/invalid values that are actually present in the candidate record.
+ */
+export function decideCandidate(
+  candidate: CandidateReviewInput & { price: number },
+  review: SignalReview,
+  sessionDate: string,
+  now = new Date(),
+): CandidateDecision {
+  const invalid: string[] = [];
+  if (!Number.isFinite(candidate.price) || candidate.price <= 0) {
+    invalid.push("Screenad kurs saknas eller är ogiltig.");
+  }
+  if (!Number.isFinite(candidate.volMultiplier) || candidate.volMultiplier <= 0) {
+    invalid.push("Volymdata saknas eller är ogiltig.");
+  }
+  if (!Number.isFinite(candidate.rsi) || candidate.rsi < 0) {
+    invalid.push("RSI-data saknas eller är ogiltig.");
+  }
+  if (!Number.isFinite(candidate.rr) || candidate.rr <= 0) {
+    invalid.push("R:R saknas eller är ogiltig.");
+  }
+  if (
+    !Number.isFinite(candidate.entryPrice) || candidate.entryPrice <= 0 ||
+    !Number.isFinite(candidate.stopPrice) || candidate.stopPrice <= 0 ||
+    !Number.isFinite(candidate.targetPrice) || candidate.targetPrice <= 0
+  ) {
+    invalid.push("Entry-, stop- eller targetdata saknas eller är ogiltig.");
+  }
+  if (invalid.length > 0) return { status: "INVALID", reasons: [...invalid, ...review.reasons] };
+
+  // Compare date-only values in UTC to avoid a browser/server timezone turning
+  // today's snapshot into yesterday's.
+  const today = now.toISOString().slice(0, 10);
+  if (sessionDate < today) {
+    return {
+      status: "STALE",
+      reasons: [`Signalen är från ${sessionDate}; kontrollera en ny snapshot och live-pris före trade.`, ...review.reasons],
+    };
+  }
+  if (review.status === "BLOCKED") return { status: "BLOCKED", reasons: review.reasons };
+  if (review.status === "WARN") return { status: "WAIT", reasons: review.reasons };
+  return {
+    status: "TRADEABLE",
+    reasons: ["Screeningsreglerna är godkända för dagens signal."],
+  };
 }
 
 export function reviewSession(

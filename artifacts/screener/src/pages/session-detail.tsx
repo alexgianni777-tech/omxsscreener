@@ -23,6 +23,22 @@ function edgeScoreColor(score: number): string {
   return "text-destructive border-destructive/30 bg-destructive/10";
 }
 
+const DECISION_STYLE: Record<string, string> = {
+  TRADEABLE: "text-success bg-success/10 border-success/30",
+  WAIT: "text-amber-500 bg-amber-500/10 border-amber-500/30",
+  BLOCKED: "text-destructive bg-destructive/10 border-destructive/30",
+  INVALID: "text-destructive bg-destructive/10 border-destructive/30",
+  STALE: "text-amber-500 bg-amber-500/10 border-amber-500/30",
+};
+
+const DECISION_LABEL: Record<string, string> = {
+  TRADEABLE: "Tradebar",
+  WAIT: "Vänta",
+  BLOCKED: "Blockerad",
+  INVALID: "Ogiltig data",
+  STALE: "Inaktuell",
+};
+
 // ── Import diff banner — shows exactly what the last (re-)import changed ───────
 const FIELD_LABELS: Record<string, string> = {
   entryPrice: "Entry",
@@ -534,6 +550,12 @@ function CandidateRow({
 
   const [localOutcome, setLocalOutcome] = useState<CandidateOutcomeProperty>(candidate.outcome);
   const [localExit, setLocalExit] = useState<string>(candidate.exitPrice ? String(candidate.exitPrice) : "");
+  const [resolutionMethod, setResolutionMethod] = useState<"MANUAL_EXIT" | "TARGET_HIT" | "STOP_HIT">(
+    candidate.resolutionMethod === "TARGET_HIT" || candidate.resolutionMethod === "STOP_HIT"
+      ? candidate.resolutionMethod
+      : "MANUAL_EXIT",
+  );
+  const [actualExitConfirmed, setActualExitConfirmed] = useState(false);
   const [showChart, setShowChart] = useState(false);
   const [showAddToPortfolio, setShowAddToPortfolio] = useState(false);
   
@@ -544,6 +566,12 @@ function CandidateRow({
         data: { 
           outcome: localOutcome as any, 
           exitPrice: localExit ? parseFloat(localExit) : null,
+          ...(localOutcome === "WIN" || localOutcome === "LOSS"
+            ? {
+                resolutionMethod,
+                ...(resolutionMethod === "MANUAL_EXIT" ? { actualExitConfirmed } : {}),
+              }
+            : {}),
           ...(removeChallengeTrade ? { removeChallengeTrade: true } : {}),
         } as any
       },
@@ -561,6 +589,13 @@ function CandidateRow({
           // 409 = outcome change would silently orphan/drop a logged Challenge
           // Tracker trade; require the user's explicit confirmation.
           if (err?.status === 409) {
+            if (localOutcome === "WIN" || localOutcome === "LOSS") {
+              window.alert(
+                err?.data?.error ??
+                "Den kopplade Challenge Tracker-traden kunde inte uppdateras säkert. Öppna Challenge Tracker och ange riskallokeringen innan du försöker igen."
+              );
+              return;
+            }
             const existing = err?.data?.existingChallengeTrade;
             const pnl = existing?.pnlKr;
             const confirmed = window.confirm(
@@ -575,7 +610,7 @@ function CandidateRow({
         },
       }
     );
-  }, [candidate.id, localOutcome, localExit, sessionId, queryClient]);
+  }, [candidate.id, localOutcome, localExit, resolutionMethod, actualExitConfirmed, sessionId, queryClient]);
   const handleSaveRef = useRef(handleSave);
   handleSaveRef.current = handleSave;
 
@@ -588,6 +623,7 @@ function CandidateRow({
   const earningsDate = quote?.earningsDate ?? null;
   const hasEarningsWarning =
     earningsInDays != null && earningsInDays >= 0 && earningsInDays <= 5;
+  const signalEarningsKnown = candidate.earningsKnowledge === "SIGNAL_TIME";
   const earningsBadgeStyle =
     earningsInDays === 0
       ? "bg-destructive/15 text-destructive border-destructive/30"
@@ -636,6 +672,7 @@ function CandidateRow({
     : Math.round(candidate.perf1m * 100);    // decimal 0–1
   const sampleN = candidate.pctB;
   const barsAgo = Math.round(candidate.distFrom20dH);
+  const decision = candidate.decision;
 
   return (
     <div className="bg-card border border-border rounded-lg shadow-sm text-sm group">
@@ -693,13 +730,22 @@ function CandidateRow({
               </div>
             )}
             {/* Earnings warning badge */}
+            {!signalEarningsKnown && (
+              <div
+                className="flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold text-muted-foreground bg-muted border-border"
+                title="Det saknas en verifierad rapportkalender från signal-dagen. Regel 7 kan inte bedömas historiskt."
+              >
+                <Clock className="w-3 h-3" />
+                Regel 7: okänd
+              </div>
+            )}
             {hasEarningsWarning && (
               <div
                 className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold ${earningsBadgeStyle}`}
-                title={`Rapport: ${earningsDate} — undvik att ta nya positioner inom 5 dagar`}
+                title={`Nuvarande Yahoo-kalender: rapport ${earningsDate}. Detta ändrar inte signal-dagens Regel 7-bedömning.`}
               >
                 <AlertTriangle className="w-3 h-3" />
-                {earningsLabel}
+                Nu: {earningsLabel}
               </div>
             )}
             {/* Edge probability score badge — only for EdgeAI sessions */}
@@ -728,6 +774,15 @@ function CandidateRow({
             </div>
           </div>
         </div>
+          {decision && (
+            <div className={`rounded border px-2.5 py-2 text-xs ${DECISION_STYLE[decision.status]}`}>
+              <div className="flex items-center gap-1 font-bold">
+                <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                Beslut: {DECISION_LABEL[decision.status] ?? decision.status}
+              </div>
+              <p className="mt-1 leading-relaxed opacity-90">{decision.reasons.join(" ")}</p>
+            </div>
+          )}
         
         {/* Metrics grid — labels adapt to EdgeAI vs manual */}
         <div className="grid grid-cols-3 gap-y-2 gap-x-4 text-xs">
@@ -899,19 +954,62 @@ function CandidateRow({
             placeholder="Exit Px"
             value={localExit}
             onChange={e => setLocalExit(e.target.value)}
-            disabled={localOutcome === "PENDING" || localOutcome === "SKIP"}
+            disabled={localOutcome === "PENDING" || localOutcome === "SKIP" || resolutionMethod !== "MANUAL_EXIT"}
             className="h-8 w-24 rounded-md border border-input bg-background px-2 py-1 text-sm font-mono disabled:opacity-50"
           />
           
           <button 
             onClick={() => handleSave()}
-            disabled={updateOutcome.isPending || (localOutcome === candidate.outcome && localExit === (candidate.exitPrice ? String(candidate.exitPrice) : ""))}
+            disabled={
+              updateOutcome.isPending ||
+              ((localOutcome === "WIN" || localOutcome === "LOSS") && resolutionMethod === "MANUAL_EXIT" && !localExit) ||
+               ((localOutcome === "WIN" || localOutcome === "LOSS") && resolutionMethod === "MANUAL_EXIT" && !actualExitConfirmed) ||
+              (localOutcome === candidate.outcome && localExit === (candidate.exitPrice ? String(candidate.exitPrice) : ""))
+            }
             className="h-8 w-8 flex items-center justify-center rounded-md bg-primary text-primary-foreground disabled:opacity-50 hover:bg-primary/90 transition-colors"
             title="Save Outcome"
           >
             <RefreshCw className={`w-4 h-4 ${updateOutcome.isPending ? "animate-spin" : ""}`} />
           </button>
         </div>
+        {(localOutcome === "WIN" || localOutcome === "LOSS") && (
+          <>
+            <select
+              value={resolutionMethod}
+              onChange={(e) => {
+                const method = e.target.value as "MANUAL_EXIT" | "TARGET_HIT" | "STOP_HIT";
+                setResolutionMethod(method);
+                if (method === "TARGET_HIT") setLocalExit(String(candidate.targetPrice));
+                if (method === "STOP_HIT") setLocalExit(String(candidate.stopPrice));
+              }}
+              className="h-8 rounded-md border border-input bg-background px-2 py-1 text-xs"
+              aria-label="Resolution method"
+            >
+              <option value="MANUAL_EXIT">Faktiskt exit-pris (manuellt)</option>
+              {localOutcome === "WIN" && <option value="TARGET_HIT">Antag target träffad</option>}
+              {localOutcome === "LOSS" && <option value="STOP_HIT">Antag stop träffad</option>}
+            </select>
+            {resolutionMethod === "MANUAL_EXIT" ? (
+              <label className="flex items-start gap-2 text-[10px] text-muted-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={actualExitConfirmed}
+                  onChange={(e) => setActualExitConfirmed(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>Jag bekräftar att detta är mitt faktiska genomförda exit-fyllnad, inte en Yahoo/live-kurs.</span>
+              </label>
+            ) : (
+              <p className="text-[10px] text-amber-500">Plan-nivå antas. Använd bara när ordningen är känd; OHLC kan inte avgöra stop/target-ordning.</p>
+            )}
+          </>
+        )}
+        {candidate.realizedR != null && (
+          <p className="text-[10px] text-muted-foreground">
+            Realiserat: <span className="font-mono font-semibold">{candidate.realizedR >= 0 ? "+" : ""}{candidate.realizedR.toFixed(2)}R</span>
+            {candidate.resolutionQuality === "ASSUMED_LEVEL" ? " · antagen nivå" : candidate.resolutionQuality === "RECORDED_EXIT" ? " · registrerat exit" : ""}
+          </p>
+        )}
       </div>
 
     </div>

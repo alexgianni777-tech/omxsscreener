@@ -72,8 +72,9 @@ export function mergeCandidateInputs<T extends CandidateInput>(
 }
 
 /** Business fields whose changes are worth surfacing in an import diff. Fields the
- * synchronization step always preserves (outcome, exitPrice, outcomeNotes,
- * isTop3Pick) are deliberately excluded — those never change on re-import. */
+ * synchronization step always preserves outcome resolution fields and
+ * isTop3Pick, so they are deliberately excluded — those never change on
+ * re-import. */
 const DIFF_TRACKED_FIELDS = [
   "entryPrice",
   "stopPrice",
@@ -90,6 +91,7 @@ const DIFF_TRACKED_FIELDS = [
   "rs3m",
   "gapWarning",
   "earningsInDays",
+  "earningsKnowledge",
   "market",
 ] as const;
 
@@ -168,10 +170,21 @@ export async function synchronizeCandidates(
   for (const candidate of incoming) {
     const identity = candidateIdentity(candidate);
     const current = existingByIdentity.get(identity);
-    const values = { ...candidate, sessionId };
+    const values: Record<string, unknown> = { ...candidate, sessionId };
 
     if (current) {
-      const changes = diffFields(current, candidate);
+      // A later historical re-import has no way to recreate a signal-day
+      // calendar. Do not replace an already recorded signal-time observation
+      // with its deliberately UNKNOWN incoming counterpart.
+      if (
+        values.earningsKnowledge === "UNKNOWN" &&
+        current.earningsKnowledge === "SIGNAL_TIME"
+      ) {
+        values.earningsInDays = current.earningsInDays;
+        values.earningsKnowledge = current.earningsKnowledge;
+        values.earningsObservedAt = current.earningsObservedAt;
+      }
+      const changes = diffFields(current, values);
       if (changes.length > 0) diff.updated.push({ ...toDiffEntry(candidate), changes });
 
       await tx
@@ -181,6 +194,12 @@ export async function synchronizeCandidates(
           outcome: current.outcome,
           exitPrice: current.exitPrice,
           outcomeNotes: current.outcomeNotes,
+          resolutionMethod: current.resolutionMethod,
+          resolutionQuality: current.resolutionQuality,
+          realizedR: current.realizedR,
+          resolutionEntryPrice: current.resolutionEntryPrice,
+          resolutionStopPrice: current.resolutionStopPrice,
+          resolutionDirection: current.resolutionDirection,
           isTop3Pick: current.isTop3Pick,
         } as any)
         .where(eq(candidatesTable.id, current.id));

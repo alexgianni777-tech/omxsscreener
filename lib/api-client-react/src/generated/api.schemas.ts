@@ -55,6 +55,103 @@ export interface ErrorResponse {
   error: string;
 }
 
+export type PortfolioPositionDirection = typeof PortfolioPositionDirection[keyof typeof PortfolioPositionDirection];
+
+
+export const PortfolioPositionDirection = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
+export interface PortfolioPosition {
+  id: number;
+  ticker: string;
+  /** @nullable */
+  instrument: string | null;
+  direction: PortfolioPositionDirection;
+  /** @nullable */
+  market: string | null;
+  /** @nullable */
+  notes: string | null;
+  entryPrice: number;
+  /** @nullable */
+  lastPrice: number | null;
+  /** @nullable */
+  stopPrice: number | null;
+  /** @nullable */
+  targetPrice: number | null;
+  shares: number;
+  positionSizeKr: number;
+  /**
+     * Entry-to-stop risk in SEK; retained for compatibility.
+     * @nullable
+     */
+  risk1R: number | null;
+  /**
+     * Maximum loss in SEK from entry to a protective stop; null when no protective stop is set.
+     * @nullable
+     */
+  riskToStopKr: number | null;
+  /**
+     * Maximum loss from entry to a protective stop
+     * @nullable
+     */
+  riskToStopPct: number | null;
+  /**
+     * Signed P&L in SEK if the position exits at its stop; null when no stop is set.
+     * @nullable
+     */
+  stopPnlKr: number | null;
+  /**
+     * Signed P&L at stop as a percentage of entry value; null when no stop is set.
+     * @nullable
+     */
+  stopPnlPct: number | null;
+  createdAt: string;
+  /** @nullable */
+  livePrice: number | null;
+  /** @nullable */
+  changePct: number | null;
+  /** @nullable */
+  quoteAsOf: string | null;
+  /** @nullable */
+  unrealisedPct: number | null;
+  /** @nullable */
+  unrealisedKr: number | null;
+  /** @nullable */
+  currentR: number | null;
+  /** @nullable */
+  marketValueKr: number | null;
+  /** @nullable */
+  distToStop: number | null;
+  /** @nullable */
+  distToTarget: number | null;
+}
+
+export interface PortfolioSummary {
+  count: number;
+  totalInvestedKr: number;
+  totalMarketValueKr: number;
+  totalUnrealisedKr: number;
+  totalUnrealisedPct: number;
+  /** Sum of negative stop P&L amounts only */
+  maxStopLossKr: number;
+  /** Current long market exposure. */
+  longExposureKr: number;
+  /** Current short market exposure */
+  shortExposureKr: number;
+  /** Long exposure plus short exposure. */
+  grossExposureKr: number;
+  /** Long exposure minus short exposure. */
+  netExposureKr: number;
+}
+
+export interface PortfolioResponse {
+  positions: PortfolioPosition[];
+  summary: PortfolioSummary;
+  fetchedAt: string;
+}
+
 export interface SessionConflictError {
   error: string;
   /** ID of the existing session for this date */
@@ -157,6 +254,17 @@ export const CandidateCategory = {
 } as const;
 
 /**
+ * Whether Rule 7 has a verified observation from the signal date
+ */
+export type CandidateEarningsKnowledge = typeof CandidateEarningsKnowledge[keyof typeof CandidateEarningsKnowledge];
+
+
+export const CandidateEarningsKnowledge = {
+  SIGNAL_TIME: 'SIGNAL_TIME',
+  UNKNOWN: 'UNKNOWN',
+} as const;
+
+/**
  * Origin market for the signal: SE or US
  */
 export type CandidateMarket = typeof CandidateMarket[keyof typeof CandidateMarket];
@@ -185,6 +293,44 @@ export const CandidateOutcomeProperty = {
   PENDING: 'PENDING',
 } as const;
 
+/**
+ * How the outcome was resolved. MANUAL_EXIT uses a recorded exit price; TARGET_HIT and STOP_HIT are explicit planned-level assumptions.
+ * @nullable
+ */
+export type CandidateResolutionMethod = typeof CandidateResolutionMethod[keyof typeof CandidateResolutionMethod] | null;
+
+
+export const CandidateResolutionMethod = {
+  MANUAL_EXIT: 'MANUAL_EXIT',
+  TARGET_HIT: 'TARGET_HIT',
+  STOP_HIT: 'STOP_HIT',
+} as const;
+
+/**
+ * Confidence/provenance of the resolution. Null is retained for legacy rows.
+ * @nullable
+ */
+export type CandidateResolutionQuality = typeof CandidateResolutionQuality[keyof typeof CandidateResolutionQuality] | null;
+
+
+export const CandidateResolutionQuality = {
+  RECORDED_EXIT: 'RECORDED_EXIT',
+  ASSUMED_LEVEL: 'ASSUMED_LEVEL',
+  LEGACY_UNKNOWN: 'LEGACY_UNKNOWN',
+} as const;
+
+/**
+ * Immutable direction captured on first resolution.
+ * @nullable
+ */
+export type CandidateResolutionDirection = typeof CandidateResolutionDirection[keyof typeof CandidateResolutionDirection] | null;
+
+
+export const CandidateResolutionDirection = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
 export type SignalReviewStatus = typeof SignalReviewStatus[keyof typeof SignalReviewStatus];
 
 
@@ -196,6 +342,22 @@ export const SignalReviewStatus = {
 
 export interface SignalReview {
   status: SignalReviewStatus;
+  reasons: string[];
+}
+
+export type CandidateDecisionStatus = typeof CandidateDecisionStatus[keyof typeof CandidateDecisionStatus];
+
+
+export const CandidateDecisionStatus = {
+  TRADEABLE: 'TRADEABLE',
+  WAIT: 'WAIT',
+  BLOCKED: 'BLOCKED',
+  INVALID: 'INVALID',
+  STALE: 'STALE',
+} as const;
+
+export interface CandidateDecision {
+  status: CandidateDecisionStatus;
   reasons: string[];
 }
 
@@ -212,6 +374,18 @@ export interface Candidate {
   pctB: number;
   atr: number;
   volMultiplier: number;
+  /**
+     * Days to earnings only when earningsKnowledge is SIGNAL_TIME; otherwise not assessable
+     * @nullable
+     */
+  earningsInDays?: number | null;
+  /** Whether Rule 7 has a verified observation from the signal date */
+  earningsKnowledge?: CandidateEarningsKnowledge;
+  /**
+     * When the Yahoo earnings calendar was observed for the stored signal-time value
+     * @nullable
+     */
+  earningsObservedAt?: string | null;
   /**
      * Wilder RSI(14) calculated from the signal chart when available
      * @nullable
@@ -238,9 +412,40 @@ export interface Candidate {
   exitPrice?: number | null;
   /** @nullable */
   outcomeNotes?: string | null;
+  /**
+     * How the outcome was resolved. MANUAL_EXIT uses a recorded exit price; TARGET_HIT and STOP_HIT are explicit planned-level assumptions.
+     * @nullable
+     */
+  resolutionMethod?: CandidateResolutionMethod;
+  /**
+     * Confidence/provenance of the resolution. Null is retained for legacy rows.
+     * @nullable
+     */
+  resolutionQuality?: CandidateResolutionQuality;
+  /**
+     * Signed realized R, calculated from the recorded or assumed exit price and the original entry/stop risk.
+     * @nullable
+     */
+  realizedR?: number | null;
+  /**
+     * Immutable entry price captured on first resolution; used as the realized-R numerator baseline.
+     * @nullable
+     */
+  resolutionEntryPrice?: number | null;
+  /**
+     * Immutable stop price captured on first resolution; used as the realized-R denominator baseline.
+     * @nullable
+     */
+  resolutionStopPrice?: number | null;
+  /**
+     * Immutable direction captured on first resolution.
+     * @nullable
+     */
+  resolutionDirection?: CandidateResolutionDirection;
   /** Whether a Challenge Tracker trade is linked to this candidate's outcome */
   hasLinkedTrade?: boolean;
   review?: SignalReview;
+  decision?: CandidateDecision;
 }
 
 export type SessionReview = SignalReview & {
@@ -262,12 +467,78 @@ export const CandidateOutcomeOutcome = {
   PENDING: 'PENDING',
 } as const;
 
+/**
+ * Required for a planned-level assumption. MANUAL_EXIT is accepted only with actualExitConfirmed=true.
+ * @nullable
+ */
+export type CandidateOutcomeResolutionMethod = typeof CandidateOutcomeResolutionMethod[keyof typeof CandidateOutcomeResolutionMethod] | null;
+
+
+export const CandidateOutcomeResolutionMethod = {
+  MANUAL_EXIT: 'MANUAL_EXIT',
+  TARGET_HIT: 'TARGET_HIT',
+  STOP_HIT: 'STOP_HIT',
+} as const;
+
+/**
+ * Validated against and persisted from the candidate direction.
+ */
+export type CandidateChallengeTradeDirection = typeof CandidateChallengeTradeDirection[keyof typeof CandidateChallengeTradeDirection];
+
+
+export const CandidateChallengeTradeDirection = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
+export type CandidateChallengeTradeFlag = typeof CandidateChallengeTradeFlag[keyof typeof CandidateChallengeTradeFlag];
+
+
+export const CandidateChallengeTradeFlag = {
+  LAST: 'LAST',
+  REFLEX: 'REFLEX',
+} as const;
+
+export interface CandidateChallengeTrade {
+  /** Validated against and persisted from the candidate session date. */
+  date: string;
+  /**
+     * Validated against and persisted from the candidate ticker.
+     * @maxLength 32
+     */
+  ticker: string;
+  /** @maxLength 120 */
+  strategy: string;
+  /** Validated against and persisted from the candidate direction. */
+  direction: CandidateChallengeTradeDirection;
+  /** Validated against realized R and riskAllocationKr; retained for older clients. */
+  pnlKr: number;
+  /**
+     * Cash allocated to one R. The server derives P&L as round(riskAllocationKr × realizedR).
+     * @exclusiveMinimum 0
+     */
+  riskAllocationKr?: number;
+  flag: CandidateChallengeTradeFlag;
+  followedPlan: boolean;
+  boughtBeforeReport?: boolean;
+}
+
 export interface CandidateOutcome {
   outcome: CandidateOutcomeOutcome;
   /** @nullable */
   exitPrice?: number | null;
   /** @nullable */
   outcomeNotes?: string | null;
+  /**
+     * Required for a planned-level assumption. MANUAL_EXIT is accepted only with actualExitConfirmed=true.
+     * @nullable
+     */
+  resolutionMethod?: CandidateOutcomeResolutionMethod;
+  /** Explicit confirmation that exitPrice is an entered, executed fill. A Yahoo/live quote alone must not set this. */
+  actualExitConfirmed?: boolean;
+  challengeTrade?: CandidateChallengeTrade;
+  /** Explicitly remove an existing linked Challenge Tracker trade when reverting to PENDING or SKIP. */
+  removeChallengeTrade?: boolean;
 }
 
 export interface SessionSummary {
