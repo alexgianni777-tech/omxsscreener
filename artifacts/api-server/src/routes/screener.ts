@@ -85,6 +85,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
         category: candidatesTable.category,
         direction: candidatesTable.direction,
         market: candidatesTable.market,
+        signalSource: candidatesTable.signalSource,
         outcome: candidatesTable.outcome,
         exitPrice: candidatesTable.exitPrice,
       })

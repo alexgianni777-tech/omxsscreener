@@ -142,6 +142,7 @@ router.post(
           category: candidatesTable.category,
           direction: candidatesTable.direction,
           market: candidatesTable.market,
+          signalSource: candidatesTable.signalSource,
           outcome: candidatesTable.outcome,
           exitPrice: candidatesTable.exitPrice,
         })
@@ -151,8 +152,7 @@ router.post(
       const affectedOutcomes = existingRows.filter((r) => r.outcome !== "PENDING");
 
       // Preview the exact effective input used by the force path. In
-      // particular, candidates from a genuinely separate market are retained
-      // while same-market pending rows are eligible for removal.
+      // particular, candidates from a separate market or source are retained.
       const wouldRemove = pendingCandidatesToRemove(existingRows, uniqueMappedSetups);
 
       res.status(409).json({

@@ -13,6 +13,7 @@ import { reviewCandidate } from "./screeningReview.ts";
 
 type Row = {
   market: "SE" | "US";
+  signalSource: "edgeai" | "telegram";
   category: "MOMENTUM";
   ticker: string;
   direction: "LONG";
@@ -23,7 +24,8 @@ const row = (
   ticker: string,
   market: Row["market"] = "SE",
   outcome: Row["outcome"] = "PENDING",
-): Row => ({ market, category: "MOMENTUM", ticker, direction: "LONG", outcome });
+  signalSource: Row["signalSource"] = "edgeai",
+): Row => ({ market, signalSource, category: "MOMENTUM", ticker, direction: "LONG", outcome });
 
 test("explicit reimport policy preserves US pending and removes absent SE pending", () => {
   const existing = [row("KEEP"), row("REMOVE"), row("RESOLVED", "SE", "WIN"), row("US-KEEP", "US")];
@@ -68,6 +70,42 @@ test("only a genuinely separate market is carried into effective input", () => {
   assert.deepEqual(
     pendingRemovalIdentities(existing, incoming),
     ["SE|MOMENTUM|OLD-SE|LONG"],
+  );
+});
+
+test("EdgeAI reimport preserves pending Telegram candidates in the same market", () => {
+  const existing = [
+    row("OLD-EDGEAI"),
+    row("TELEGRAM-KEEP", "SE", "PENDING", "telegram"),
+  ];
+  const incoming = [row("NEW-EDGEAI")];
+  const effective = effectiveCandidateInputs(incoming, existing);
+
+  assert.deepEqual(
+    effective.map((candidate) => candidate.ticker),
+    ["NEW-EDGEAI", "TELEGRAM-KEEP"],
+  );
+  assert.deepEqual(
+    pendingRemovalIdentities(existing, incoming),
+    ["SE|MOMENTUM|OLD-EDGEAI|LONG"],
+  );
+});
+
+test("Telegram reimport preserves pending EdgeAI candidates in the same market", () => {
+  const existing = [
+    row("OLD-TELEGRAM", "SE", "PENDING", "telegram"),
+    row("EDGEAI-KEEP"),
+  ];
+  const incoming = [row("NEW-TELEGRAM", "SE", "PENDING", "telegram")];
+  const effective = effectiveCandidateInputs(incoming, existing);
+
+  assert.deepEqual(
+    effective.map((candidate) => candidate.ticker),
+    ["NEW-TELEGRAM", "EDGEAI-KEEP"],
+  );
+  assert.deepEqual(
+    pendingRemovalIdentities(existing, incoming),
+    ["SE|MOMENTUM|OLD-TELEGRAM|LONG"],
   );
 });
 

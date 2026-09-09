@@ -1,5 +1,6 @@
 export type CandidatePolicyInput = {
   market?: string | null;
+  signalSource?: string | null;
   category: string;
   ticker: string;
   direction: string;
@@ -14,19 +15,23 @@ export function candidateIdentity(candidate: CandidatePolicyInput): string {
   ].join("|");
 }
 
-/** Preserve only rows from markets not represented by this import. */
+/** Preserve rows from markets or sources not represented by this import. */
 export function effectiveCandidateInputs<T extends CandidatePolicyInput>(
   incoming: T[],
   existing: CandidatePolicyInput[],
 ): T[] {
   const incomingIdentities = new Set(incoming.map(candidateIdentity));
   const incomingMarkets = new Set(incoming.map((candidate) => candidate.market ?? "SE"));
+  const incomingSources = new Set(incoming.map((candidate) => candidate.signalSource ?? null));
   return [
     ...incoming,
     ...existing.filter(
       (candidate) =>
         !incomingIdentities.has(candidateIdentity(candidate)) &&
-        !incomingMarkets.has(candidate.market ?? "SE"),
+        (
+          !incomingMarkets.has(candidate.market ?? "SE") ||
+          !incomingSources.has(candidate.signalSource ?? null)
+        ),
     ),
   ] as T[];
 }
