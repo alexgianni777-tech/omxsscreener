@@ -500,13 +500,19 @@ export function Today() {
         </div>
 
         {picks.length === 0 && !loading && (
-          <div className="text-sm text-muted-foreground text-center py-12 border border-dashed border-border rounded-xl">
-            {session?.sessionReview?.status === "BLOCKED"
-              ? "Ingen kvalificerad trade idag — signalerna stoppades av risk- och datakvalitetsregler."
-              : "Inga picks idag ännu — kontrolleras automatiskt var 5:e minut från börsöppningen kl 09:00."}
+          <div className={`text-sm text-center py-12 border border-dashed rounded-xl ${
+            session && !isToday
+              ? "text-amber-600 border-amber-500/30 bg-amber-500/5"
+              : "text-muted-foreground border-border"
+          }`}>
+            {session && !isToday
+              ? `Dagens EdgeAI-signal har ännu inte publicerats. Senaste sessionen är från ${new Date(`${session.date}T12:00:00`).toLocaleDateString("sv-SE", { weekday: "long", day: "numeric", month: "short" })}. Kontrolleras automatiskt var 5:e minut.`
+              : session?.sessionReview?.status === "BLOCKED"
+                ? "Ingen kvalificerad trade idag — signalerna stoppades av risk- och datakvalitetsregler."
+                : "Inga picks idag ännu — kontrolleras automatiskt var 5:e minut från börsöppningen kl 09:00."}
           </div>
         )}
-        {session?.sessionReview && session.sessionReview.reasons.length > 0 && (
+        {session?.sessionReview && isToday && session.sessionReview.reasons.length > 0 && (
           <div className={`flex items-start gap-2.5 px-4 py-3 rounded-xl text-sm mb-3 ${
             session.sessionReview.status === "BLOCKED"
               ? "bg-destructive/10 border border-destructive/20 text-destructive"
