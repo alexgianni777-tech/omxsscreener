@@ -20,13 +20,14 @@ import { calendarDaysUntil } from "../lib/marketCalendar";
 import { logger } from "../lib/logger";
 import { withRetry } from "../lib/retry";
 import {
-  candidateIdentity,
   deduplicateCandidates,
   lockScreenerSession,
   mergeCandidateInputs,
+  pendingCandidatesToRemove,
   synchronizeCandidates,
 } from "../lib/candidateSynchronization";
 import { mapEdgeAiSetup } from "../lib/edgeAiMapping";
+import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
@@ -118,6 +119,9 @@ router.post(
       ...usRaw.map((s: any) => mapEdgeAiSetup(s, "US", rankCounter)),
     ];
     const { candidates: uniqueMappedSetups, skipped } = deduplicateCandidates(mappedSetups);
+    uniqueMappedSetups.forEach((candidate) => {
+      Object.assign(candidate, { signalSource: "edgeai" as const });
+    });
     if (skipped.length > 0) {
       logger.warn({ skipped }, "EdgeAI import skipped duplicate candidate identities");
     }
@@ -146,10 +150,10 @@ router.post(
 
       const affectedOutcomes = existingRows.filter((r) => r.outcome !== "PENDING");
 
-      const incomingIdentities = new Set(uniqueMappedSetups.map((c) => candidateIdentity(c as any)));
-      const wouldRemove = existingRows
-        .filter((r) => r.outcome === "PENDING" && !incomingIdentities.has(candidateIdentity(r as any)))
-        .map(({ ticker, category, direction, market }) => ({ ticker, category, direction, market: market ?? "SE" }));
+      // Preview the exact effective input used by the force path. In
+      // particular, candidates from a genuinely separate market are retained
+      // while same-market pending rows are eligible for removal.
+      const wouldRemove = pendingCandidatesToRemove(existingRows, uniqueMappedSetups);
 
       res.status(409).json({
         error: `A session for ${sessionDate} already exists`,
@@ -213,11 +217,10 @@ router.post(
             perf1m,
             perf3m,
             marketRsi,
-            source: existing[0].source === "edgeai" ? "edgeai" : "mixed",
           })
           .where(eq(screenerSessionsTable.id, existingId))
           .returning();
-        const { diff } = await synchronizeCandidates(
+        const { candidates: synchronizedCandidates, diff } = await synchronizeCandidates(
           tx,
           updated.id,
           mergeCandidateInputs(
@@ -225,9 +228,13 @@ router.post(
             existingCandidates.map(({ id, createdAt, ...candidate }) => candidate),
           ),
         );
+        const aggregateSource = aggregateSessionSource(
+          existing[0].source,
+          synchronizedCandidates.map((candidate) => candidate.signalSource),
+        );
         await tx
           .update(screenerSessionsTable)
-          .set({ lastImportDiff: diff, lastImportAt: new Date() })
+          .set({ lastImportDiff: diff, lastImportAt: new Date(), source: aggregateSource })
           .where(eq(screenerSessionsTable.id, updated.id));
         return updated.id;
       });

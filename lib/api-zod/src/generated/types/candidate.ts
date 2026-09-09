@@ -14,6 +14,7 @@ import type { CandidateOutcomeProperty } from './candidateOutcomeProperty';
 import type { CandidateResolutionDirection } from './candidateResolutionDirection';
 import type { CandidateResolutionMethod } from './candidateResolutionMethod';
 import type { CandidateResolutionQuality } from './candidateResolutionQuality';
+import type { CandidateSignalSource } from './candidateSignalSource';
 import type { SignalReview } from './signalReview';
 
 export interface Candidate {
@@ -56,6 +57,11 @@ export interface Candidate {
   gapWarning?: number | null;
   /** Origin market for the signal: SE or US */
   market?: CandidateMarket;
+  /**
+     * Provenance of this individual signal; session source is only a legacy fallback.
+     * @nullable
+     */
+  signalSource?: CandidateSignalSource;
   direction: CandidateDirection;
   entryPrice: number;
   stopPrice: number;

@@ -21,12 +21,13 @@ import { decideCandidate, reviewCandidate, reviewSession } from "../lib/screenin
 import { logger } from "../lib/logger";
 import { withRetry } from "../lib/retry";
 import {
-  candidateIdentity,
   deduplicateCandidates,
   lockScreenerSession,
   mergeCandidateInputs,
+  pendingCandidatesToRemove,
   synchronizeCandidates,
 } from "../lib/candidateSynchronization";
+import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
 
 const router: IRouter = Router();
 
@@ -85,12 +86,10 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
 
     const affectedOutcomes = existingRows.filter((r) => r.outcome !== "PENDING");
 
-    const incomingIdentities = new Set(
-      session.candidates.map((c) => candidateIdentity({ ...c, market: "SE" })),
+    const wouldRemove = pendingCandidatesToRemove(
+      existingRows as Array<typeof existingRows[number] & { category: string }>,
+      session.candidates.map((c) => ({ ...c, market: "SE" })),
     );
-    const wouldRemove = existingRows
-      .filter((r) => r.outcome === "PENDING" && !incomingIdentities.has(candidateIdentity(r as any)))
-      .map(({ ticker, category, direction, market }) => ({ ticker, category, direction, market: market ?? "SE" }));
 
     res.status(409).json({
       error: `A session for ${session.date} already exists`,
@@ -124,6 +123,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
   ) => ({
     sessionId,
     market: "SE" as const,   // screener text is always SE stocks
+    signalSource: "manual" as const,
     category: c.category,
     rank: c.rank,
     ticker: c.ticker,
@@ -163,8 +163,6 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
   // ---------- force re-import: preserve outcomes, replace everything else ----------
   if (existing.length > 0 && force) {
     const existingId = existing[0].id;
-    const isEdgeAISession = existing[0].source === "edgeai";
-
     const { updatedSession, updatedCandidates, diff } = await db.transaction(async (tx) => {
       await lockScreenerSession(tx, session.date);
       // Re-read under the same lock used by outcome mutation; a pre-lock copy
@@ -183,7 +181,6 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
           marketRsi: session.marketWeather.rsi,
           trendLabel: session.marketWeather.trendLabel,
           rawText: parsed.data.rawText,
-          source: isEdgeAISession ? "mixed" : existing[0].source,
         })
         .where(eq(screenerSessionsTable.id, existingId))
         .returning();
@@ -194,17 +191,24 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
         existingCandidates.map(({ id, ...candidate }) => candidate as any),
       );
       const { candidates: updatedCandidates, diff } = await synchronizeCandidates(tx, updatedSession.id, incomingRows);
+      const aggregateSource = aggregateSessionSource(
+        updatedSession.source,
+        updatedCandidates.map((candidate) => candidate.signalSource),
+      );
       await tx
         .update(screenerSessionsTable)
-        .set({ lastImportDiff: diff, lastImportAt: new Date() })
+        .set({ lastImportDiff: diff, lastImportAt: new Date(), source: aggregateSource })
         .where(eq(screenerSessionsTable.id, updatedSession.id));
-      return { updatedSession, updatedCandidates, diff };
+      return { updatedSession: { ...updatedSession, source: aggregateSource }, updatedCandidates, diff };
     });
 
     const linkedIds = await fetchLinkedTradeIds(updatedCandidates.map((c: any) => c.id));
     const response = ImportSessionResponse.parse({
       id: updatedSession.id,
       date: updatedSession.date,
+      source: updatedSession.source ?? null,
+      createdAt: updatedSession.createdAt ?? null,
+      lastImportAt: updatedSession.lastImportAt ?? null,
       marketWeather: {
         omxsValue: updatedSession.omxsValue,
         perf5d: updatedSession.perf5d,
@@ -257,6 +261,9 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
   const response = ImportSessionResponse.parse({
     id: insertedSession.id,
     date: insertedSession.date,
+    source: insertedSession.source ?? null,
+    createdAt: insertedSession.createdAt ?? null,
+    lastImportAt: insertedSession.lastImportAt ?? null,
     marketWeather: {
       omxsValue: insertedSession.omxsValue,
       perf5d: insertedSession.perf5d,
@@ -337,9 +344,14 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
         })
         .where(eq(screenerSessionsTable.id, params.data.id))
         .returning();
+      const existingCandidates = await tx
+        .select()
+        .from(candidatesTable)
+        .where(eq(candidatesTable.sessionId, updatedSession.id));
       const rows = parsedSession.candidates.map((candidate) => ({
         sessionId: updatedSession.id,
         market: "SE" as const,
+        signalSource: "manual" as const,
         category: candidate.category,
         rank: candidate.rank,
         ticker: candidate.ticker,
@@ -362,12 +374,23 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
         oneR: candidate.oneR,
         outcome: "PENDING" as const,
       }));
-      const { candidates: resultCandidates, diff } = await synchronizeCandidates(tx, updatedSession.id, rows);
+      const { candidates: resultCandidates, diff } = await synchronizeCandidates(
+        tx,
+        updatedSession.id,
+        mergeCandidateInputs(
+          rows,
+          existingCandidates.map(({ id, ...candidate }) => candidate),
+        ),
+      );
+      const aggregateSource = aggregateSessionSource(
+        updatedSession.source,
+        resultCandidates.map((candidate) => candidate.signalSource),
+      );
       await tx
         .update(screenerSessionsTable)
-        .set({ lastImportDiff: diff, lastImportAt: new Date() })
+        .set({ lastImportDiff: diff, lastImportAt: new Date(), source: aggregateSource })
         .where(eq(screenerSessionsTable.id, updatedSession.id));
-      return { updatedSession, resultCandidates, diff };
+      return { updatedSession: { ...updatedSession, source: aggregateSource }, resultCandidates, diff };
     }));
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Could not synchronize candidates" });
@@ -379,6 +402,9 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
     ReimportSessionResponse.parse({
       id: updatedSession.id,
       date: updatedSession.date,
+      source: updatedSession.source ?? null,
+      createdAt: updatedSession.createdAt ?? null,
+      lastImportAt: updatedSession.lastImportAt ?? null,
       marketWeather: {
         omxsValue: updatedSession.omxsValue,
         perf5d: updatedSession.perf5d,
@@ -529,6 +555,9 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
   const parsed = GetSessionResponse.parse({
     id: session.id,
     date: session.date,
+    source: session.source ?? null,
+    createdAt: session.createdAt ?? null,
+    lastImportAt: session.lastImportAt ?? null,
     marketWeather: {
       omxsValue: session.omxsValue,
       perf5d: session.perf5d,
@@ -634,6 +663,7 @@ function mapCandidate(c: {
   earningsKnowledge: "SIGNAL_TIME" | "UNKNOWN" | null;
   earningsObservedAt: Date | null;
   market: string | null;
+  signalSource: "edgeai" | "telegram" | "manual" | "screener" | null;
   direction: string;
   entryPrice: number;
   stopPrice: number;
@@ -646,6 +676,9 @@ function mapCandidate(c: {
   resolutionMethod: "MANUAL_EXIT" | "TARGET_HIT" | "STOP_HIT" | null;
   resolutionQuality: "RECORDED_EXIT" | "ASSUMED_LEVEL" | "LEGACY_UNKNOWN" | null;
   realizedR: number | null;
+  resolutionEntryPrice: number | null;
+  resolutionStopPrice: number | null;
+  resolutionDirection: "LONG" | "SHORT" | null;
   isTop3Pick?: boolean | null;
 }, hasLinkedTrade = false) {
   return {
@@ -671,6 +704,7 @@ function mapCandidate(c: {
     earningsKnowledge: c.earningsKnowledge === "SIGNAL_TIME" ? "SIGNAL_TIME" : "UNKNOWN",
     earningsObservedAt: c.earningsObservedAt ?? null,
     market: c.market ?? "SE",
+    signalSource: c.signalSource ?? null,
     direction: c.direction,
     entryPrice: c.entryPrice,
     stopPrice: c.stopPrice,
@@ -683,6 +717,9 @@ function mapCandidate(c: {
     resolutionMethod: c.resolutionMethod ?? null,
     resolutionQuality: c.resolutionQuality ?? null,
     realizedR: c.realizedR ?? null,
+     resolutionEntryPrice: c.resolutionEntryPrice ?? null,
+     resolutionStopPrice: c.resolutionStopPrice ?? null,
+     resolutionDirection: c.resolutionDirection ?? null,
     isTop3Pick: c.isTop3Pick ?? false,
     hasLinkedTrade,
   };

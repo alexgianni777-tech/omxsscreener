@@ -275,6 +275,20 @@ export const CandidateMarket = {
   US: 'US',
 } as const;
 
+/**
+ * Provenance of this individual signal; session source is only a legacy fallback.
+ * @nullable
+ */
+export type CandidateSignalSource = typeof CandidateSignalSource[keyof typeof CandidateSignalSource] | null;
+
+
+export const CandidateSignalSource = {
+  edgeai: 'edgeai',
+  telegram: 'telegram',
+  manual: 'manual',
+  screener: 'screener',
+} as const;
+
 export type CandidateDirection = typeof CandidateDirection[keyof typeof CandidateDirection];
 
 
@@ -401,6 +415,11 @@ export interface Candidate {
   gapWarning?: number | null;
   /** Origin market for the signal: SE or US */
   market?: CandidateMarket;
+  /**
+     * Provenance of this individual signal; session source is only a legacy fallback.
+     * @nullable
+     */
+  signalSource?: CandidateSignalSource;
   direction: CandidateDirection;
   entryPrice: number;
   stopPrice: number;
@@ -555,6 +574,11 @@ export interface SessionSummary {
   trackedCount: number;
 }
 
+/**
+ * @nullable
+ */
+export type SessionDetailEdgeRegime = { [key: string]: unknown } | null;
+
 export interface ImportDiffEntry {
   identity: string;
   ticker: string;
@@ -587,6 +611,25 @@ export interface SessionDetail {
   id: number;
   /** YYYY-MM-DD */
   date: string;
+  /**
+     * Import provenance, such as edgeai, telegram, or mixed.
+     * @nullable
+     */
+  source: string | null;
+  /** @nullable */
+  createdAt: string | null;
+  /** @nullable */
+  lastImportAt: string | null;
+  /** @nullable */
+  edgeRegime?: SessionDetailEdgeRegime;
+  /** @nullable */
+  edgeExpectancy?: number | null;
+  /** @nullable */
+  edgeWinRate?: number | null;
+  /** @nullable */
+  edgePF?: number | null;
+  /** @nullable */
+  edgeN?: number | null;
   marketWeather: MarketWeather;
   candidates: Candidate[];
   sessionReview?: SessionReview;

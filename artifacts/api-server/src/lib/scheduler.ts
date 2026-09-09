@@ -126,6 +126,9 @@ async function runImport(date: string): Promise<void> {
   const seMapped = seSetups.map((s) => mapEdgeAiSetup(s, "SE", rankCounterSE));
   const usMapped = usSetups.map((s) => mapEdgeAiSetup(s, "US", rankCounterUS));
   const mapped = [...seMapped, ...usMapped];
+  mapped.forEach((candidate) => {
+    Object.assign(candidate, { signalSource: "edgeai" as const });
+  });
 
   // Enrich volume from live Yahoo Finance data. A missing result is retained as
   // missing and logged; downstream guardrails turn it into a no-trade rather than
@@ -240,14 +243,23 @@ async function tick() {
 }
 
 export function startScheduler() {
+  // This module is process-local, but startScheduler can be called by more
+  // than one bootstrap path in tests or hot reloads. Never create two pollers.
+  if (schedulerInterval) {
+    logger.debug("[scheduler] Already started; ignoring duplicate start");
+    return schedulerInterval;
+  }
   // Run once on startup (with a short delay to let DB connect)
   setTimeout(() => tick(), 10_000);
   // Then every 5 minutes
   const interval = setInterval(tick, CHECK_INTERVAL_MS);
+  schedulerInterval = interval;
 
   const nextCheck = new Date(Date.now() + CHECK_INTERVAL_MS);
   schedulerStatus.nextCheckAt = nextCheck.toISOString();
 
-  logger.info("[scheduler] Started — checking EdgeAI every 5 min on weekdays from 08:00 UTC; imports as soon as today's data is available");
+  logger.info("[scheduler] Started — checking EdgeAI every 5 min on weekdays from 09:00 Europe/Stockholm; imports as soon as today's data is available");
   return interval;
 }
+
+let schedulerInterval: ReturnType<typeof setInterval> | null = null;

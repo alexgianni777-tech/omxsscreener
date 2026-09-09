@@ -210,7 +210,7 @@ export function SessionDetail() {
   }
 
   const { marketWeather, candidates } = session;
-  const isEdgeAI = (session as any).source === "edgeai";
+  const isEdgeAI = session.source === "edgeai";
   const categories = ["MOMENTUM", "SQUEEZE", "STUDS", "WEAKEST"] as const;
 
   // ── Market state (from first available quote) ─────────────────────────────
@@ -256,8 +256,8 @@ export function SessionDetail() {
       </div>
 
       {/* ── Import diff — exactly what the last (re-)import changed ── */}
-      {(session as any).importDiff && (
-        <ImportDiffBanner diff={(session as any).importDiff} importedAt={(session as any).lastImportAt} />
+      {session.importDiff && (
+        <ImportDiffBanner diff={session.importDiff} importedAt={session.lastImportAt} />
       )}
 
       {/* Market Weather Banner */}
@@ -283,18 +283,18 @@ export function SessionDetail() {
       {/* ── Data-quality / no-trade banner — same volume & market-RSI reliability
            checks as "Idag", surfaced here too so historical sessions show why
            a setup was blocked or flagged. ── */}
-      {(session as any).sessionReview && (session as any).sessionReview.reasons.length > 0 && (
+      {session.sessionReview && session.sessionReview.reasons.length > 0 && (
         <div className={`flex items-start gap-3 p-4 rounded-lg border ${
-          (session as any).sessionReview.status === "BLOCKED"
+          session.sessionReview.status === "BLOCKED"
             ? "border-destructive/30 bg-destructive/5"
             : "border-amber-500/30 bg-amber-500/5"
         }`}>
-          <ShieldAlert className={`w-4 h-4 shrink-0 mt-0.5 ${(session as any).sessionReview.status === "BLOCKED" ? "text-destructive" : "text-amber-400"}`} />
+          <ShieldAlert className={`w-4 h-4 shrink-0 mt-0.5 ${session.sessionReview.status === "BLOCKED" ? "text-destructive" : "text-amber-400"}`} />
           <div>
             <span className={`font-semibold text-sm ${(session as any).sessionReview.status === "BLOCKED" ? "text-destructive" : "text-amber-400"}`}>
-              {(session as any).sessionReview.status === "BLOCKED" ? "No-trade" : "Kontroll före trade"}
+              {session.sessionReview.status === "BLOCKED" ? "No-trade" : "Kontroll före trade"}
             </span>
-            <p className="text-xs text-muted-foreground mt-0.5">{(session as any).sessionReview.reasons.join(" ")}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{session.sessionReview.reasons.join(" ")}</p>
           </div>
         </div>
       )}
@@ -369,7 +369,7 @@ export function SessionDetail() {
 
       {/* EdgeAI Panel — shown when session was imported from EdgeAI */}
       {isEdgeAI && (
-        <EdgeAIPanel session={session as any} />
+        <EdgeAIPanel session={session} />
       )}
 
       {/* Categories */}
@@ -377,8 +377,13 @@ export function SessionDetail() {
         {categories.map(cat => {
           let catCandidates = candidates.filter(c => c.category === cat);
           // For EdgeAI sessions: sort by composite edge score (winRate × expectancyR) descending
-          if (isEdgeAI) {
-            catCandidates = [...catCandidates].sort((a, b) => edgeScore(b) - edgeScore(a));
+          if (catCandidates.some((candidate) => (candidate.signalSource ?? session.source) === "edgeai")) {
+            catCandidates = [...catCandidates].sort((a, b) => {
+              const aEdge = (a.signalSource ?? session.source) === "edgeai";
+              const bEdge = (b.signalSource ?? session.source) === "edgeai";
+              if (aEdge !== bEdge) return aEdge ? -1 : 1;
+              return aEdge ? edgeScore(b) - edgeScore(a) : a.rank - b.rank;
+            });
           } else if (cat === "MOMENTUM") {
             // #58: Momentum should reward stocks with actual price gains, not just
             // the source list's own line order — sort by relative strength (rs3m)
@@ -397,7 +402,7 @@ export function SessionDetail() {
                 <div className="w-2 h-2 rounded-full bg-primary"></div>
                 {cat}
                 <span className="ml-2 text-sm font-normal text-muted-foreground px-2 py-0.5 bg-muted rounded-full">{catCandidates.length}</span>
-                {isEdgeAI && <span className="ml-1 text-[10px] text-muted-foreground">sorterat efter sannolikhet</span>}
+                {catCandidates.some((candidate) => (candidate.signalSource ?? session.source) === "edgeai") && <span className="ml-1 text-[10px] text-muted-foreground">sorterat efter sannolikhet</span>}
               </h3>
               
               <div className="grid gap-4">
@@ -408,7 +413,7 @@ export function SessionDetail() {
                     sessionId={id}
                     quote={quoteMap[candidate.ticker]}
                     daysOld={daysOld}
-                    isEdgeAI={isEdgeAI}
+                    isEdgeAI={(candidate.signalSource ?? session.source) === "edgeai"}
                     rank={idx + 1}
                     isPicked={candidate.direction === "SHORT" ? pickedShortIds.has(candidate.id) : pickedLongIds.has(candidate.id)}
                     pickedCount={candidate.direction === "SHORT" ? pickedShortIds.size : pickedLongIds.size}
@@ -427,12 +432,12 @@ export function SessionDetail() {
 
 // ── EdgeAI system panel ───────────────────────────────────────────────────────
 interface EdgeAISessionExtra {
-  source: "edgeai" | null;
-  edgeRegime: { label?: string; trend?: string; strength?: number } | null;
-  edgeExpectancy: number | null;
-  edgeWinRate: number | null;
-  edgePF: number | null;
-  edgeN: number | null;
+  source: string | null;
+  edgeRegime?: { label?: string; trend?: string; strength?: number } | null;
+  edgeExpectancy?: number | null;
+  edgeWinRate?: number | null;
+  edgePF?: number | null;
+  edgeN?: number | null;
   candidates: Candidate[];
 }
 

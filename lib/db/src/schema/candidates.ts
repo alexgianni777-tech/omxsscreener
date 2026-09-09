@@ -37,6 +37,7 @@ export const candidatesTable = pgTable("candidates", {
   // mapCandidate boundary instead of enforcing NOT NULL at the DB level — see
   // lib/db/SCHEMA-SAFETY.md history and #52.
   market: text("market", { enum: ["SE", "US"] }).default("SE"),
+  signalSource: text("signal_source", { enum: ["edgeai", "telegram", "manual", "screener"] }),
   direction: text("direction", { enum: ["LONG", "SHORT"] }).notNull(),
   entryPrice: real("entry_price").notNull(),
   stopPrice: real("stop_price").notNull(),

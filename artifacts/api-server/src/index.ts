@@ -1,9 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-// Automatic EdgeAI polling is disabled by request — the user triggers EdgeAI
-// import manually from the dashboard instead. scheduler.ts is kept around
-// (unused) in case automatic polling is wanted again later.
-// import { startScheduler } from "./lib/scheduler";
+import { startScheduler } from "./lib/scheduler";
 import { runMigrations } from "./lib/migrate";
 
 const rawPort = process.env["PORT"];
@@ -33,7 +30,9 @@ async function main() {
     }
 
     logger.info({ port }, "Server listening");
-    // Automatic EdgeAI polling disabled — trigger imports manually instead.
+    // Start only after listen succeeds: migrations and the HTTP startup path
+    // are complete, and the scheduler can safely use the live DB connection.
+    startScheduler();
   });
 }
 

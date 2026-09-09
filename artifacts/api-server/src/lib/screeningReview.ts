@@ -15,6 +15,7 @@ export type CandidateReviewInput = {
   stopPrice: number;
   targetPrice: number;
   rr: number;
+  signalSource?: string | null;
 };
 
 export type SignalReview = {
@@ -41,7 +42,7 @@ export function reviewCandidate(
   const warnings: string[] = [];
   const blockers: string[] = [];
   const isShort = candidate.direction === "SHORT";
-  const isEdgeAi = source === "edgeai";
+  const isEdgeAi = (candidate.signalSource ?? source) === "edgeai";
 
   if (!Number.isFinite(candidate.volMultiplier) || candidate.volMultiplier <= 0) {
     blockers.push("Volymdata saknas — ingen kvalificerad trade.");

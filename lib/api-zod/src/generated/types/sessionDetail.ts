@@ -8,12 +8,32 @@
 import type { Candidate } from './candidate';
 import type { ImportDiff } from './importDiff';
 import type { MarketWeather } from './marketWeather';
+import type { SessionDetailEdgeRegime } from './sessionDetailEdgeRegime';
 import type { SessionReview } from './sessionReview';
 
 export interface SessionDetail {
   id: number;
   /** YYYY-MM-DD */
   date: string;
+  /**
+     * Import provenance, such as edgeai, telegram, or mixed.
+     * @nullable
+     */
+  source: string | null;
+  /** @nullable */
+  createdAt: Date | null;
+  /** @nullable */
+  lastImportAt: Date | null;
+  /** @nullable */
+  edgeRegime?: SessionDetailEdgeRegime;
+  /** @nullable */
+  edgeExpectancy?: number | null;
+  /** @nullable */
+  edgeWinRate?: number | null;
+  /** @nullable */
+  edgePF?: number | null;
+  /** @nullable */
+  edgeN?: number | null;
   marketWeather: MarketWeather;
   candidates: Candidate[];
   sessionReview?: SessionReview;

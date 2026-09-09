@@ -2,6 +2,12 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { candidatesTable } from "@workspace/db";
 import { logger } from "./logger";
+import {
+  candidateIdentity as policyCandidateIdentity,
+  effectiveCandidateInputs,
+  pendingRemovalIdentities,
+  synchronizedSignalSource,
+} from "./candidateSynchronizationPolicy";
 
 type CandidateInput = Record<string, unknown> & {
   market?: string | null;
@@ -16,12 +22,7 @@ type CandidateInput = Record<string, unknown> & {
  * directions.
  */
 export function candidateIdentity(candidate: CandidateInput): string {
-  return [
-    candidate.market ?? "SE",
-    candidate.category,
-    candidate.ticker.trim().toUpperCase(),
-    candidate.direction,
-  ].join("|");
+  return policyCandidateIdentity(candidate);
 }
 
 /** @deprecated Use deduplicateCandidates instead — no longer throws on duplicates. */
@@ -62,13 +63,23 @@ export function mergeCandidateInputs<T extends CandidateInput>(
   incoming: T[],
   existing: CandidateInput[],
 ): T[] {
-  const incomingIdentities = new Set(incoming.map(candidateIdentity));
-  return [
-    ...incoming,
-    ...existing.filter(
-      (candidate) => !incomingIdentities.has(candidateIdentity(candidate)),
-    ),
-  ] as T[];
+  return effectiveCandidateInputs(incoming, existing);
+}
+
+/**
+ * Return the pending rows that synchronizeCandidates will delete for an
+ * incoming batch. Keeping this calculation beside the writer is important:
+ * conflict previews must not grow a subtly different notion of "effective"
+ * input from the actual force-import.
+ */
+export function pendingCandidatesToRemove(
+  existing: CandidateInput[],
+  incoming: CandidateInput[],
+): CandidateDiffEntry[] {
+  const removedIdentities = new Set(
+    pendingRemovalIdentities(existing, incoming),
+  );
+  return existing.filter((candidate) => removedIdentities.has(candidateIdentity(candidate))).map(toDiffEntry);
 }
 
 /** Business fields whose changes are worth surfacing in an import diff. Fields the
@@ -93,6 +104,7 @@ const DIFF_TRACKED_FIELDS = [
   "earningsInDays",
   "earningsKnowledge",
   "market",
+  "signalSource",
 ] as const;
 
 export type CandidateDiffEntry = {
@@ -200,6 +212,10 @@ export async function synchronizeCandidates(
           resolutionEntryPrice: current.resolutionEntryPrice,
           resolutionStopPrice: current.resolutionStopPrice,
           resolutionDirection: current.resolutionDirection,
+           signalSource: synchronizedSignalSource(
+             values.signalSource as string | null | undefined,
+             current.signalSource,
+           ),
           isTop3Pick: current.isTop3Pick,
         } as any)
         .where(eq(candidatesTable.id, current.id));

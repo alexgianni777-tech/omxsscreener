@@ -26,8 +26,10 @@ import { timingSafeEqual } from "node:crypto";
 import {
   deduplicateCandidates,
   lockScreenerSession,
+  mergeCandidateInputs,
   synchronizeCandidates,
 } from "../lib/candidateSynchronization";
+import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
@@ -141,6 +143,7 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
   ) => ({
     sessionId,
     market: "SE" as const,   // Telegram screener always imports SE stocks
+    signalSource: "telegram" as const,
     category: c.category,
     rank: c.rank,
     ticker: c.ticker,
@@ -182,20 +185,37 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
       marketRsi: marketWeather.rsi,
       trendLabel: marketWeather.trendLabel,
       rawText,
-      source: "telegram",
     };
     const [stored] = existing
       ? await tx.update(screenerSessionsTable).set(sessionRow).where(eq(screenerSessionsTable.id, existing.id)).returning()
       : await tx.insert(screenerSessionsTable).values({ date, ...sessionRow }).returning();
+    const existingCandidates = existing
+      ? await tx
+          .select()
+          .from(candidatesTable)
+          .where(eq(candidatesTable.sessionId, stored.id))
+      : [];
     const { candidates: storedCandidates, diff } = await synchronizeCandidates(
       tx,
       stored.id,
-      candidates.map((candidate) => buildRow(stored.id, candidate)),
+      mergeCandidateInputs(
+        candidates.map((candidate) => buildRow(stored.id, candidate)),
+        existingCandidates.map(({ id, ...candidate }) => candidate),
+      ),
+    );
+    const aggregateSource = aggregateSessionSource(
+      existing?.source,
+      storedCandidates.map((candidate) => candidate.signalSource),
     );
     if (existing) {
       await tx
         .update(screenerSessionsTable)
-        .set({ lastImportDiff: diff, lastImportAt: new Date() })
+        .set({ lastImportDiff: diff, lastImportAt: new Date(), source: aggregateSource })
+        .where(eq(screenerSessionsTable.id, stored.id));
+    } else {
+      await tx
+        .update(screenerSessionsTable)
+        .set({ source: aggregateSource })
         .where(eq(screenerSessionsTable.id, stored.id));
     }
     return { stored, candidateCount: storedCandidates.length, updated: Boolean(existing) };

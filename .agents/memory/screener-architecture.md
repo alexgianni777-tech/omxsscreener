@@ -41,6 +41,13 @@ EdgeAI imports fetch the canonical GitHub repository file, rather than GitHub Pa
 
 **How to apply:** cap Yahoo historical queries at the signal date for prior-day snapshots; same-day imports may continue through the current time. Treat earnings history separately because a live quote does not reconstruct what was known on an earlier date.
 
+## Candidate-level source provenance
+**Rule:** source provenance belongs to each candidate, not only the session, because one session may contain EdgeAI, Telegram, and manual rows.
+
+**Why:** a session-wide source applies the wrong review rules and display semantics after a mixed-market or cross-source re-import.
+
+**How to apply:** stamp every incoming candidate, prefer explicit incoming provenance on replacement, preserve carried rows, and leave ambiguous legacy mixed rows unknown rather than fabricating a source.
+
 ## GitHub PAT issues
 The GITHUB_PAT secret in Replit must be a full GitHub classic token (~40 chars, starts with ghp_) or fine-grained token (93+ chars). Users have entered short wrong values. Use the GitHub Replit integration (connection:conn_github_01M07N23478V7V8E5YZKNGFJ93) for API calls from the agent instead of relying on the shell env var.
 

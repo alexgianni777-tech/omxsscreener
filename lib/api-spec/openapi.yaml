@@ -694,6 +694,10 @@ components:
           type: string
           enum: [SE, US]
           description: "Origin market for the signal: SE or US"
+        signalSource:
+          type: ["string", "null"]
+          enum: [edgeai, telegram, manual, screener, null]
+          description: "Provenance of this individual signal; session source is only a legacy fallback."
         direction:
           type: string
           enum: [LONG, SHORT]
@@ -871,13 +875,33 @@ components:
 
     SessionDetail:
       type: object
-      required: [id, date, marketWeather, candidates]
+      required: [id, date, marketWeather, candidates, source, createdAt, lastImportAt]
       properties:
         id:
           type: number
         date:
           type: string
           description: "YYYY-MM-DD"
+        source:
+          type: ["string", "null"]
+          description: "Import provenance, such as edgeai, telegram, or mixed."
+        createdAt:
+          type: ["string", "null"]
+          format: date-time
+        lastImportAt:
+          type: ["string", "null"]
+          format: date-time
+        edgeRegime:
+          type: ["object", "null"]
+          additionalProperties: true
+        edgeExpectancy:
+          type: ["number", "null"]
+        edgeWinRate:
+          type: ["number", "null"]
+        edgePF:
+          type: ["number", "null"]
+        edgeN:
+          type: ["number", "null"]
         marketWeather:
           $ref: "#/components/schemas/MarketWeather"
         candidates:
