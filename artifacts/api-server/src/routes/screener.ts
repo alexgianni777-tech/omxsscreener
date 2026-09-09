@@ -50,6 +50,13 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     throw err;
   }
 
+  if (parsed.data.targetDate) {
+    const targetDate = parsed.data.targetDate instanceof Date
+      ? parsed.data.targetDate.toISOString().slice(0, 10)
+      : parsed.data.targetDate;
+    session = { ...session, date: targetDate };
+  }
+
   // Check for duplicate date
   const existing = await db
     .select({ id: screenerSessionsTable.id, source: screenerSessionsTable.source })

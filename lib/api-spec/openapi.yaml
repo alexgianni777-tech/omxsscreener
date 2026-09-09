@@ -568,6 +568,10 @@ components:
         rawText:
           type: string
           description: The raw text output from the screener
+        targetDate:
+          type: string
+          format: date
+          description: Optional trading-session date. The date inside rawText remains the source-data date.
         force:
           type: boolean
           description: If true, replace the existing session for this date while preserving logged outcomes

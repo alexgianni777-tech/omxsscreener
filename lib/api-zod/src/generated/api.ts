@@ -21,6 +21,7 @@ export const HealthCheckResponse = zod.object({
  */
 export const ImportSessionBody = zod.object({
   "rawText": zod.string().describe('The raw text output from the screener'),
+  "targetDate": zod.coerce.date().optional().describe('Optional trading-session date. The date inside rawText remains the source-data date.'),
   "force": zod.boolean().optional().describe('If true, replace the existing session for this date while preserving logged outcomes')
 })
 
@@ -161,6 +162,7 @@ export const ReimportSessionParams = zod.object({
 
 export const ReimportSessionBody = zod.object({
   "rawText": zod.string().describe('The raw text output from the screener'),
+  "targetDate": zod.coerce.date().optional().describe('Optional trading-session date. The date inside rawText remains the source-data date.'),
   "force": zod.boolean().optional().describe('If true, replace the existing session for this date while preserving logged outcomes')
 })
 

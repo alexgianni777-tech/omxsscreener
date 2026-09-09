@@ -41,6 +41,13 @@ EdgeAI imports fetch the canonical GitHub repository file, rather than GitHub Pa
 
 **How to apply:** cap Yahoo historical queries at the signal date for prior-day snapshots; same-day imports may continue through the current time. Treat earnings history separately because a live quote does not reconstruct what was known on an earlier date.
 
+## Telegram source date versus trading date
+**Rule:** a manually pasted Telegram report may be assigned to today's Stockholm trading session while retaining the untouched report text and its original source-data date.
+
+**Why:** the Telegram report can be generated from the prior close and therefore carry yesterday's date, even though its candidates are intended to be traded today. Treating the source date as the session date hides them from today's dashboard.
+
+**How to apply:** keep the override explicit and user-visible, default it on for pasted daily reports, and never apply the same override to strict automated EdgeAI imports or historical imports.
+
 ## Candidate-level source provenance
 **Rule:** source provenance belongs to each candidate, not only the session, because one session may contain EdgeAI, Telegram, and manual rows.
 

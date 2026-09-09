@@ -27,6 +27,7 @@ type ConflictInfo = {
   affectedOutcomes: AffectedOutcome[];
   wouldRemove: RemovedCandidatePreview[];
   rawText: string;
+  targetDate?: string;
 };
 
 const OUTCOME_COLORS: Record<string, string> = {
@@ -51,6 +52,7 @@ type EdgeAIStatus =
 
 export function Import() {
   const [rawText, setRawText] = useState("");
+  const [useTodayAsTradingDate, setUseTodayAsTradingDate] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<ConflictInfo | null>(null);
   const [edgeStatus, setEdgeStatus] = useState<EdgeAIStatus>({ kind: "idle" });
@@ -59,10 +61,18 @@ export function Import() {
   const queryClient = useQueryClient();
   const { login } = useAuthContext();
 
-  const runImport = (text: string, force: boolean) => {
+  const stockholmToday = () =>
+    new Intl.DateTimeFormat("sv-SE", {
+      timeZone: "Europe/Stockholm",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+
+  const runImport = (text: string, force: boolean, targetDate?: string) => {
     setError(null);
     importSession.mutate(
-      { data: { rawText: text, force } },
+      { data: { rawText: text, force, targetDate } },
       {
         onSuccess: (data) => {
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
@@ -88,6 +98,7 @@ export function Import() {
               affectedOutcomes: body.affectedOutcomes,
               wouldRemove: body.wouldRemove ?? [],
               rawText: text,
+              targetDate,
             });
           } else {
             setError(body?.error || err?.message || "Failed to parse and import session. Check format.");
@@ -102,13 +113,13 @@ export function Import() {
       setError("Please paste screener output first.");
       return;
     }
-    runImport(rawText, false);
+    runImport(rawText, false, useTodayAsTradingDate ? stockholmToday() : undefined);
   };
 
   const handleForceReimport = () => {
     if (!conflict) return;
     setConflict(null);
-    runImport(conflict.rawText, true);
+    runImport(conflict.rawText, true, conflict.targetDate);
   };
 
   const handleEdgeAIImport = async (force = false) => {
@@ -276,6 +287,21 @@ MARKNADSVÄDER  OMXS30 3305.0 | 5d  2.7% | 1m  1.8% | 3m  8.9% | RSI  79
           spellCheck={false}
           data-testid="input-raw-text"
         />
+        <label className="flex items-start gap-3 border-t border-border bg-muted/30 px-4 py-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={useTodayAsTradingDate}
+            onChange={(event) => setUseTodayAsTradingDate(event.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-primary"
+          />
+          <span>
+            <span className="block text-sm font-medium">Använd som dagens förslag</span>
+            <span className="block text-xs text-muted-foreground mt-0.5">
+              Lägger kandidaterna i dagens session ({stockholmToday()}) även om Telegramtexten bygger på gårdagens stängningsdata.
+              Originaltextens datum sparas fortfarande som källdatum.
+            </span>
+          </span>
+        </label>
       </div>
 
       <div className="flex justify-end">

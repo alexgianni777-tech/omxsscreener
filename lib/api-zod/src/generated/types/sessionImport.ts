@@ -9,6 +9,8 @@
 export interface SessionImport {
   /** The raw text output from the screener */
   rawText: string;
+  /** Optional trading-session date. The date inside rawText remains the source-data date. */
+  targetDate?: Date;
   /** If true, replace the existing session for this date while preserving logged outcomes */
   force?: boolean;
 }
