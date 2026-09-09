@@ -676,10 +676,10 @@ function CandidateRow({
 
   return (
     <div className="bg-card border border-border rounded-lg shadow-sm text-sm group">
-    <div className="p-4 flex flex-col xl:flex-row gap-4 xl:items-stretch">
+    <div className="p-4 flex flex-col 2xl:flex-row gap-4 2xl:items-stretch">
       
       {/* Identity & Core Metrics */}
-      <div className="flex flex-col gap-3 min-w-[280px] xl:border-r border-border xl:pr-4">
+      <div className="flex flex-col gap-3 min-w-0 2xl:min-w-[280px] 2xl:border-r border-border 2xl:pr-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="font-mono text-muted-foreground text-xs">#{rank}</span>
@@ -837,7 +837,7 @@ function CandidateRow({
       </div>
 
       {/* Live Price */}
-      <div className="flex flex-col justify-center min-w-[140px] xl:border-r border-border xl:pr-4">
+      <div className="flex flex-col justify-center min-w-0 2xl:min-w-[140px] 2xl:border-r border-border 2xl:pr-4">
         <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
           <Activity className="w-3 h-3" /> Live Price
         </div>
@@ -882,7 +882,7 @@ function CandidateRow({
       </div>
 
       {/* Trade Plan */}
-      <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4 xl:border-r border-border xl:pr-4 py-2 xl:py-0 bg-muted/30 p-3 rounded-md xl:bg-transparent xl:p-0">
+      <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4 2xl:border-r border-border 2xl:pr-4 py-2 2xl:py-0 bg-muted/30 p-3 rounded-md 2xl:bg-transparent 2xl:p-0">
         <div className="flex flex-col justify-center">
           <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1"><Crosshair className="w-3 h-3"/> Entry</div>
           <div className="font-mono font-semibold text-base">{formatNumber(candidate.entryPrice)}</div>
@@ -917,7 +917,7 @@ function CandidateRow({
       </div>
 
       {/* Outcome Logger */}
-      <div className="min-w-[280px] flex flex-col justify-center gap-2">
+      <div className="min-w-0 2xl:min-w-[280px] flex flex-col justify-center gap-2">
         <div className="flex items-center gap-2">
           <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Log Outcome</div>
           {(candidate.outcome === "WIN" || candidate.outcome === "LOSS") && (

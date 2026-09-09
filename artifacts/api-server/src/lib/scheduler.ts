@@ -3,9 +3,9 @@
  *
  * Logic:
  *  - Every 5 minutes, check if today is a weekday AND there is no session yet.
- *  - If conditions met AND it's past 06:15 UTC, trigger EdgeAI import.
+ *  - If conditions met AND Nasdaq Stockholm is open, trigger EdgeAI import.
  *  - This gracefully handles server restarts: if the server came up after
- *    06:15 and no session exists, it imports immediately on the first tick.
+ *    09:00 Stockholm time and no session exists, it imports immediately.
  */
 import { db, screenerSessionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
@@ -25,11 +25,30 @@ import { withRetry } from "./retry";
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
-// Start checking from 08:00 UTC (10:00 CEST) — market has been open 1 h.
-// EdgeAI data is generated mid-morning; the scheduler retries every 5 min
-// and imports as soon as today's data is available (generatedAt check below).
-const EARLIEST_HOUR_UTC   = 8;
-const EARLIEST_MINUTE_UTC = 0;
+// Start at Nasdaq Stockholm's 09:00 local open. An IANA timezone avoids
+// summer/winter time shifting the scheduler by an hour.
+const STOCKHOLM_TIME = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/Stockholm",
+  weekday: "short",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+function stockholmClock(d: Date) {
+  const parts = Object.fromEntries(
+    STOCKHOLM_TIME.formatToParts(d).map((part) => [part.type, part.value]),
+  );
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    weekday: parts.weekday,
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+  };
+}
 
 function daysUntil(date: Date | number | null | undefined): number | null {
   return calendarDaysUntil(date);
@@ -47,15 +66,6 @@ export let schedulerStatus: {
   lastError: null,
   nextCheckAt: null,
 };
-
-function isWeekday(d: Date): boolean {
-  const day = d.getUTCDay();
-  return day >= 1 && day <= 5; // Mon–Fri
-}
-
-function todayUtc(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 async function sessionExistsForDate(date: string): Promise<boolean> {
   const rows = await db
@@ -204,13 +214,14 @@ async function tick() {
   const now = new Date();
   schedulerStatus.lastChecked = now.toISOString();
 
-  if (!isWeekday(now)) return;
-  const utcH = now.getUTCHours();
-  const utcM = now.getUTCMinutes();
+  const stockholm = stockholmClock(now);
+  if (stockholm.weekday === "Sat" || stockholm.weekday === "Sun") return;
 
-  // ── Daily import (Mon–Fri from 08:00 UTC) ──────────────────────────────────
-  if (utcH >= EARLIEST_HOUR_UTC) {
-    const today = todayUtc();
+  // ── Daily import (Mon–Fri from 09:00 Europe/Stockholm) ──────────────────────
+  const marketIsOpen =
+    stockholm.hour > 9 || (stockholm.hour === 9 && stockholm.minute >= 0);
+  if (marketIsOpen) {
+    const today = stockholm.date;
     if (!(await sessionExistsForDate(today))) {
       logger.info({ today }, "[scheduler] No session found, auto-importing from EdgeAI");
       try {

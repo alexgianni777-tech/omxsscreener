@@ -7,7 +7,7 @@ description: Key decisions, bug fixes, and data flow for the trading screener sy
 
 ## Data flow
 GitHub Actions screener (alexgianni777-tech/omxs30) → Telegram bot → POST /api/screener/sessions/import (telegramImport.ts)
-EdgeAI scheduler (scheduler.ts, every 5 min weekdays 08:00+ UTC) → POST /api/screener/sessions/import-from-edgeai (edgeai.ts)
+EdgeAI scheduler checks every 5 minutes from the Nasdaq Stockholm open at 09:00 Europe/Stockholm; use local timezone logic, not a fixed UTC hour.
 
 ## Critical field semantics
 - `volMultiplier` stores vol ratio (0.3x = 30% of avg). It does NOT store R:R anymore.

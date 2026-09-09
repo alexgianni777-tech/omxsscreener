@@ -503,7 +503,7 @@ export function Today() {
           <div className="text-sm text-muted-foreground text-center py-12 border border-dashed border-border rounded-xl">
             {session?.sessionReview?.status === "BLOCKED"
               ? "Ingen kvalificerad trade idag — signalerna stoppades av risk- och datakvalitetsregler."
-              : "Inga picks idag ännu — kontrolleras automatiskt var 5:e minut från kl 10:00."}
+              : "Inga picks idag ännu — kontrolleras automatiskt var 5:e minut från börsöppningen kl 09:00."}
           </div>
         )}
         {session?.sessionReview && session.sessionReview.reasons.length > 0 && (
