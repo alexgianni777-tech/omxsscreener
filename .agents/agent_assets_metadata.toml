@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "LHjTlLFZaKWRE8b0ak1VA"
+uri = "file://exports/claude-trading-analysis-review.md"
+type = "text"
+title = "Kodunderlag för Claude – tradinganalys"
+description = "Självbärande Markdown-dokument med granskningsprompt och central kod för signalregler, EdgeAI-mappning, ranking, risk, utfall, portfölj och datamodell."
+logical_id = "94323e27-2bc3-468f-b6cb-231437a6bc8f"
+content_hash = "sha256:18f46bd70b9fa7b399a511dd3176c4ff55eebba7eeb34c78e0eaa62774ef562e"
+size = 76242
+mtime_ms = 1789805652677
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/94323e27-2bc3-468f-b6cb-231437a6bc8f/cd57ecf4-0d39-4017-b2ff-17890c804414"
+storage_version_token = "1789805653291243"
+content_type = "text/markdown"
