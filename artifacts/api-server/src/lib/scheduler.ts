@@ -2,13 +2,13 @@
  * Daily EdgeAI auto-import scheduler.
  *
  * Logic:
- *  - Every 5 minutes, check if today is a weekday AND there is no session yet.
+ *  - Every 5 minutes, check if today is a weekday AND EdgeAI is not yet in today's session.
  *  - If conditions met AND Nasdaq Stockholm is open, trigger EdgeAI import.
  *  - This gracefully handles server restarts: if the server came up after
  *    09:00 Stockholm time and no session exists, it imports immediately.
  */
-import { db, screenerSessionsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
 import { logger } from "./logger";
 import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "./omxs30TickerMap";
@@ -17,7 +17,12 @@ import {
   volumeMultiplierFromQuote,
 } from "./marketIndicators";
 import { fetchFreshEdgeAiData } from "./edgeAiSource";
-import { lockScreenerSession, synchronizeCandidates } from "./candidateSynchronization";
+import {
+  lockScreenerSession,
+  mergeCandidateInputs,
+  synchronizeCandidates,
+} from "./candidateSynchronization";
+import { aggregateSessionSource } from "./candidateSynchronizationPolicy";
 import { calendarDaysUntil } from "./marketCalendar";
 import { mapEdgeAiSetup } from "./edgeAiMapping";
 import { withRetry } from "./retry";
@@ -67,12 +72,21 @@ export let schedulerStatus: {
   nextCheckAt: null,
 };
 
-async function sessionExistsForDate(date: string): Promise<boolean> {
-  const rows = await db
+async function sessionHasEdgeAiForDate(date: string): Promise<boolean> {
+  const [session] = await db
     .select({ id: screenerSessionsTable.id })
     .from(screenerSessionsTable)
     .where(eq(screenerSessionsTable.date, date));
-  return rows.length > 0;
+  if (!session) return false;
+  const [edgeAiCandidate] = await db
+    .select({ id: candidatesTable.id })
+    .from(candidatesTable)
+    .where(and(
+      eq(candidatesTable.sessionId, session.id),
+      eq(candidatesTable.signalSource, "edgeai"),
+    ))
+    .limit(1);
+  return Boolean(edgeAiCandidate);
 }
 
 async function fetchOmxsMarketWeather(): Promise<{
@@ -119,8 +133,6 @@ async function runImport(date: string): Promise<void> {
     logger.warn({ err: err.message }, "[scheduler] OMXS30 market weather fetch failed — using zeros");
   }
 
-  const { candidatesTable } = await import("@workspace/db");
-
   const rankCounterSE: Record<string, number> = {};
   const rankCounterUS: Record<string, number> = {};
   const seMapped = seSetups.map((s) => mapEdgeAiSetup(s, "SE", rankCounterSE));
@@ -162,11 +174,51 @@ async function runImport(date: string): Promise<void> {
     await db.transaction(async (tx) => {
       await lockScreenerSession(tx, date);
       const [alreadyStored] = await tx
-        .select({ id: screenerSessionsTable.id })
+        .select({ id: screenerSessionsTable.id, source: screenerSessionsTable.source })
         .from(screenerSessionsTable)
         .where(eq(screenerSessionsTable.date, date));
       if (alreadyStored) {
-        logger.info({ date, sessionId: alreadyStored.id }, "[scheduler] Session already exists after lock — skipping");
+        const existingCandidates = await tx
+          .select()
+          .from(candidatesTable)
+          .where(eq(candidatesTable.sessionId, alreadyStored.id));
+        const { candidates: synchronizedCandidates, diff } = await synchronizeCandidates(
+          tx,
+          alreadyStored.id,
+          mergeCandidateInputs(
+            mapped,
+            existingCandidates.map(({ id, createdAt, ...candidate }) => candidate),
+          ),
+        );
+        const source = aggregateSessionSource(
+          alreadyStored.source,
+          synchronizedCandidates.map((candidate) => candidate.signalSource),
+        );
+        await tx
+          .update(screenerSessionsTable)
+          .set({
+            omxsValue: mw.omxsValue,
+            perf5d: mw.perf5d,
+            perf1m: mw.perf1m,
+            perf3m: mw.perf3m,
+            marketRsi: mw.marketRsi,
+            trendLabel: se?.regime?.label ?? "n/a",
+            edgeRegime: JSON.stringify(se?.regime ?? {}),
+            edgeExpectancy: se?.edge?.expectancyR ?? null,
+            edgeWinRate: se?.edge?.winRate != null
+              ? (se.edge.winRate > 1 ? se.edge.winRate / 100 : se.edge.winRate)
+              : null,
+            edgePF: se?.edge?.profitFactor ?? null,
+            edgeN: se?.edge?.n ?? null,
+            source,
+            lastImportDiff: diff,
+            lastImportAt: new Date(),
+          })
+          .where(eq(screenerSessionsTable.id, alreadyStored.id));
+        logger.info(
+          { date, sessionId: alreadyStored.id, seSetups: seSetups.length, usSetups: usSetups.length },
+          "[scheduler] EdgeAI merged into existing session",
+        );
         return;
       }
       const [inserted] = await tx
@@ -225,8 +277,8 @@ async function tick() {
     stockholm.hour > 9 || (stockholm.hour === 9 && stockholm.minute >= 0);
   if (marketIsOpen) {
     const today = stockholm.date;
-    if (!(await sessionExistsForDate(today))) {
-      logger.info({ today }, "[scheduler] No session found, auto-importing from EdgeAI");
+    if (!(await sessionHasEdgeAiForDate(today))) {
+      logger.info({ today }, "[scheduler] EdgeAI missing from today's session — importing");
       try {
         await runImport(today);
         schedulerStatus.lastImported = today;
