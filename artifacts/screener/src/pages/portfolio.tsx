@@ -176,9 +176,9 @@ function SummaryBar({ summary, fetchedAt }: { summary: PortfolioData["summary"];
         />
         <Tile
           label="Max stopförlust"
-          value={`${sgn(-summary.maxStopLossKr, 0)} kr`}
-          sub="Endast negativ nedsida vid stop"
-          valueClass="text-destructive"
+          value={summary.maxStopLossKr == null ? "Odefinierad" : `${sgn(-summary.maxStopLossKr, 0)} kr`}
+          sub={summary.maxStopLossKr == null ? "Minst en position saknar stop" : "Endast negativ nedsida vid stop"}
+          valueClass={summary.maxStopLossKr == null ? "text-amber-500" : "text-destructive"}
         />
         <Tile label="Long-exponering" value={`${fmt(summary.longExposureKr)} kr`} valueClass="text-success" />
         <Tile label="Short-exponering" value={`${fmt(summary.shortExposureKr)} kr`} valueClass="text-destructive" />

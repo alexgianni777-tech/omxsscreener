@@ -11,7 +11,9 @@ EdgeAI scheduler checks every 5 minutes from the Nasdaq Stockholm open at 09:00 
 
 ## Critical field semantics
 - `volMultiplier` stores vol ratio (0.3x = 30% of avg). It does NOT store R:R anymore.
+- A partial daily RVOL below the usable threshold is missing data (`null`), never replaced with average-10-day / average-3-month volume trend.
 - `rr` column stores the actual R:R ratio. analytics.ts must read `c.rr`, not `c.volMultiplier`.
+- Opening gaps use percentage points (2.9 means 2.9%), matching the 2.5% safety thresholds.
 - `market` column = "SE" | "US" | null. Must be set on insert — edgeai.ts tags SE/US before combining allSetups.
 
 ## Screener trade plan (as of 2026-08-12)
@@ -59,10 +61,10 @@ EdgeAI imports fetch the canonical GitHub repository file, rather than GitHub Pa
 The GITHUB_PAT secret in Replit must be a full GitHub classic token (~40 chars, starts with ghp_) or fine-grained token (93+ chars). Users have entered short wrong values. Use the GitHub Replit integration (connection:conn_github_01M07N23478V7V8E5YZKNGFJ93) for API calls from the agent instead of relying on the shell env var.
 
 ## Backfill (not yet built as of 2026-08-12)
-candidates-log.csv now includes entry, stop, target, rr, holdDays, dir columns. Triple-barrier backfill API endpoint is Task #53.
+candidates-log.csv includes entry, stop, target, rr, holdDays, and direction columns. Triple-barrier backfill remains to be implemented.
 
 ## holdDays not yet in DB schema
-candidates table does not have a hold_days column yet (Task #54). holdDays is computed at import time from BUCKET_PARAMS but not persisted.
+The candidate model does not yet persist the calculated holding limit, so automatic time exits cannot be enforced reliably.
 
 ## Yahoo Finance calls need their own retry
 `yahoo-finance2`'s `yf.quote`/`yf.historical` have no built-in retry. A single transient failure used to zero-fill OMXS30 market weather (RSI/perf → 0, stored permanently on the session) or leave a candidate's `volMultiplier` at its 0 default (blocking the trade). All three import paths (scheduler.ts, edgeai.ts manual import, screener.ts telegram import) now wrap these calls in a small `withRetry` helper (`artifacts/api-server/src/lib/retry.ts`, 3 attempts with backoff) before falling back.

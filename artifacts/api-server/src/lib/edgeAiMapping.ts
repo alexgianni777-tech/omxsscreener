@@ -10,8 +10,8 @@
  * transaction whenever a fractional value appeared — invisible until someone
  * checked whether a session existed for that date. Keep this the only copy.
  */
-import { calculateOpeningGapPct, calculateWilderRsi } from "./marketIndicators";
-import { edgeAiDirection } from "./edgeAiSource";
+import { calculateOpeningGapPct, calculateWilderRsi } from "./marketIndicators.ts";
+import { edgeAiDirection } from "./edgeAiSource.ts";
 
 export type EdgeAiCategory = "MOMENTUM" | "SQUEEZE" | "STUDS" | "WEAKEST";
 export type EdgeAiMarket = "SE" | "US";
@@ -51,15 +51,19 @@ export function mapEdgeAiSetup(
   // Use EdgeAI's own calibrated target — it reflects the system's actual back-tested level.
   // Forcing a fixed R:R would reduce win rate below the system's calibration.
   const targetPrice = Number(s.target ?? 0);
-  const rr = Number(s.rr ?? 0);
+  const reward = direction === "SHORT" ? entry - targetPrice : targetPrice - entry;
+  const rr = oneR > 0 && reward > 0 ? reward / oneR : 0;
   // Strip .ST so resolveYahooTicker can re-add it correctly for SE stocks;
   // US tickers have no .ST so this is a no-op for them.
   const ticker = String(s.ticker ?? "").replace(/\.ST$/i, "").toUpperCase();
   // barsAgo: how many bars (trading days) ago the signal was first triggered
   const barsAgo = Number(s.barsAgo ?? 0);
   const chart = Array.isArray(s.chart) ? s.chart : [];
-  const signalRsi = calculateWilderRsi(chart.map((bar: any) => Number(bar?.c)));
-  const signalGapPct = calculateOpeningGapPct(chart);
+  const signalChart = barsAgo > 0
+    ? chart.slice(0, Math.max(0, chart.length - Math.floor(barsAgo)))
+    : chart;
+  const signalRsi = calculateWilderRsi(signalChart.map((bar: any) => Number(bar?.c)));
+  const signalGapPct = calculateOpeningGapPct(signalChart);
 
   return {
     market,

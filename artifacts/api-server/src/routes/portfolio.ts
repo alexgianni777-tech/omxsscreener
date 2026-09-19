@@ -157,10 +157,13 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
   const totalUnrealisedKr = enriched.reduce((s, p) => s + (p.unrealisedKr ?? 0), 0);
   const totalMarketValueKr = enriched.reduce((s, p) => s + (p.marketValueKr ?? p.positionSizeKr), 0);
   const totalInvestedKr = enriched.reduce((s, p) => s + p.positionSizeKr, 0);
-  const maxStopLossKr = enriched.reduce(
-    (sum, position) => sum + Math.max(0, -(position.stopPnlKr ?? 0)),
-    0,
-  );
+  const hasPositionWithoutStop = enriched.some((position) => position.stopPrice == null);
+  const maxStopLossKr = hasPositionWithoutStop
+    ? null
+    : enriched.reduce(
+        (sum, position) => sum + Math.max(0, -(position.stopPnlKr ?? 0)),
+        0,
+      );
   const longExposureKr = enriched
     .filter((p) => p.direction === "LONG")
     .reduce((s, p) => s + (p.marketValueKr ?? p.positionSizeKr), 0);
@@ -176,7 +179,7 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
       totalMarketValueKr: +totalMarketValueKr.toFixed(0),
       totalUnrealisedKr: +totalUnrealisedKr.toFixed(0),
       totalUnrealisedPct: totalInvestedKr > 0 ? +((totalUnrealisedKr / totalInvestedKr) * 100).toFixed(2) : 0,
-      maxStopLossKr: +maxStopLossKr.toFixed(0),
+      maxStopLossKr: maxStopLossKr != null ? +maxStopLossKr.toFixed(0) : null,
       longExposureKr: +longExposureKr.toFixed(0),
       shortExposureKr: +shortExposureKr.toFixed(0),
       grossExposureKr: +(longExposureKr + shortExposureKr).toFixed(0),

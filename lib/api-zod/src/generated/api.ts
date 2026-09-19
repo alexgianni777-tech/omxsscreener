@@ -632,7 +632,7 @@ export const GetPortfolioResponse = zod.object({
   "totalMarketValueKr": zod.number(),
   "totalUnrealisedKr": zod.number(),
   "totalUnrealisedPct": zod.number(),
-  "maxStopLossKr": zod.number().describe('Sum of negative stop P&L amounts only'),
+  "maxStopLossKr": zod.number().nullable().describe('Sum of negative stop P&L amounts only. Null when any open position lacks a stop, because maximum stop loss is then undefined.'),
   "longExposureKr": zod.number().describe('Current long market exposure.'),
   "shortExposureKr": zod.number().describe('Current short market exposure'),
   "grossExposureKr": zod.number().describe('Long exposure plus short exposure.'),

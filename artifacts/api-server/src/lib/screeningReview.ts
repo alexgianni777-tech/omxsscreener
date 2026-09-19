@@ -30,6 +30,13 @@ export type CandidateDecision = {
   reasons: string[];
 };
 
+const STOCKHOLM_DATE = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: "Europe/Stockholm",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
 function statusFor(reasons: string[], blockers: string[]): ReviewStatus {
   if (blockers.length > 0) return "BLOCKED";
   return reasons.length > 0 ? "WARN" : "APPROVED";
@@ -67,6 +74,9 @@ export function reviewCandidate(
   }
 
   if (candidate.rr < 1.2) blockers.push(`R:R ${candidate.rr.toFixed(2)} är under miniminivån 1,2.`);
+  if (isEdgeAi && candidate.rsi < 0) {
+    blockers.push(`Negativ historisk förväntan (${(candidate.rsi / 100).toFixed(2)}R).`);
+  }
   if (candidate.earningsKnowledge !== "SIGNAL_TIME") {
     warnings.push("Regel 7 ej bedömbar: rapportkalender saknar verifierad signal-tidsobservation.");
   } else if (candidate.earningsInDays != null && candidate.earningsInDays >= 0 && candidate.earningsInDays <= 5) {
@@ -119,7 +129,8 @@ export function decideCandidate(
   if (!Number.isFinite(candidate.volMultiplier) || candidate.volMultiplier <= 0) {
     invalid.push("Volymdata saknas eller är ogiltig.");
   }
-  if (!Number.isFinite(candidate.rsi) || candidate.rsi < 0) {
+  const isEdgeAi = (candidate.signalSource ?? null) === "edgeai";
+  if (!Number.isFinite(candidate.rsi) || (!isEdgeAi && candidate.rsi < 0)) {
     invalid.push("RSI-data saknas eller är ogiltig.");
   }
   if (!Number.isFinite(candidate.rr) || candidate.rr <= 0) {
@@ -134,9 +145,7 @@ export function decideCandidate(
   }
   if (invalid.length > 0) return { status: "INVALID", reasons: [...invalid, ...review.reasons] };
 
-  // Compare date-only values in UTC to avoid a browser/server timezone turning
-  // today's snapshot into yesterday's.
-  const today = now.toISOString().slice(0, 10);
+  const today = STOCKHOLM_DATE.format(now);
   if (sessionDate < today) {
     return {
       status: "STALE",
@@ -155,7 +164,7 @@ export function reviewSession(
   candidateReviews: SignalReview[],
   marketRsi: number,
 ): SignalReview & { tradableCount: number } {
-  const tradableCount = candidateReviews.filter((review) => review.status !== "BLOCKED").length;
+  const tradableCount = candidateReviews.filter((review) => review.status === "APPROVED").length;
   const reasons: string[] = [];
   if (!Number.isFinite(marketRsi) || marketRsi <= 0) {
     reasons.push("Marknads-RSI saknas — marknadsregimen är inte fullt verifierad.");

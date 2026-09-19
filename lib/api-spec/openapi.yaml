@@ -531,7 +531,9 @@ components:
         totalMarketValueKr: { type: number }
         totalUnrealisedKr: { type: number }
         totalUnrealisedPct: { type: number }
-        maxStopLossKr: { type: number, description: Sum of negative stop P&L amounts only, expressed as a positive maximum-loss amount. }
+        maxStopLossKr:
+          type: ["number", "null"]
+          description: Sum of negative stop P&L amounts only. Null when any open position lacks a stop, because maximum stop loss is then undefined.
         longExposureKr: { type: number, description: Current long market exposure. }
         shortExposureKr: { type: number, description: Current short market exposure, reported as a positive amount. }
         grossExposureKr: { type: number, description: Long exposure plus short exposure. }

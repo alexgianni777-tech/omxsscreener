@@ -58,12 +58,17 @@ type Candidate = {
   stopPrice: number;
   targetPrice: number;
   rr: number;
+  category: "MOMENTUM" | "SQUEEZE" | "STUDS" | "WEAKEST";
+  rank: number;
   isTop3Pick: boolean;
+  rs3m: number;
   perf1m: number;
   rsi: number;
+  distFrom20dH: number;
   outcome: string;
   earningsInDays: number | null;
   market: "SE" | "US" | null;
+  signalSource: "edgeai" | "telegram" | "manual" | "screener" | null;
   pctB: number; // EdgeAI sample size (number of historical observations)
   volMultiplier: number;
   signalRsi?: number | null;
@@ -71,6 +76,48 @@ type Candidate = {
   review?: { status: "APPROVED" | "WARN" | "BLOCKED"; reasons: string[] };
   decision?: { status: "TRADEABLE" | "WAIT" | "BLOCKED" | "INVALID" | "STALE"; reasons: string[] };
 };
+
+const SOURCE_ORDER = ["edgeai", "telegram", "manual", "screener", "unknown"];
+const MAX_HOLD_DAYS: Record<string, number> = { MOMENTUM: 10, SQUEEZE: 15, STUDS: 5, WEAKEST: 10 };
+
+function selectionScore(candidate: Candidate): number {
+  if (candidate.signalSource === "edgeai") {
+    const reliability = candidate.pctB / (Math.max(0, candidate.pctB) + 20);
+    const ageDecay = Math.max(0, 1 - Math.max(0, candidate.distFrom20dH) / (MAX_HOLD_DAYS[candidate.category] ?? 10));
+    return (candidate.rsi / 100) * reliability * ageDecay;
+  }
+  const directionSign = candidate.direction === "SHORT" ? -1 : 1;
+  return directionSign * (candidate.perf1m + candidate.rs3m) / 100;
+}
+
+function sourceBalanced(candidates: Candidate[], limit: number): Candidate[] {
+  const groups = new Map<string, Candidate[]>();
+  for (const candidate of candidates) {
+    const source = candidate.signalSource ?? "unknown";
+    groups.set(source, [...(groups.get(source) ?? []), candidate]);
+  }
+  for (const group of groups.values()) {
+    group.sort((a, b) => selectionScore(b) - selectionScore(a) || a.rank - b.rank || a.ticker.localeCompare(b.ticker));
+  }
+  const sources = [...groups.keys()].sort((a, b) => {
+    const ai = SOURCE_ORDER.indexOf(a);
+    const bi = SOURCE_ORDER.indexOf(b);
+    return (ai < 0 ? SOURCE_ORDER.length : ai) - (bi < 0 ? SOURCE_ORDER.length : bi);
+  });
+  const result: Candidate[] = [];
+  for (let index = 0; result.length < limit; index++) {
+    let added = false;
+    for (const source of sources) {
+      const candidate = groups.get(source)?.[index];
+      if (!candidate) continue;
+      result.push(candidate);
+      added = true;
+      if (result.length === limit) break;
+    }
+    if (!added) break;
+  }
+  return result;
+}
 
 type Session = {
   id: number;
@@ -213,7 +260,7 @@ export function Today() {
         : candidate.review?.status !== "BLOCKED",
     );
     const starred = eligible.filter(c => c.isTop3Pick);
-    const pool = starred.length > 0 ? starred : [...eligible].sort((a, b) => b.perf1m * b.rsi - a.perf1m * a.rsi);
+    const pool = starred.length > 0 ? starred : sourceBalanced(eligible, eligible.length);
     const seen = new Set<string>();
     const unique: Candidate[] = [];
     for (const c of pool) {

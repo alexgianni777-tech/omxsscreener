@@ -15,6 +15,7 @@
 import { Router, type IRouter } from "express";
 import { asc } from "drizzle-orm";
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
+import { candidateSelectionScore, selectSourceBalancedCandidates } from "../lib/candidateRanking.ts";
 
 const router: IRouter = Router();
 
@@ -53,21 +54,9 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
   const sessionResults = sessions.map((session) => {
     const candidates = bySession.get(session.id) ?? [];
 
-    // Sort by edge score descending: (winRate/100) × (expectancyR×100/100)
-    // = perf1m × rsi — monotone so no need to divide
-    const sorted = [...candidates].sort(
-      (a, b) => (b.perf1m ?? 0) * (b.rsi ?? 0) - (a.perf1m ?? 0) * (a.rsi ?? 0),
-    );
-
     // Top 3 is deliberately per direction: up to three LONG and three SHORT
-    // candidates. Manual choices override auto-rank within their own direction.
-    const deterministicSort = (items: typeof candidates) =>
-      [...items].sort(
-        (a, b) =>
-          (b.perf1m ?? 0) * (b.rsi ?? 0) - (a.perf1m ?? 0) * (a.rsi ?? 0) ||
-          a.rank - b.rank ||
-          a.ticker.localeCompare(b.ticker),
-      );
+    // candidates. Manual choices override source-balanced auto-rank within
+    // their own direction.
     const manualPicks = candidates.filter((c) => c.isTop3Pick === true);
     const selectDirection = (direction: "LONG" | "SHORT") => {
       const pool = candidates.filter((candidate) =>
@@ -80,7 +69,9 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
           ? candidate.direction === "SHORT"
           : candidate.direction !== "SHORT",
       );
-      return deterministicSort(manual.length > 0 ? manual : pool).slice(0, 3);
+      return manual.length > 0
+        ? [...manual].sort((a, b) => a.rank - b.rank || a.ticker.localeCompare(b.ticker)).slice(0, 3)
+        : selectSourceBalancedCandidates(pool, 3);
     };
     const topLong = selectDirection("LONG");
     const topShort = selectDirection("SHORT");
@@ -137,9 +128,7 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
       return {
         ticker: c.ticker,
         direction: c.direction,
-        edgeScore: Number(
-          (((c.perf1m ?? 0) / 100) * ((c.rsi ?? 0) / 100)).toFixed(4),
-        ),
+        edgeScore: Number(candidateSelectionScore(c).toFixed(4)),
         outcome: c.outcome,
         r,
         earningsWarning,
@@ -160,7 +149,7 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
       return {
         ticker: c.ticker,
         direction: c.direction,
-        edgeScore: Number((((c.perf1m ?? 0) / 100) * ((c.rsi ?? 0) / 100)).toFixed(4)),
+        edgeScore: Number(candidateSelectionScore(c).toFixed(4)),
         outcome: c.outcome,
         r: (c.outcome === "WIN" && persistedR != null && persistedR > 0) ||
           (c.outcome === "LOSS" && persistedR != null && persistedR < 0)

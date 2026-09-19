@@ -155,8 +155,9 @@ function parseCandidate(
   const entryPrice = parseFloat(planMatch[2]);
   const stopPrice = parseFloat(planMatch[3]);
   const targetPrice = parseFloat(planMatch[4]);
-  const rr = parseFloat(planMatch[5]);
   const oneR = Math.abs(entryPrice - stopPrice);
+  const reward = direction === "SHORT" ? entryPrice - targetPrice : targetPrice - entryPrice;
+  const rr = oneR > 0 && reward > 0 ? reward / oneR : 0;
 
   return {
     category,

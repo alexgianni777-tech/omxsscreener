@@ -7,12 +7,15 @@ const WARN_EDGEAI_DATA_AGE_MS = 30 * 60 * 60 * 1_000;
 const MAX_EDGEAI_IMPORT_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 
 export class EdgeAiDataFreshnessError extends Error {
+  public readonly generatedAt: string | null;
+
   constructor(
     message: string,
-    public readonly generatedAt: string | null,
+    generatedAt: string | null,
   ) {
     super(message);
     this.name = "EdgeAiDataFreshnessError";
+    this.generatedAt = generatedAt;
   }
 }
 

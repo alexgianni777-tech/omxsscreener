@@ -42,7 +42,7 @@ export function calculateOpeningGapPct(chart: PriceBar[] | undefined): number | 
   if (!Number.isFinite(previousClose) || previousClose <= 0 || !Number.isFinite(latestOpen)) {
     return null;
   }
-  return Math.round(((latestOpen - previousClose) / previousClose) * 1000) / 1000;
+  return Math.round(((latestOpen - previousClose) / previousClose) * 100 * 1000) / 1000;
 }
 
 export function volumeMultiplierFromQuote(quote: {
@@ -52,13 +52,8 @@ export function volumeMultiplierFromQuote(quote: {
 }): number | null {
   const volume = Number(quote.regularMarketVolume ?? 0);
   const average10d = Number(quote.averageDailyVolume10Day ?? 0);
-  const average3m = Number(quote.averageDailyVolume3Month ?? 0);
-
   if (average10d > 0 && volume / average10d >= 0.2) {
     return Math.round((volume / average10d) * 10) / 10;
-  }
-  if (average10d > 0 && average3m > 0) {
-    return Math.round((average10d / average3m) * 10) / 10;
   }
   return null;
 }

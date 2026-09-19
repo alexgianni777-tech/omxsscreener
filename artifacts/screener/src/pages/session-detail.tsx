@@ -8,13 +8,15 @@ import { CandlestickChart } from "../components/CandlestickChart";
 import { AddToPortfolioModal } from "../components/AddToPortfolioModal";
 
 // ── Edge score helpers ────────────────────────────────────────────────────────
-// For EdgeAI sessions: rsi field stores expectancyR × 100; perf1m stores winRate.
-// compositeScore = winRate × expectancyR (Kelly-ish proxy).
+// For EdgeAI sessions: rsi stores expectancyR × 100, pctB stores sample N,
+// and distFrom20dH stores signal age. Do not multiply by win rate again because
+// expectancy already includes the strategy's payoff and hit rate.
 function edgeScore(c: Candidate): number {
   const expectancyR = c.rsi / 100; // stored as rsi×100
-  // perf1m may be stored as integer % (49) or decimal (0.49) — normalize
-  const winRate = c.perf1m > 1 ? c.perf1m / 100 : c.perf1m;
-  return winRate * expectancyR;
+  const reliability = c.pctB / (Math.max(0, c.pctB) + 20);
+  const maxHoldDays = c.category === "SQUEEZE" ? 15 : c.category === "STUDS" ? 5 : 10;
+  const ageDecay = Math.max(0, 1 - Math.max(0, c.distFrom20dH) / maxHoldDays);
+  return expectancyR * reliability * ageDecay;
 }
 
 function edgeScoreColor(score: number): string {

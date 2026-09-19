@@ -12,8 +12,11 @@ export interface PortfolioSummary {
   totalMarketValueKr: number;
   totalUnrealisedKr: number;
   totalUnrealisedPct: number;
-  /** Sum of negative stop P&L amounts only */
-  maxStopLossKr: number;
+  /**
+     * Sum of negative stop P&L amounts only. Null when any open position lacks a stop, because maximum stop loss is then undefined.
+     * @nullable
+     */
+  maxStopLossKr: number | null;
   /** Current long market exposure. */
   longExposureKr: number;
   /** Current short market exposure */
