@@ -16,7 +16,7 @@ export interface CandidateOutcome {
   /** @nullable */
   outcomeNotes?: string | null;
   /**
-     * Required for a planned-level assumption. MANUAL_EXIT is accepted only with actualExitConfirmed=true.
+     * TIME_EXIT and MANUAL_EXIT are accepted only with actualExitConfirmed=true and an entered fill price.
      * @nullable
      */
   resolutionMethod?: CandidateOutcomeResolutionMethod;

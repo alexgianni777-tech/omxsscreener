@@ -557,8 +557,8 @@ function CandidateRow({
 
   const [localOutcome, setLocalOutcome] = useState<CandidateOutcomeProperty>(candidate.outcome);
   const [localExit, setLocalExit] = useState<string>(candidate.exitPrice ? String(candidate.exitPrice) : "");
-  const [resolutionMethod, setResolutionMethod] = useState<"MANUAL_EXIT" | "TARGET_HIT" | "STOP_HIT">(
-    candidate.resolutionMethod === "TARGET_HIT" || candidate.resolutionMethod === "STOP_HIT"
+  const [resolutionMethod, setResolutionMethod] = useState<"MANUAL_EXIT" | "TARGET_HIT" | "STOP_HIT" | "TIME_EXIT">(
+    candidate.resolutionMethod === "TARGET_HIT" || candidate.resolutionMethod === "STOP_HIT" || candidate.resolutionMethod === "TIME_EXIT"
       ? candidate.resolutionMethod
       : "MANUAL_EXIT",
   );
@@ -573,10 +573,10 @@ function CandidateRow({
         data: { 
           outcome: localOutcome as any, 
           exitPrice: localExit ? parseFloat(localExit) : null,
-          ...(localOutcome === "WIN" || localOutcome === "LOSS"
+          ...(localOutcome === "WIN" || localOutcome === "LOSS" || localOutcome === "TIME_EXIT"
             ? {
-                resolutionMethod,
-                ...(resolutionMethod === "MANUAL_EXIT" ? { actualExitConfirmed } : {}),
+                resolutionMethod: localOutcome === "TIME_EXIT" ? "TIME_EXIT" : resolutionMethod,
+                ...((resolutionMethod === "MANUAL_EXIT" || localOutcome === "TIME_EXIT") ? { actualExitConfirmed } : {}),
               }
             : {}),
           ...(removeChallengeTrade ? { removeChallengeTrade: true } : {}),
@@ -942,7 +942,14 @@ function CandidateRow({
         <div className="flex items-center gap-2">
           <select 
             value={localOutcome}
-            onChange={e => setLocalOutcome(e.target.value as CandidateOutcomeProperty)}
+            onChange={e => {
+              const next = e.target.value as CandidateOutcomeProperty;
+              setLocalOutcome(next);
+              if (next === "TIME_EXIT") {
+                setResolutionMethod("TIME_EXIT");
+                setActualExitConfirmed(false);
+              }
+            }}
             className={`h-8 rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring font-medium flex-1 ${
               localOutcome === "WIN" ? "text-success border-success/50" : 
               localOutcome === "LOSS" ? "text-destructive border-destructive/50" : 
@@ -952,6 +959,7 @@ function CandidateRow({
             <option value="PENDING">PENDING</option>
             <option value="WIN">WIN</option>
             <option value="LOSS">LOSS</option>
+             <option value="TIME_EXIT">TIME EXIT</option>
             <option value="SKIP">SKIP</option>
           </select>
           
@@ -961,7 +969,7 @@ function CandidateRow({
             placeholder="Exit Px"
             value={localExit}
             onChange={e => setLocalExit(e.target.value)}
-            disabled={localOutcome === "PENDING" || localOutcome === "SKIP" || resolutionMethod !== "MANUAL_EXIT"}
+            disabled={localOutcome === "PENDING" || localOutcome === "SKIP" || (resolutionMethod !== "MANUAL_EXIT" && resolutionMethod !== "TIME_EXIT")}
             className="h-8 w-24 rounded-md border border-input bg-background px-2 py-1 text-sm font-mono disabled:opacity-50"
           />
           
@@ -969,8 +977,8 @@ function CandidateRow({
             onClick={() => handleSave()}
             disabled={
               updateOutcome.isPending ||
-              ((localOutcome === "WIN" || localOutcome === "LOSS") && resolutionMethod === "MANUAL_EXIT" && !localExit) ||
-               ((localOutcome === "WIN" || localOutcome === "LOSS") && resolutionMethod === "MANUAL_EXIT" && !actualExitConfirmed) ||
+              ((localOutcome === "WIN" || localOutcome === "LOSS" || localOutcome === "TIME_EXIT") && (resolutionMethod === "MANUAL_EXIT" || resolutionMethod === "TIME_EXIT") && !localExit) ||
+               ((localOutcome === "WIN" || localOutcome === "LOSS" || localOutcome === "TIME_EXIT") && (resolutionMethod === "MANUAL_EXIT" || resolutionMethod === "TIME_EXIT") && !actualExitConfirmed) ||
               (localOutcome === candidate.outcome && localExit === (candidate.exitPrice ? String(candidate.exitPrice) : ""))
             }
             className="h-8 w-8 flex items-center justify-center rounded-md bg-primary text-primary-foreground disabled:opacity-50 hover:bg-primary/90 transition-colors"
@@ -979,12 +987,12 @@ function CandidateRow({
             <RefreshCw className={`w-4 h-4 ${updateOutcome.isPending ? "animate-spin" : ""}`} />
           </button>
         </div>
-        {(localOutcome === "WIN" || localOutcome === "LOSS") && (
+        {(localOutcome === "WIN" || localOutcome === "LOSS" || localOutcome === "TIME_EXIT") && (
           <>
             <select
               value={resolutionMethod}
               onChange={(e) => {
-                const method = e.target.value as "MANUAL_EXIT" | "TARGET_HIT" | "STOP_HIT";
+                const method = e.target.value as "MANUAL_EXIT" | "TARGET_HIT" | "STOP_HIT" | "TIME_EXIT";
                 setResolutionMethod(method);
                 if (method === "TARGET_HIT") setLocalExit(String(candidate.targetPrice));
                 if (method === "STOP_HIT") setLocalExit(String(candidate.stopPrice));
@@ -993,10 +1001,11 @@ function CandidateRow({
               aria-label="Resolution method"
             >
               <option value="MANUAL_EXIT">Faktiskt exit-pris (manuellt)</option>
+              {localOutcome === "TIME_EXIT" && <option value="TIME_EXIT">Faktiskt pris vid tidsutgång</option>}
               {localOutcome === "WIN" && <option value="TARGET_HIT">Antag target träffad</option>}
               {localOutcome === "LOSS" && <option value="STOP_HIT">Antag stop träffad</option>}
             </select>
-            {resolutionMethod === "MANUAL_EXIT" ? (
+            {resolutionMethod === "MANUAL_EXIT" || resolutionMethod === "TIME_EXIT" ? (
               <label className="flex items-start gap-2 text-[10px] text-muted-foreground cursor-pointer">
                 <input
                   type="checkbox"

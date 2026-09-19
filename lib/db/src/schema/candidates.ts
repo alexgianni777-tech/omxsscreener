@@ -21,6 +21,11 @@ export const candidatesTable = pgTable("candidates", {
   // Separate signal inputs from legacy display fields: EdgeAI uses `rsi` for E[R].
   signalRsi: real("signal_rsi"),
   signalGapPct: real("signal_gap_pct"),
+  edgeWinRate: real("edge_win_rate"),
+  edgeExpectancyR: real("edge_expectancy_r"),
+  edgeSampleN: integer("edge_sample_n"),
+  signalAgeBars: integer("signal_age_bars"),
+  maxHoldDays: integer("max_hold_days"),
   distFrom20dH: real("dist_from_20d_h").notNull(),
   gapWarning: real("gap_warning"),
   // Rule 7 is a point-in-time signal attribute. A value is usable only when
@@ -44,14 +49,14 @@ export const candidatesTable = pgTable("candidates", {
   targetPrice: real("target_price").notNull(),
   rr: real("rr").notNull(),
   oneR: real("one_r").notNull(),
-  outcome: text("outcome", { enum: ["WIN", "LOSS", "SKIP", "PENDING"] }).notNull().default("PENDING"),
+  outcome: text("outcome", { enum: ["WIN", "LOSS", "TIME_EXIT", "SKIP", "PENDING"] }).notNull().default("PENDING"),
   exitPrice: real("exit_price"),
   outcomeNotes: text("outcome_notes"),
   // A resolved trade must say whether its price was recorded from an actual
   // exit or is an explicitly-labelled planned-level assumption. Null preserves
   // pre-existing outcome history whose resolution provenance was not captured.
   resolutionMethod: text("resolution_method", {
-    enum: ["MANUAL_EXIT", "TARGET_HIT", "STOP_HIT"],
+    enum: ["MANUAL_EXIT", "TARGET_HIT", "STOP_HIT", "TIME_EXIT"],
   }),
   resolutionQuality: text("resolution_quality", {
     enum: ["RECORDED_EXIT", "ASSUMED_LEVEL", "LEGACY_UNKNOWN"],

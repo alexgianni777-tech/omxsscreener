@@ -12,6 +12,7 @@ export type CandidateOutcomeProperty = typeof CandidateOutcomeProperty[keyof typ
 export const CandidateOutcomeProperty = {
   WIN: 'WIN',
   LOSS: 'LOSS',
+  TIME_EXIT: 'TIME_EXIT',
   SKIP: 'SKIP',
   PENDING: 'PENDING',
 } as const;

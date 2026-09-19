@@ -124,7 +124,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     earnings: EarningsObservation,
     preserved?: {
       outcome: string; exitPrice: number | null; outcomeNotes: string | null;
-      resolutionMethod: "MANUAL_EXIT" | "TARGET_HIT" | "STOP_HIT" | null;
+      resolutionMethod: "MANUAL_EXIT" | "TARGET_HIT" | "STOP_HIT" | "TIME_EXIT" | null;
       resolutionQuality: "RECORDED_EXIT" | "ASSUMED_LEVEL" | "LEGACY_UNKNOWN" | null;
       realizedR: number | null;
     },
@@ -144,6 +144,11 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     volMultiplier: volMap.get(c.ticker) ?? c.volMultiplier,
     signalRsi: c.rsi,
     signalGapPct: c.gapWarning ?? null,
+    edgeWinRate: null,
+    edgeExpectancyR: null,
+    edgeSampleN: null,
+    signalAgeBars: null,
+    maxHoldDays: c.category === "SQUEEZE" ? 15 : c.category === "STUDS" ? 5 : 10,
     distFrom20dH: c.distFrom20dH,
     gapWarning: c.gapWarning ?? undefined,
     earningsInDays: earnings.earningsInDays ?? undefined,
@@ -155,7 +160,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     targetPrice: c.targetPrice,
     rr: c.rr,
     oneR: c.oneR,
-    outcome: (preserved?.outcome ?? "PENDING") as "WIN" | "LOSS" | "SKIP" | "PENDING",
+    outcome: (preserved?.outcome ?? "PENDING") as "WIN" | "LOSS" | "TIME_EXIT" | "SKIP" | "PENDING",
     exitPrice: preserved?.exitPrice ?? null,
     outcomeNotes: preserved?.outcomeNotes ?? null,
     resolutionMethod: preserved?.resolutionMethod ?? null,
@@ -665,6 +670,11 @@ function mapCandidate(c: {
   volMultiplier: number;
   signalRsi: number | null;
   signalGapPct: number | null;
+  edgeWinRate: number | null;
+  edgeExpectancyR: number | null;
+  edgeSampleN: number | null;
+  signalAgeBars: number | null;
+  maxHoldDays: number | null;
   distFrom20dH: number;
   gapWarning: number | null;
   earningsInDays: number | null;
@@ -681,7 +691,7 @@ function mapCandidate(c: {
   outcome: string;
   exitPrice: number | null;
   outcomeNotes: string | null;
-  resolutionMethod: "MANUAL_EXIT" | "TARGET_HIT" | "STOP_HIT" | null;
+  resolutionMethod: "MANUAL_EXIT" | "TARGET_HIT" | "STOP_HIT" | "TIME_EXIT" | null;
   resolutionQuality: "RECORDED_EXIT" | "ASSUMED_LEVEL" | "LEGACY_UNKNOWN" | null;
   realizedR: number | null;
   resolutionEntryPrice: number | null;
@@ -704,6 +714,11 @@ function mapCandidate(c: {
     volMultiplier: c.volMultiplier,
     signalRsi: c.signalRsi ?? null,
     signalGapPct: c.signalGapPct ?? null,
+    edgeWinRate: c.edgeWinRate ?? null,
+    edgeExpectancyR: c.edgeExpectancyR ?? null,
+    edgeSampleN: c.edgeSampleN ?? null,
+    signalAgeBars: c.signalAgeBars ?? null,
+    maxHoldDays: c.maxHoldDays ?? null,
     distFrom20dH: c.distFrom20dH,
     gapWarning: c.gapWarning ?? null,
     earningsInDays: c.earningsInDays ?? null,

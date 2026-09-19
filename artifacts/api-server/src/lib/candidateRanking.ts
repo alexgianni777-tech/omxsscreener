@@ -9,6 +9,10 @@ type RankableCandidate = {
   rsi: number;
   pctB: number;
   distFrom20dH: number;
+  edgeExpectancyR?: number | null;
+  edgeSampleN?: number | null;
+  signalAgeBars?: number | null;
+  maxHoldDays?: number | null;
 };
 
 const SOURCE_ORDER = ["edgeai", "telegram", "manual", "screener", "unknown"];
@@ -21,11 +25,12 @@ const MAX_HOLD_DAYS: Record<string, number> = {
 
 export function candidateSelectionScore(candidate: RankableCandidate): number {
   if (candidate.signalSource === "edgeai") {
-    const expectancyR = candidate.rsi / 100;
-    const sampleN = Math.max(0, candidate.pctB);
+    const expectancyR = candidate.edgeExpectancyR ?? candidate.rsi / 100;
+    const sampleN = Math.max(0, candidate.edgeSampleN ?? candidate.pctB);
     const reliability = sampleN / (sampleN + 20);
-    const maxHoldDays = MAX_HOLD_DAYS[candidate.category] ?? 10;
-    const ageDecay = Math.max(0, 1 - Math.max(0, candidate.distFrom20dH) / maxHoldDays);
+    const maxHoldDays = candidate.maxHoldDays ?? MAX_HOLD_DAYS[candidate.category] ?? 10;
+    const signalAgeBars = candidate.signalAgeBars ?? candidate.distFrom20dH;
+    const ageDecay = Math.max(0, 1 - Math.max(0, signalAgeBars) / maxHoldDays);
     return expectancyR * reliability * ageDecay;
   }
 

@@ -64,6 +64,11 @@ export function mapEdgeAiSetup(
     : chart;
   const signalRsi = calculateWilderRsi(signalChart.map((bar: any) => Number(bar?.c)));
   const signalGapPct = calculateOpeningGapPct(signalChart);
+  const edgeWinRateRaw = Number(s.edge?.winRate ?? 0);
+  const edgeWinRate = edgeWinRateRaw > 1 ? edgeWinRateRaw / 100 : edgeWinRateRaw;
+  const edgeExpectancyR = Number(s.edge?.expectancyR ?? 0);
+  const edgeSampleN = Math.max(0, Math.floor(Number(s.edge?.sample ?? 0)));
+  const maxHoldDays = category === "SQUEEZE" ? 15 : category === "STUDS" ? 5 : 10;
 
   return {
     market,
@@ -73,11 +78,11 @@ export function mapEdgeAiSetup(
     price: entry,
     rs3m: Number(s.rs ?? 0),
     // Normalize to decimal 0–1 (EdgeAI may send integer % like 51).
-    perf1m: (() => { const wr = Number(s.edge?.winRate ?? 0); return wr > 1 ? wr / 100 : wr; })(),
+    perf1m: edgeWinRate,
     // `rsi` is a legacy integer display field mapped from EdgeAI's expectancy —
     // the column is a Postgres integer, so this MUST be rounded before insert.
-    rsi: Math.round(Number(s.edge?.expectancyR ?? 0) * 100),
-    pctB: Number(s.edge?.sample ?? 0), // store N (sample size)
+    rsi: Math.round(edgeExpectancyR * 100),
+    pctB: edgeSampleN, // legacy compatibility during field migration
     atr: oneR,
     volMultiplier: 0, // filled in by live Yahoo Finance fetch by the caller
     earningsInDays: null as number | null,
@@ -86,6 +91,11 @@ export function mapEdgeAiSetup(
     distFrom20dH: barsAgo, // store signal age in trading days
     signalRsi,
     signalGapPct,
+    edgeWinRate,
+    edgeExpectancyR,
+    edgeSampleN,
+    signalAgeBars: Math.max(0, Math.floor(barsAgo)),
+    maxHoldDays,
     gapWarning: signalGapPct != null && Math.abs(signalGapPct) >= 2.5 ? signalGapPct : null,
     direction,
     entryPrice: entry,

@@ -105,6 +105,11 @@ const DIFF_TRACKED_FIELDS = [
   "earningsKnowledge",
   "market",
   "signalSource",
+  "edgeWinRate",
+  "edgeExpectancyR",
+  "edgeSampleN",
+  "signalAgeBars",
+  "maxHoldDays",
 ] as const;
 
 export type CandidateDiffEntry = {

@@ -52,6 +52,31 @@ export interface Candidate {
      * @nullable
      */
   signalGapPct?: number | null;
+  /**
+     * EdgeAI historical win rate as a fraction, separate from one-month price performance
+     * @nullable
+     */
+  edgeWinRate?: number | null;
+  /**
+     * EdgeAI expected R per trade, separate from RSI
+     * @nullable
+     */
+  edgeExpectancyR?: number | null;
+  /**
+     * Number of observations behind the EdgeAI estimate
+     * @nullable
+     */
+  edgeSampleN?: number | null;
+  /**
+     * Trading bars elapsed since the signal trigger
+     * @nullable
+     */
+  signalAgeBars?: number | null;
+  /**
+     * Maximum intended holding period in trading days
+     * @nullable
+     */
+  maxHoldDays?: number | null;
   distFrom20dH: number;
   /** @nullable */
   gapWarning?: number | null;
@@ -74,7 +99,7 @@ export interface Candidate {
   /** @nullable */
   outcomeNotes?: string | null;
   /**
-     * How the outcome was resolved. MANUAL_EXIT uses a recorded exit price; TARGET_HIT and STOP_HIT are explicit planned-level assumptions.
+     * How the outcome was resolved. MANUAL_EXIT and TIME_EXIT require a recorded exit price; TARGET_HIT and STOP_HIT are explicit planned-level assumptions.
      * @nullable
      */
   resolutionMethod?: CandidateResolutionMethod;

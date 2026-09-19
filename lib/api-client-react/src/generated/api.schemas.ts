@@ -308,12 +308,13 @@ export type CandidateOutcomeProperty = typeof CandidateOutcomeProperty[keyof typ
 export const CandidateOutcomeProperty = {
   WIN: 'WIN',
   LOSS: 'LOSS',
+  TIME_EXIT: 'TIME_EXIT',
   SKIP: 'SKIP',
   PENDING: 'PENDING',
 } as const;
 
 /**
- * How the outcome was resolved. MANUAL_EXIT uses a recorded exit price; TARGET_HIT and STOP_HIT are explicit planned-level assumptions.
+ * How the outcome was resolved. MANUAL_EXIT and TIME_EXIT require a recorded exit price; TARGET_HIT and STOP_HIT are explicit planned-level assumptions.
  * @nullable
  */
 export type CandidateResolutionMethod = typeof CandidateResolutionMethod[keyof typeof CandidateResolutionMethod] | null;
@@ -323,6 +324,7 @@ export const CandidateResolutionMethod = {
   MANUAL_EXIT: 'MANUAL_EXIT',
   TARGET_HIT: 'TARGET_HIT',
   STOP_HIT: 'STOP_HIT',
+  TIME_EXIT: 'TIME_EXIT',
 } as const;
 
 /**
@@ -415,6 +417,31 @@ export interface Candidate {
      * @nullable
      */
   signalGapPct?: number | null;
+  /**
+     * EdgeAI historical win rate as a fraction, separate from one-month price performance
+     * @nullable
+     */
+  edgeWinRate?: number | null;
+  /**
+     * EdgeAI expected R per trade, separate from RSI
+     * @nullable
+     */
+  edgeExpectancyR?: number | null;
+  /**
+     * Number of observations behind the EdgeAI estimate
+     * @nullable
+     */
+  edgeSampleN?: number | null;
+  /**
+     * Trading bars elapsed since the signal trigger
+     * @nullable
+     */
+  signalAgeBars?: number | null;
+  /**
+     * Maximum intended holding period in trading days
+     * @nullable
+     */
+  maxHoldDays?: number | null;
   distFrom20dH: number;
   /** @nullable */
   gapWarning?: number | null;
@@ -437,7 +464,7 @@ export interface Candidate {
   /** @nullable */
   outcomeNotes?: string | null;
   /**
-     * How the outcome was resolved. MANUAL_EXIT uses a recorded exit price; TARGET_HIT and STOP_HIT are explicit planned-level assumptions.
+     * How the outcome was resolved. MANUAL_EXIT and TIME_EXIT require a recorded exit price; TARGET_HIT and STOP_HIT are explicit planned-level assumptions.
      * @nullable
      */
   resolutionMethod?: CandidateResolutionMethod;
@@ -487,12 +514,13 @@ export type CandidateOutcomeOutcome = typeof CandidateOutcomeOutcome[keyof typeo
 export const CandidateOutcomeOutcome = {
   WIN: 'WIN',
   LOSS: 'LOSS',
+  TIME_EXIT: 'TIME_EXIT',
   SKIP: 'SKIP',
   PENDING: 'PENDING',
 } as const;
 
 /**
- * Required for a planned-level assumption. MANUAL_EXIT is accepted only with actualExitConfirmed=true.
+ * TIME_EXIT and MANUAL_EXIT are accepted only with actualExitConfirmed=true and an entered fill price.
  * @nullable
  */
 export type CandidateOutcomeResolutionMethod = typeof CandidateOutcomeResolutionMethod[keyof typeof CandidateOutcomeResolutionMethod] | null;
@@ -502,6 +530,7 @@ export const CandidateOutcomeResolutionMethod = {
   MANUAL_EXIT: 'MANUAL_EXIT',
   TARGET_HIT: 'TARGET_HIT',
   STOP_HIT: 'STOP_HIT',
+  TIME_EXIT: 'TIME_EXIT',
 } as const;
 
 /**
@@ -554,7 +583,7 @@ export interface CandidateOutcome {
   /** @nullable */
   outcomeNotes?: string | null;
   /**
-     * Required for a planned-level assumption. MANUAL_EXIT is accepted only with actualExitConfirmed=true.
+     * TIME_EXIT and MANUAL_EXIT are accepted only with actualExitConfirmed=true and an entered fill price.
      * @nullable
      */
   resolutionMethod?: CandidateOutcomeResolutionMethod;

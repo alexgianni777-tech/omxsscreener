@@ -24,7 +24,7 @@ type ChallengeTradeInput = {
   riskAllocationKr?: number;
 };
 
-type ResolutionMethod = "MANUAL_EXIT" | "TARGET_HIT" | "STOP_HIT";
+type ResolutionMethod = "MANUAL_EXIT" | "TARGET_HIT" | "STOP_HIT" | "TIME_EXIT";
 
 /**
  * Resolve an outcome without inventing a price path. A manually recorded exit
@@ -43,11 +43,12 @@ function resolveOutcome(
 ):
   | { success: true; exitPrice: number | null; realizedR: number | null; resolutionMethod: ResolutionMethod | null; resolutionQuality: "RECORDED_EXIT" | "ASSUMED_LEVEL" | null }
   | { success: false; error: string } {
-  if (input.outcome !== "WIN" && input.outcome !== "LOSS") {
+  if (input.outcome !== "WIN" && input.outcome !== "LOSS" && input.outcome !== "TIME_EXIT") {
     return { success: true, exitPrice: null, realizedR: null, resolutionMethod: null, resolutionQuality: null };
   }
 
-  const method = input.resolutionMethod ?? (input.exitPrice != null ? "MANUAL_EXIT" : null);
+  const method = input.resolutionMethod ??
+    (input.outcome === "TIME_EXIT" ? "TIME_EXIT" : input.exitPrice != null ? "MANUAL_EXIT" : null);
   if (!method) {
     return { success: false, error: "WIN eller LOSS kräver ett registrerat exit-pris eller en uttrycklig target/stop-anta­gande." };
   }
@@ -57,17 +58,23 @@ function resolveOutcome(
   if (method === "STOP_HIT" && input.outcome !== "LOSS") {
     return { success: false, error: "STOP_HIT kan bara användas för LOSS." };
   }
+  if (method === "TIME_EXIT" && input.outcome !== "TIME_EXIT") {
+    return { success: false, error: "TIME_EXIT-metoden kan bara användas för TIME_EXIT-utfall." };
+  }
+  if (input.outcome === "TIME_EXIT" && method !== "TIME_EXIT") {
+    return { success: false, error: "TIME_EXIT-utfall måste registreras med TIME_EXIT-metoden." };
+  }
 
   const assumedPrice = method === "TARGET_HIT" ? candidate.targetPrice : method === "STOP_HIT" ? candidate.stopPrice : null;
   if (method !== "MANUAL_EXIT" && input.exitPrice != null && Math.abs(input.exitPrice - assumedPrice!) > 0.0001) {
     return { success: false, error: `${method} måste använda signalens ${method === "TARGET_HIT" ? "target" : "stop"}-pris.` };
   }
-  if (method === "MANUAL_EXIT" && input.actualExitConfirmed !== true) {
-    return { success: false, error: "MANUAL_EXIT kräver att ett faktiskt genomfört exit-fyllnad uttryckligen bekräftas. En Yahoo/live-kurs är inte ett registrerat exit." };
+  if ((method === "MANUAL_EXIT" || method === "TIME_EXIT") && input.actualExitConfirmed !== true) {
+    return { success: false, error: `${method} kräver att ett faktiskt genomfört exit-fyllnad uttryckligen bekräftas. En Yahoo/live-kurs är inte ett registrerat exit.` };
   }
   const exitPrice = assumedPrice ?? input.exitPrice;
   if (exitPrice == null || !Number.isFinite(exitPrice)) {
-    return { success: false, error: "MANUAL_EXIT kräver ett giltigt faktiskt exit-pris." };
+    return { success: false, error: `${method} kräver ett giltigt faktiskt exit-pris.` };
   }
   // Keep the first resolution's inputs immutable. Legacy rows have no
   // snapshot, so only an explicit new resolution may establish one; we never
@@ -90,7 +97,7 @@ function resolveOutcome(
     exitPrice,
     realizedR,
     resolutionMethod: method,
-    resolutionQuality: method === "MANUAL_EXIT" ? "RECORDED_EXIT" : "ASSUMED_LEVEL",
+    resolutionQuality: method === "MANUAL_EXIT" || method === "TIME_EXIT" ? "RECORDED_EXIT" : "ASSUMED_LEVEL",
   };
 }
 
@@ -174,6 +181,11 @@ router.get("/candidates", async (req, res): Promise<void> => {
       pctB: candidatesTable.pctB,
       atr: candidatesTable.atr,
       volMultiplier: candidatesTable.volMultiplier,
+      edgeWinRate: candidatesTable.edgeWinRate,
+      edgeExpectancyR: candidatesTable.edgeExpectancyR,
+      edgeSampleN: candidatesTable.edgeSampleN,
+      signalAgeBars: candidatesTable.signalAgeBars,
+      maxHoldDays: candidatesTable.maxHoldDays,
       distFrom20dH: candidatesTable.distFrom20dH,
       gapWarning: candidatesTable.gapWarning,
       direction: candidatesTable.direction,
@@ -241,19 +253,19 @@ router.patch("/candidates/:id/outcome", async (req, res): Promise<void> => {
     res.status(400).json({ error: challengeInput.error });
     return;
   }
-  if (
-    challengeInput &&
-    body.data.outcome !== "WIN" &&
-    body.data.outcome !== "LOSS"
-  ) {
-    res.status(400).json({ error: "A Challenge Tracker trade requires WIN or LOSS" });
+  const isResolvedOutcome =
+    body.data.outcome === "WIN" ||
+    body.data.outcome === "LOSS" ||
+    body.data.outcome === "TIME_EXIT";
+  if (challengeInput && !isResolvedOutcome) {
+    res.status(400).json({ error: "A Challenge Tracker trade requires a priced resolved outcome" });
     return;
   }
   // Explicit confirmation required to drop a linked Challenge Tracker trade —
   // financial history must never disappear as a side effect of an outcome edit.
   const removeChallengeTrade = req.body?.removeChallengeTrade === true;
 
-  const revertingOutcome = body.data.outcome !== "WIN" && body.data.outcome !== "LOSS";
+  const revertingOutcome = !isResolvedOutcome;
 
   // This lookup supplies only the advisory-lock key. Candidate, resolution and
   // link state are deliberately re-read after the lock has been acquired.
@@ -465,6 +477,11 @@ router.patch("/candidates/:id/outcome", async (req, res): Promise<void> => {
       pctB: result_.pctB,
       atr: result_.atr,
       volMultiplier: result_.volMultiplier,
+      edgeWinRate: result_.edgeWinRate ?? null,
+      edgeExpectancyR: result_.edgeExpectancyR ?? null,
+      edgeSampleN: result_.edgeSampleN ?? null,
+      signalAgeBars: result_.signalAgeBars ?? null,
+      maxHoldDays: result_.maxHoldDays ?? null,
       distFrom20dH: result_.distFrom20dH,
       gapWarning: result_.gapWarning ?? null,
       direction: result_.direction,

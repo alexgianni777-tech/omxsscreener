@@ -7,7 +7,7 @@
  */
 
 /**
- * Required for a planned-level assumption. MANUAL_EXIT is accepted only with actualExitConfirmed=true.
+ * TIME_EXIT and MANUAL_EXIT are accepted only with actualExitConfirmed=true and an entered fill price.
  * @nullable
  */
 export type CandidateOutcomeResolutionMethod = typeof CandidateOutcomeResolutionMethod[keyof typeof CandidateOutcomeResolutionMethod] | null;
@@ -17,4 +17,5 @@ export const CandidateOutcomeResolutionMethod = {
   MANUAL_EXIT: 'MANUAL_EXIT',
   TARGET_HIT: 'TARGET_HIT',
   STOP_HIT: 'STOP_HIT',
+  TIME_EXIT: 'TIME_EXIT',
 } as const;

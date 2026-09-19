@@ -14,6 +14,14 @@ EdgeAI scheduler checks every 5 minutes from the Nasdaq Stockholm open at 09:00 
 - A partial daily RVOL below the usable threshold is missing data (`null`), never replaced with average-10-day / average-3-month volume trend.
 - `rr` column stores the actual R:R ratio. analytics.ts must read `c.rr`, not `c.volMultiplier`.
 - Opening gaps use percentage points (2.9 means 2.9%), matching the 2.5% safety thresholds.
+- EdgeAI win rate, expectancy, sample N, and signal age have dedicated nullable fields. Legacy overloaded fields remain only for backward compatibility.
+
+## Time exits
+**Rule:** A `TIME_EXIT` requires an entered, explicitly confirmed execution price. Never substitute a Yahoo/live quote.
+
+**Why:** A maximum holding period removes PENDING censoring only if the exit is auditable; inventing a fill would replace one bias with another.
+
+**How to apply:** Persist each new signal's category-based maximum holding period. Include priced time exits in R statistics; leave legacy rows nullable rather than guessing.
 - `market` column = "SE" | "US" | null. Must be set on insert — edgeai.ts tags SE/US before combining allSetups.
 
 ## Screener trade plan (as of 2026-08-12)

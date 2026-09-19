@@ -7,7 +7,7 @@
  */
 
 /**
- * How the outcome was resolved. MANUAL_EXIT uses a recorded exit price; TARGET_HIT and STOP_HIT are explicit planned-level assumptions.
+ * How the outcome was resolved. MANUAL_EXIT and TIME_EXIT require a recorded exit price; TARGET_HIT and STOP_HIT are explicit planned-level assumptions.
  * @nullable
  */
 export type CandidateResolutionMethod = typeof CandidateResolutionMethod[keyof typeof CandidateResolutionMethod] | null;
@@ -17,4 +17,5 @@ export const CandidateResolutionMethod = {
   MANUAL_EXIT: 'MANUAL_EXIT',
   TARGET_HIT: 'TARGET_HIT',
   STOP_HIT: 'STOP_HIT',
+  TIME_EXIT: 'TIME_EXIT',
 } as const;

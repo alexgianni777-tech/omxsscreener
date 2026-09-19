@@ -120,6 +120,21 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
         dirBucket.losses++;
         dirBucket.totalTrades++;
         dirBucket.totalR += r;
+      } else if (c.outcome === "TIME_EXIT" && persistedR != null && Number.isFinite(persistedR)) {
+        r = persistedR;
+        totalTrades++;
+        sessionHasResolved = true;
+        sessionR += r;
+        cumulativeR += r;
+        dirBucket.totalTrades++;
+        dirBucket.totalR += r;
+        if (r > 0) {
+          wins++;
+          dirBucket.wins++;
+        } else if (r < 0) {
+          losses++;
+          dirBucket.losses++;
+        }
       }
 
       const eid = c.earningsInDays;
@@ -152,7 +167,8 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
         edgeScore: Number(candidateSelectionScore(c).toFixed(4)),
         outcome: c.outcome,
         r: (c.outcome === "WIN" && persistedR != null && persistedR > 0) ||
-          (c.outcome === "LOSS" && persistedR != null && persistedR < 0)
+          (c.outcome === "LOSS" && persistedR != null && persistedR < 0) ||
+          (c.outcome === "TIME_EXIT" && persistedR != null && Number.isFinite(persistedR))
           ? persistedR
           : null,
         earningsWarning: c.earningsKnowledge === "SIGNAL_TIME" && eid != null && eid >= 0 && eid <= 5,

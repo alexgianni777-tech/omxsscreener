@@ -15,6 +15,11 @@ test("EdgeAI R:R is calculated from entry, stop and target", () => {
     chart: [],
   }, "SE", {});
   assert.equal(candidate.rr, 2);
+  assert.equal(candidate.edgeWinRate, 0.55);
+  assert.equal(candidate.edgeExpectancyR, 0.2);
+  assert.equal(candidate.edgeSampleN, 100);
+  assert.equal(candidate.signalAgeBars, 0);
+  assert.equal(candidate.maxHoldDays, 10);
 });
 
 test("signal indicators exclude bars after the trigger", () => {

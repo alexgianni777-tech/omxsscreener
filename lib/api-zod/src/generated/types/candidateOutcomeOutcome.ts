@@ -12,6 +12,7 @@ export type CandidateOutcomeOutcome = typeof CandidateOutcomeOutcome[keyof typeo
 export const CandidateOutcomeOutcome = {
   WIN: 'WIN',
   LOSS: 'LOSS',
+  TIME_EXIT: 'TIME_EXIT',
   SKIP: 'SKIP',
   PENDING: 'PENDING',
 } as const;

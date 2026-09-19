@@ -692,6 +692,21 @@ components:
         signalGapPct:
           type: ["number", "null"]
           description: "Opening gap from previous close in percent when available"
+        edgeWinRate:
+          type: ["number", "null"]
+          description: "EdgeAI historical win rate as a fraction, separate from one-month price performance"
+        edgeExpectancyR:
+          type: ["number", "null"]
+          description: "EdgeAI expected R per trade, separate from RSI"
+        edgeSampleN:
+          type: ["number", "null"]
+          description: "Number of observations behind the EdgeAI estimate"
+        signalAgeBars:
+          type: ["number", "null"]
+          description: "Trading bars elapsed since the signal trigger"
+        maxHoldDays:
+          type: ["number", "null"]
+          description: "Maximum intended holding period in trading days"
         distFrom20dH:
           type: number
         gapWarning:
@@ -719,15 +734,15 @@ components:
           type: number
         outcome:
           type: string
-          enum: [WIN, LOSS, SKIP, PENDING]
+          enum: [WIN, LOSS, TIME_EXIT, SKIP, PENDING]
         exitPrice:
           type: ["number", "null"]
         outcomeNotes:
           type: ["string", "null"]
         resolutionMethod:
           type: ["string", "null"]
-          enum: [MANUAL_EXIT, TARGET_HIT, STOP_HIT, null]
-          description: "How the outcome was resolved. MANUAL_EXIT uses a recorded exit price; TARGET_HIT and STOP_HIT are explicit planned-level assumptions."
+          enum: [MANUAL_EXIT, TARGET_HIT, STOP_HIT, TIME_EXIT, null]
+          description: "How the outcome was resolved. MANUAL_EXIT and TIME_EXIT require a recorded exit price; TARGET_HIT and STOP_HIT are explicit planned-level assumptions."
         resolutionQuality:
           type: ["string", "null"]
           enum: [RECORDED_EXIT, ASSUMED_LEVEL, LEGACY_UNKNOWN, null]
@@ -802,15 +817,15 @@ components:
       properties:
         outcome:
           type: string
-          enum: [WIN, LOSS, SKIP, PENDING]
+          enum: [WIN, LOSS, TIME_EXIT, SKIP, PENDING]
         exitPrice:
           type: ["number", "null"]
         outcomeNotes:
           type: ["string", "null"]
         resolutionMethod:
           type: ["string", "null"]
-          enum: [MANUAL_EXIT, TARGET_HIT, STOP_HIT, null]
-          description: "Required for a planned-level assumption. MANUAL_EXIT is accepted only with actualExitConfirmed=true."
+          enum: [MANUAL_EXIT, TARGET_HIT, STOP_HIT, TIME_EXIT, null]
+          description: "TIME_EXIT and MANUAL_EXIT are accepted only with actualExitConfirmed=true and an entered fill price."
         actualExitConfirmed:
           type: boolean
           description: "Explicit confirmation that exitPrice is an entered, executed fill. A Yahoo/live quote alone must not set this."
