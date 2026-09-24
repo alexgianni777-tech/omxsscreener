@@ -17,6 +17,12 @@ This app's daily screener data comes from **three separate GitHub repos**, each 
 
 **How to apply:** preserve the local-time schedule when editing the external workflow; do not convert it back to a fixed UTC morning cron.
 
+**OMXS30 freshness rule:** the post-close Telegram screener must fail closed if the index bar is not from its report date, even if the stock bars are current. A failed calculation sends only an error alert and must not import partial output into the dashboard.
+
+**Why:** old index bars corrupt market weather and relative-strength rankings, while an ordinary warning left actionable trade plans visible; previously a child-process failure could be treated as a successful notification.
+
+**How to apply:** keep the index-date gate ahead of stock analysis, and keep the notifier's failure branch separate from the normal Telegram/dashboard delivery. Re-run after fresh data arrives; do not silently switch to a different Stockholm index.
+
 **EdgeAI schedule is separate:** the `edgeai` repository still uses its own 06:00 UTC weekday trigger and needs separate write access to change. Do not assume it follows the `omxs30` schedule.
 
 **Why:** separate GitHub workflows can miss or be delayed independently; a fresh OMXS30 session does not imply a fresh EdgeAI data file.
