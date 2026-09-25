@@ -41,6 +41,12 @@ This app's daily screener data comes from **three separate GitHub repos**, each 
 
 **How to apply:** treat missing stock data as a failed report, not just an in-message warning. Keep scheduled retries scoped to the pending completed session, and provide an explicit-date backfill path for longer outages rather than relabeling yesterday's prices as today.
 
+**Quiet-retry status rule:** a retry that is merely waiting for Yahoo's completed bars must end without a GitHub failure notification and without marking the report delivered. Unexpected errors must still fail the workflow.
+
+**Why:** suppressing only Telegram errors still makes GitHub email the user on every scheduled retry; treating a waiting retry as successful without gating the delivery marker would permanently skip an unsent report.
+
+**How to apply:** distinguish transient data-not-ready from real failures at the workflow boundary, and keep the delivery-marker step conditional on an actual send.
+
 **EdgeAI schedule is separate:** the `edgeai` repository still uses its own 06:00 UTC weekday trigger and needs separate write access to change. Do not assume it follows the `omxs30` schedule.
 
 **Why:** separate GitHub workflows can miss or be delayed independently; a fresh OMXS30 session does not imply a fresh EdgeAI data file.
