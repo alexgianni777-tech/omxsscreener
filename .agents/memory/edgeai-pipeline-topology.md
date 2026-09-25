@@ -82,3 +82,9 @@ This app's daily screener data comes from **three separate GitHub repos**, each 
 **Why:** both GitHub API write paths returned HTTP 403 for workflow changes while ordinary code writes succeeded. A repository's contents-write access alone does not authorize workflow-file edits.
 
 **How to apply:** check whether the dedicated workflow-write credential is available; if not, request authorization through the secure secrets flow. Do not confuse a successful source-code commit with a completed schedule repair, and do not dispatch a live trading workflow just to test permissions.
+
+**Telegram credential isolation rule:** credentials configured as GitHub Actions secrets in `omxs30` are not automatically available to `edgeai`. Successful OMXS30 Telegram delivery does not prove the separate EdgeAI digest can send.
+
+**Why:** a real EdgeAI build completed with verified market data but its notifier found both Telegram environment variables empty, while the independent OMXS30 job delivered successfully.
+
+**How to apply:** distinguish source-data recovery and dashboard import from EdgeAI Telegram delivery. If that digest is wanted, configure its bot token and chat ID in the `edgeai` repository's Actions secrets through a secure flow; never copy credentials through logs or chat, and verify a delivery receipt before claiming it works.
