@@ -35,6 +35,12 @@ This app's daily screener data comes from **three separate GitHub repos**, each 
 
 **How to apply:** don't silently substitute hourly OHLCV for daily OHLCV. If adding a fallback, explicitly mark volume unavailable or otherwise validate it and disclose the reduced data quality.
 
+**Complete-report retry rule:** do not send a Telegram/dashboard screening until the index and every included stock have a closed daily bar for the same report date. Retry missing data quietly, skip already-delivered dates, and allow an explicit historical date if the normal retry window has passed.
+
+**Why:** Yahoo can publish the index daily bar while keeping Swedish stock daily bars a day behind; hourly closes may be fresh but hourly volume does not match the completed daily volume. Re-running without a delivery record can duplicate a trading list.
+
+**How to apply:** treat missing stock data as a failed report, not just an in-message warning. Keep scheduled retries scoped to the pending completed session, and provide an explicit-date backfill path for longer outages rather than relabeling yesterday's prices as today.
+
 **EdgeAI schedule is separate:** the `edgeai` repository still uses its own 06:00 UTC weekday trigger and needs separate write access to change. Do not assume it follows the `omxs30` schedule.
 
 **Why:** separate GitHub workflows can miss or be delayed independently; a fresh OMXS30 session does not imply a fresh EdgeAI data file.
