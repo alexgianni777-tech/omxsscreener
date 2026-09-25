@@ -247,16 +247,18 @@ export function Today() {
   const goalPct = account != null
     ? Math.min(100, ((account - startCapital) / (goalCapital - startCapital)) * 100)
     : 0;
+  const isToday = session?.date === todayISO();
 
   // top picks: prefer starred, fallback to edge-score rank — split by market if data exists
   // Deduplicates by ticker: if a stock appears in multiple setups, keep only the best-ranked.
   function selectPicks(cands: Candidate[], n = 3): Candidate[] {
     // A legacy session may not have a decision yet. Keep its previous review
-    // behavior, but never promote a current signal that is explicitly WAIT,
-    // STALE, INVALID, or BLOCKED into today's actionable picks.
+    // behavior. Older, otherwise valid signals may be shown as history, but
+    // must never become today's actionable picks.
     const eligible = cands.filter((candidate) =>
       candidate.decision
-        ? candidate.decision.status === "TRADEABLE"
+        ? candidate.decision.status === "TRADEABLE" ||
+          (!isToday && candidate.decision.status === "STALE" && candidate.review?.status !== "BLOCKED")
         : candidate.review?.status !== "BLOCKED",
     );
     const starred = eligible.filter(c => c.isTop3Pick);
@@ -283,6 +285,9 @@ export function Today() {
   const picks: Candidate[] = hasMarket
     ? [...sePicks, ...usPicks, ...seShortPicks, ...usShortPicks]
     : [...selectPicks(longCands), ...selectPicks(shortCands)];
+  const historicalOverview = session && !isToday && picks.length === 0
+    ? sourceBalanced(allCandidates, 6)
+    : [];
 
   // ── Market regime flags (hoisted so picks.map can reference them) ─────────────
   const mw = session?.marketWeather;
@@ -411,8 +416,6 @@ export function Today() {
     );
   }
 
-  const isToday = session?.date === todayISO();
-
   return (
     <div className="max-w-xl mx-auto space-y-5 pb-16">
 
@@ -507,8 +510,8 @@ export function Today() {
                   : "Ingen session"}
               </span>
               {session && !isToday && (
-                <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded font-medium">
-                  Väntar på ny signal
+                <span data-testid="status-older-signal" className="text-[10px] bg-amber-500/10 text-amber-600 border border-amber-500/20 px-1.5 py-0.5 rounded font-medium">
+                  Äldre signal · väntar på ny
                 </span>
               )}
             </div>
@@ -546,6 +549,15 @@ export function Today() {
           </div>
         </div>
 
+        {session && !isToday && picks.length > 0 && (
+          <div data-testid="status-historical-picks" role="status" className="flex items-start gap-2.5 px-4 py-3 rounded-xl text-sm mb-3 bg-amber-500/5 border border-amber-500/30 text-amber-700">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>
+              Förslagen nedan är från {formatDate(session.date)}, inte från i dag. De visas som historik medan en ny signal inväntas.
+              Kontrollera ny signal och aktuella priser innan du överväger en trade.
+            </span>
+          </div>
+        )}
         {picks.length === 0 && !loading && (
           <div className={`text-sm text-center py-12 border border-dashed rounded-xl ${
             session && !isToday
@@ -553,10 +565,31 @@ export function Today() {
               : "text-muted-foreground border-border"
           }`}>
             {session && !isToday
-              ? `Dagens EdgeAI-signal har ännu inte publicerats. Senaste sessionen är från ${new Date(`${session.date}T12:00:00`).toLocaleDateString("sv-SE", { weekday: "long", day: "numeric", month: "short" })}. Kontrolleras automatiskt var 5:e minut.`
+              ? `Senaste sessionen är från ${new Date(`${session.date}T12:00:00`).toLocaleDateString("sv-SE", { weekday: "long", day: "numeric", month: "short" })}. ${historicalOverview.length > 0 ? "Inga förslag klarar kontrollerna; lagrade signaler visas nedan som historik." : "Den innehåller inga förslag."} En ny signal kontrolleras automatiskt var 5:e minut.`
               : session?.sessionReview?.status === "BLOCKED"
                 ? "Ingen kvalificerad trade idag — signalerna stoppades av risk- och datakvalitetsregler."
                 : "Inga picks idag ännu — kontrolleras automatiskt var 5:e minut från börsöppningen kl 09:00."}
+          </div>
+        )}
+        {historicalOverview.length > 0 && (
+          <div data-testid="list-historical-signals" className="space-y-2 mb-3">
+            {historicalOverview.map(candidate => (
+              <div key={candidate.id} className="border border-amber-500/20 bg-card rounded-xl px-4 py-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <strong>{candidate.ticker.replace(/\.ST$/i, "")}</strong>
+                  <span className="text-xs text-muted-foreground">{candidate.direction === "SHORT" ? "Sälj" : "Köp"}</span>
+                  <span className="ml-auto text-xs text-amber-700">Ej handelsbar nu</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {candidate.review?.reasons[0] ?? candidate.decision?.reasons[0] ?? "Tidigare signal — kontrollera aktuell data före trade."}
+                </p>
+              </div>
+            ))}
+            {session && (
+              <Link href={`/sessions/${session.id}`} data-testid="link-all-historical-signals" className="block text-xs text-primary hover:underline px-1">
+                Visa hela den tidigare sessionen →
+              </Link>
+            )}
           </div>
         )}
         {session?.sessionReview && isToday && session.sessionReview.reasons.length > 0 && (
@@ -613,7 +646,7 @@ export function Today() {
             const winPnl = allocatedRisk != null ? Math.round(allocatedRisk * candidate.rr) : null;
             const lossPnl = allocatedRisk != null ? Math.round(-allocatedRisk) : null;
             const quote = quotes[candidate.ticker];
-            const autoHit = !isDone ? autoDetectOutcome(candidate) : null;
+            const autoHit = isToday && !isDone ? autoDetectOutcome(candidate) : null;
 
             // price bar: where live price sits between stop and target
             const priceBarPct = quote?.livePrice != null ? (() => {
@@ -775,7 +808,7 @@ export function Today() {
                   )}
 
                   {/* P&L estimate */}
-                  {riskKr != null && !isDone && (
+                  {isToday && riskKr != null && !isDone && (
                     <div className="flex gap-2 text-xs font-mono text-muted-foreground">
                       <span>Win: <strong className="text-success">+{kr(winPnl!)}</strong></span>
                       <span className="text-muted-foreground/40">·</span>
@@ -812,7 +845,7 @@ export function Today() {
                   )}
 
                   {/* Manual action buttons */}
-                  {!isDone && !autoHit && (
+                  {isToday && !isDone && !autoHit && (
                     <div className="pt-1">
                       {isLogging ? (
                         <div className="flex gap-2">
@@ -849,7 +882,7 @@ export function Today() {
                   )}
 
                   {/* Still show manual button after auto-hit (override) */}
-                  {!isDone && autoHit && (
+                  {isToday && !isDone && autoHit && (
                     <div className="pt-1">
                       {isLogging ? (
                         <div className="flex gap-2">
@@ -871,6 +904,15 @@ export function Today() {
                         </button>
                       )}
                     </div>
+                  )}
+                  {!isToday && !isDone && session && (
+                    <Link
+                      href={`/sessions/${session.id}`}
+                      data-testid={`link-historical-outcome-${candidate.id}`}
+                      className="block w-full py-2.5 rounded-lg border border-border text-center text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
+                    >
+                      Se session och logga faktiskt utfall →
+                    </Link>
                   )}
                 </div>
               </div>
