@@ -76,3 +76,9 @@ This app's daily screener data comes from **three separate GitHub repos**, each 
 **Why:** weekend and delayed upstream runs make “not today” normal, and the manual button is explicitly used to retrieve both SE and US alternatives. Silently relabeling old signals as today would corrupt history.
 
 **How to apply:** warn when the snapshot is older, accept reasonably recent data (including weekends), reject invalid or excessively old timestamps, and permit US-only snapshots when SE has no setups.
+
+**Workflow-edit permission rule:** the existing GitHub connection can edit ordinary source files in the external repositories but cannot update files under `.github/workflows/`; the separate available repository token also lacks workflow-write permission.
+
+**Why:** both GitHub API write paths returned HTTP 403 for workflow changes while ordinary code writes succeeded. A repository's contents-write access alone does not authorize workflow-file edits.
+
+**How to apply:** request workflow-write authorization through the secure secrets/connection flow before changing schedules. Do not confuse a successful source-code commit with a completed schedule repair, and do not dispatch a live trading workflow just to test permissions.
