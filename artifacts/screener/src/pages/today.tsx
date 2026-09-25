@@ -71,6 +71,7 @@ type Candidate = {
   signalSource: "edgeai" | "telegram" | "manual" | "screener" | null;
   pctB: number; // EdgeAI sample size (number of historical observations)
   volMultiplier: number;
+  volumeAsOf?: string | null;
   signalRsi?: number | null;
   signalGapPct?: number | null;
   review?: { status: "APPROVED" | "WARN" | "BLOCKED"; reasons: string[] };
@@ -751,7 +752,9 @@ export function Today() {
                       {session?.source === "edgeai" && candidate.perf1m > 0 && <span>WR {Math.round(candidate.perf1m)}%</span>}
                       {session?.source === "edgeai" && candidate.rsi > 0 && <span>E {(candidate.rsi / 100).toFixed(2)}R</span>}
                       {session?.source === "edgeai" && candidate.pctB > 0 && <span>{Math.round(candidate.pctB)} obs</span>}
-                      <span>Volym {candidate.volMultiplier > 0 ? `${candidate.volMultiplier.toFixed(1)}x` : "saknas"}</span>
+                      <span>Volym {candidate.volMultiplier > 0
+                        ? `${candidate.volMultiplier.toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}x · ${candidate.volumeAsOf || "datum saknas"}`
+                        : "saknas"}</span>
                       {candidate.review?.status === "WARN" && <span className="text-amber-500">⚠ granska</span>}
                     </div>
                   </div>

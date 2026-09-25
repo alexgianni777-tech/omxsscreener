@@ -15,7 +15,7 @@ import {
 import { parseScreenerText, ScreenerParseError } from "../lib/screenerParser";
 import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "../lib/omxs30TickerMap";
-import { volumeMultiplierFromQuote } from "../lib/marketIndicators";
+import { fetchCompletedVolumeBatch } from "../lib/completedVolumeBatch";
 import { calendarDaysBetween } from "../lib/marketCalendar";
 import { decideCandidate, reviewCandidate, reviewSession } from "../lib/screeningReview";
 import { logger } from "../lib/logger";
@@ -50,6 +50,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     throw err;
   }
 
+  const reportDate = session.date;
   if (parsed.data.targetDate) {
     const targetDate = parsed.data.targetDate instanceof Date
       ? parsed.data.targetDate.toISOString().slice(0, 10)
@@ -110,13 +111,9 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
   }
 
   // ---------- helpers shared by both insert and force-update paths ----------
-  // Fetch live vol ratio (current / 10-day avg) from Yahoo Finance.
-  // Overrides the Telegram bot's broken "vol 0.0x" field when it fails.
-  // A current Yahoo quote cannot revise a historical signal's stored review.
-  // For historical imports use the submitted signal value instead.
-  const volMap = session.date === new Date().toISOString().slice(0, 10)
-    ? await enrichVolMultiplier(session.candidates.map((c) => c.ticker), _yf)
-    : new Map<string, number>();
+  // The parsed report date remains the source date even when a manual paste
+  // is explicitly assigned to today's session for trading.
+  const volMap = await enrichVolMultiplier(session.candidates.map((c) => c.ticker), _yf, reportDate);
 
   const buildCandidateRow = (
     sessionId: number,
@@ -141,7 +138,8 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     rsi: c.rsi,
     pctB: c.pctB,
     atr: c.atr,
-    volMultiplier: volMap.get(c.ticker) ?? c.volMultiplier,
+    volMultiplier: volMap.get(c.ticker)?.multiplier ?? 0,
+    volumeAsOf: volMap.get(c.ticker)?.asOf ?? null,
     signalRsi: c.rsi,
     signalGapPct: c.gapWarning ?? null,
     edgeWinRate: null,
@@ -338,6 +336,11 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
     return;
   }
 
+  const reimportVolumes = await enrichVolMultiplier(
+    parsedSession.candidates.map((candidate) => candidate.ticker),
+    _yf,
+    parsedSession.date,
+  );
   let updatedSession: typeof existingSession;
   let resultCandidates: (typeof candidatesTable.$inferSelect)[];
   let diff: import("../lib/candidateSynchronization").CandidateSyncDiff;
@@ -374,7 +377,8 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
         rsi: candidate.rsi,
         pctB: candidate.pctB,
         atr: candidate.atr,
-        volMultiplier: candidate.volMultiplier,
+        volMultiplier: reimportVolumes.get(candidate.ticker)?.multiplier ?? 0,
+        volumeAsOf: reimportVolumes.get(candidate.ticker)?.asOf ?? null,
         signalRsi: candidate.rsi,
         signalGapPct: candidate.gapWarning ?? null,
         distFrom20dH: candidate.distFrom20dH,
@@ -668,6 +672,7 @@ function mapCandidate(c: {
   pctB: number;
   atr: number;
   volMultiplier: number;
+  volumeAsOf: string | null;
   signalRsi: number | null;
   signalGapPct: number | null;
   edgeWinRate: number | null;
@@ -712,6 +717,7 @@ function mapCandidate(c: {
     pctB: c.pctB,
     atr: c.atr,
     volMultiplier: c.volMultiplier,
+    volumeAsOf: c.volumeAsOf ?? null,
     signalRsi: c.signalRsi ?? null,
     signalGapPct: c.signalGapPct ?? null,
     edgeWinRate: c.edgeWinRate ?? null,
@@ -821,39 +827,23 @@ async function fetchEarningsBatch(
 }
 
 /**
- * Fetch live volume ratio (regularMarketVolume / averageDailyVolume10Day) for
- * a batch of screener tickers. Returns a map keyed by the original ticker string.
- * Missing source data is deliberately omitted so the UI can present "saknas".
- */
-/**
- * Volume ratio strategy:
- *  - If today's intraday volume is already ≥20% of the 10-day average (i.e. we're
- *    well into the trading session), use realtime ratio: today / avg10d.
- *  - Otherwise (early-morning imports, pre-market, etc.) fall back to the stable
- *    recent-vs-historical ratio: avg10d / avg3m.  This tells the trader whether
- *    recent activity is elevated or depressed compared to the 3-month baseline.
+ * Fetch relative volume for the report's completed day (not a live quote).
+ * A failed verification leaves volume unavailable, not qualified by an
+ * unverified report ratio or today's incomplete live quote.
  */
 async function enrichVolMultiplier(
   tickers: string[],
   yf: InstanceType<typeof YahooFinance>,
-): Promise<Map<string, number>> {
-  const volMap = new Map<string, number>();
-  await Promise.allSettled(
-    [...new Set(tickers)].map(async (ticker) => {
-      try {
-        const q = (await withRetry(() => yf.quote(resolveYahooTicker(ticker), {}, { validateResult: false }))) as any;
-        const volumeMultiplier = volumeMultiplierFromQuote(q);
-        if (volumeMultiplier != null) {
-          volMap.set(ticker, volumeMultiplier);
-        } else {
-          logger.warn({ ticker }, "Volume enrichment missing Yahoo volume or average fields");
-        }
-      } catch (err: any) {
-        logger.warn({ ticker, err: err.message }, "Volume enrichment failed");
-      }
-    }),
+  reportDate: string,
+): Promise<Map<string, { multiplier: number; asOf: string }>> {
+  const volumes = await fetchCompletedVolumeBatch(
+    yf,
+    tickers.map((ticker) => ({ ticker, market: "SE", asOfDate: reportDate })),
   );
-  return volMap;
+  return new Map(tickers.flatMap((ticker) => {
+    const result = volumes.get(`SE:${ticker}:${reportDate}`);
+    return result ? [[ticker, result] as const] : [];
+  }));
 }
 
 /** Current Yahoo data is signal-time evidence only after fetchEarningsBatch's date guard. */

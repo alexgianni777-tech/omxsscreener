@@ -14,8 +14,8 @@ import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "./omxs30TickerMap";
 import {
   calculateWilderRsi,
-  volumeMultiplierFromQuote,
 } from "./marketIndicators";
+import { completedVolumeKey, fetchCompletedVolumeBatch } from "./completedVolumeBatch";
 import { fetchFreshEdgeAiData } from "./edgeAiSource";
 import {
   lockScreenerSession,
@@ -142,21 +142,28 @@ async function runImport(date: string): Promise<void> {
     Object.assign(candidate, { signalSource: "edgeai" as const });
   });
 
-  // Enrich volume from live Yahoo Finance data. A missing result is retained as
-  // missing and logged; downstream guardrails turn it into a no-trade rather than
-  // quietly treating it as a legitimate 0,0x ratio.
+  const volumeRequests = mapped.map((c) => ({
+    ticker: c.ticker,
+    market: c.market,
+    asOfDate: String((c.market === "SE" ? se : edgeData.markets.US)?.dataAsOf ?? ""),
+  }));
+  const volumeMap = await fetchCompletedVolumeBatch(yf, volumeRequests);
+  mapped.forEach((c, index) => {
+    const request = volumeRequests[index];
+    const value = request.asOfDate <= date ? volumeMap.get(completedVolumeKey(request)) : null;
+    if (value) {
+      c.volMultiplier = value.multiplier;
+      c.volumeAsOf = value.asOf;
+    }
+  });
+
+  // Yahoo's current earnings calendar is usable only for today's signal.
   await Promise.allSettled(
     mapped.map(async (c) => {
       try {
-        const q = (await withRetry(() => yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false }))) as any;
         const isSignalDay = date === new Date().toISOString().slice(0, 10);
         if (isSignalDay) {
-          const volumeMultiplier = volumeMultiplierFromQuote(q);
-          if (volumeMultiplier != null) {
-            c.volMultiplier = volumeMultiplier;
-          } else {
-            logger.warn({ ticker: c.ticker }, "[scheduler] Volume enrichment missing Yahoo volume or average fields");
-          }
+          const q = (await withRetry(() => yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false }))) as any;
           const earningsInDays = daysUntil(q.earningsTimestamp);
           if (earningsInDays != null) {
             c.earningsInDays = earningsInDays;

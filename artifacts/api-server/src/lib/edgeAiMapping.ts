@@ -84,7 +84,8 @@ export function mapEdgeAiSetup(
     rsi: Math.round(edgeExpectancyR * 100),
     pctB: edgeSampleN, // legacy compatibility during field migration
     atr: oneR,
-    volMultiplier: 0, // filled in by live Yahoo Finance fetch by the caller
+    volMultiplier: 0, // filled only from a verified completed Yahoo daily bar
+    volumeAsOf: null as string | null,
     earningsInDays: null as number | null,
     earningsKnowledge: "UNKNOWN" as "SIGNAL_TIME" | "UNKNOWN",
     earningsObservedAt: null as Date | null,

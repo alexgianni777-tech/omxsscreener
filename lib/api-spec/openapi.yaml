@@ -675,6 +675,9 @@ components:
           type: number
         volMultiplier:
           type: number
+        volumeAsOf:
+          type: ["string", "null"]
+          description: "YYYY-MM-DD completed Yahoo trading day used for relative volume; null for unverified or legacy measurements"
         earningsInDays:
           type: ["number", "null"]
           description: "Days to earnings only when earningsKnowledge is SIGNAL_TIME; otherwise not assessable"

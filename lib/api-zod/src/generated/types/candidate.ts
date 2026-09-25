@@ -31,6 +31,11 @@ export interface Candidate {
   atr: number;
   volMultiplier: number;
   /**
+     * YYYY-MM-DD completed Yahoo trading day used for relative volume; null for unverified or legacy measurements
+     * @nullable
+     */
+  volumeAsOf?: string | null;
+  /**
      * Days to earnings only when earningsKnowledge is SIGNAL_TIME; otherwise not assessable
      * @nullable
      */

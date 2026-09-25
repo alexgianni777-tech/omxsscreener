@@ -119,6 +119,7 @@ test("mixed-session rows use their own signal provenance for review rules", () =
     signalRsi: 50,
     signalGapPct: null,
     volMultiplier: 1,
+    volumeAsOf: "2026-07-10",
     earningsInDays: null,
     earningsKnowledge: "SIGNAL_TIME" as const,
     entryPrice: 100,

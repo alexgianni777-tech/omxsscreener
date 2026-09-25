@@ -1,4 +1,4 @@
-import { useGetSession, getGetSessionQueryKey, useGetQuotes, getGetQuotesQueryKey, Candidate, CandidateOutcomeProperty, useUpdateCandidateOutcome, QuoteResult, ImportDiff } from "@workspace/api-client-react";
+import { useGetSession, getGetSessionQueryKey, useGetQuotes, getGetQuotesQueryKey, Candidate as ApiCandidate, CandidateOutcomeProperty, useUpdateCandidateOutcome, QuoteResult, ImportDiff } from "@workspace/api-client-react";
 import { useParams, Link } from "wouter";
 import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
 import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity, AlertTriangle, Clock, ExternalLink, CandlestickChart as CandlestickIcon, Star, Briefcase } from "lucide-react";
@@ -6,6 +6,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { CandlestickChart } from "../components/CandlestickChart";
 import { AddToPortfolioModal } from "../components/AddToPortfolioModal";
+
+type Candidate = ApiCandidate & { volumeAsOf?: string | null };
 
 // ── Edge score helpers ────────────────────────────────────────────────────────
 // For EdgeAI sessions: rsi stores expectancyR × 100, pctB stores sample N,
@@ -830,14 +832,24 @@ function CandidateRow({
             <span className="font-mono">{formatNumber(candidate.atr)}</span>
           </div>
           {isEdgeAI ? (
-            <div>
-              <span className="text-muted-foreground block text-[10px]">N / {barsAgo}b</span>
-              <span className="font-mono">{sampleN > 0 ? Math.round(sampleN) : "—"}</span>
-            </div>
+            <>
+              <div>
+                <span className="text-muted-foreground block text-[10px]">N / {barsAgo}b</span>
+                <span className="font-mono">{sampleN > 0 ? Math.round(sampleN) : "—"}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground block text-[10px]">VOL</span>
+                <span className="font-mono">{candidate.volMultiplier > 0
+                  ? `${candidate.volMultiplier.toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}x · ${candidate.volumeAsOf || "datum saknas"}`
+                  : "saknas"}</span>
+              </div>
+            </>
           ) : (
             <div>
               <span className="text-muted-foreground block text-[10px]">VOL</span>
-              <span className="font-mono">{formatNumber(candidate.volMultiplier)}x</span>
+              <span className="font-mono">{candidate.volMultiplier > 0
+                ? `${candidate.volMultiplier.toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}x · ${candidate.volumeAsOf || "datum saknas"}`
+                : "saknas"}</span>
             </div>
           )}
         </div>

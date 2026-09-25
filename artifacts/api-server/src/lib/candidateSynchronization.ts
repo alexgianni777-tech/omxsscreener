@@ -93,6 +93,7 @@ const DIFF_TRACKED_FIELDS = [
   "rr",
   "rsi",
   "volMultiplier",
+  "volumeAsOf",
   "oneR",
   "rank",
   "distFrom20dH",

@@ -21,7 +21,7 @@ import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import { parseScreenerText, ScreenerParseError } from "../lib/screenerParser";
 import { logger } from "../lib/logger";
 import YahooFinance from "yahoo-finance2";
-import { resolveYahooTicker } from "../lib/omxs30TickerMap";
+import { fetchCompletedVolumeBatch } from "../lib/completedVolumeBatch";
 import { timingSafeEqual } from "node:crypto";
 import {
   deduplicateCandidates,
@@ -33,29 +33,24 @@ import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
-/**
- * Enrich volMultiplier for each candidate via live Yahoo Finance data.
- * Uses intraday vol when ≥20% of daily avg (meaningful session),
- * otherwise falls back to avg10d/avg3m trend ratio (stable at open / pre-market).
- */
+/** Verify report-date volume against the preceding ten completed Yahoo trading days. */
 async function enrichVolMultiplier(
   candidates: Array<{ ticker: string; volMultiplier: number }>,
-): Promise<void> {
-  await Promise.allSettled(
-    candidates.map(async (c) => {
-      try {
-        const q = (await yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false })) as any;
-        const vol:    number = q.regularMarketVolume       ?? 0;
-        const avg10d: number = q.averageDailyVolume10Day   ?? 0;
-        const avg3m:  number = q.averageDailyVolume3Month  ?? 0;
-        if (avg10d > 0 && vol / avg10d >= 0.2) {
-          c.volMultiplier = Math.round((vol / avg10d) * 10) / 10;
-        } else if (avg10d > 0 && avg3m > 0) {
-          c.volMultiplier = Math.round((avg10d / avg3m) * 10) / 10;
-        }
-      } catch { /* keep parsed fallback */ }
-    }),
+  reportDate: string,
+): Promise<Map<string, { multiplier: number; asOf: string }>> {
+  const volumes = await fetchCompletedVolumeBatch(
+    yf,
+    candidates.map((candidate) => ({ ticker: candidate.ticker, market: "SE", asOfDate: reportDate })),
   );
+  for (const candidate of candidates) {
+    const verified = volumes.get(`SE:${candidate.ticker}:${reportDate}`);
+    // A bot-provided ratio is not proof of the completed Yahoo bar.
+    candidate.volMultiplier = verified?.multiplier ?? 0;
+  }
+  return new Map(candidates.flatMap((candidate) => {
+    const verified = volumes.get(`SE:${candidate.ticker}:${reportDate}`);
+    return verified ? [[candidate.ticker, verified] as const] : [];
+  }));
 }
 
 const router: IRouter = Router();
@@ -128,8 +123,8 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
     }
   }
 
-  // Enrich vol from live Yahoo Finance — overrides the bot's parsed 0.0x values
-  await enrichVolMultiplier(candidates);
+  // The report date, not import time, is the provenance of its daily signal.
+  const verifiedVolumes = await enrichVolMultiplier(candidates, date);
 
   const buildRow = (
     sessionId: number,
@@ -154,6 +149,7 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
     pctB: c.pctB,
     atr: c.atr,
     volMultiplier: c.volMultiplier,
+    volumeAsOf: verifiedVolumes.get(c.ticker)?.asOf ?? null,
     distFrom20dH: c.distFrom20dH,
     gapWarning: c.gapWarning ?? undefined,
     direction: c.direction,

@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, real, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, real, boolean, timestamp, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { screenerSessionsTable } from "./screenerSessions";
@@ -18,6 +18,9 @@ export const candidatesTable = pgTable("candidates", {
   pctB: real("pct_b").notNull(),
   atr: real("atr").notNull(),
   volMultiplier: real("vol_multiplier").notNull(),
+  // The completed Yahoo trading day underlying this relative-volume measurement.
+  // Legacy and unverified values remain undated.
+  volumeAsOf: date("volume_as_of", { mode: "string" }),
   // Separate signal inputs from legacy display fields: EdgeAI uses `rsi` for E[R].
   signalRsi: real("signal_rsi"),
   signalGapPct: real("signal_gap_pct"),

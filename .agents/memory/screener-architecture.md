@@ -11,7 +11,9 @@ EdgeAI scheduler checks every 5 minutes from the Nasdaq Stockholm open at 09:00 
 
 ## Critical field semantics
 - `volMultiplier` stores vol ratio (0.3x = 30% of avg). It does NOT store R:R anymore.
-- A partial daily RVOL below the usable threshold is missing data (`null`), never replaced with average-10-day / average-3-month volume trend.
+- **Volume qualification rule:** use the completed Yahoo daily candle underlying the signal/report, compared with preceding completed trading days. A live partial day or a 10-day/3-month trend is not a substitute; an undated legacy ratio is not verified evidence for a new trading decision.
+  **Why:** the user explicitly chose the latest closed day's volume for qualification after Yahoo's previous-day bars were complete but morning live-volume enrichment still labeled valid proposals "Ogiltig data."
+  **How to apply:** keep the source candle date attached to the ratio and visible to the trader; if that exact daily bar is unavailable, leave the proposal unqualified rather than silently changing the meaning of "volume."
 - `rr` column stores the actual R:R ratio. analytics.ts must read `c.rr`, not `c.volMultiplier`.
 - Opening gaps use percentage points (2.9 means 2.9%), matching the 2.5% safety thresholds.
 - EdgeAI win rate, expectancy, sample N, and signal age have dedicated nullable fields. Legacy overloaded fields remain only for backward compatibility.

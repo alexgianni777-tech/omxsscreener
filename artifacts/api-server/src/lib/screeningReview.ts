@@ -9,6 +9,7 @@ export type CandidateReviewInput = {
   signalRsi: number | null;
   signalGapPct: number | null;
   volMultiplier: number;
+  volumeAsOf?: string | null;
   earningsInDays: number | null;
   earningsKnowledge: "SIGNAL_TIME" | "UNKNOWN" | null;
   entryPrice: number;
@@ -53,6 +54,8 @@ export function reviewCandidate(
 
   if (!Number.isFinite(candidate.volMultiplier) || candidate.volMultiplier <= 0) {
     blockers.push("Volymdata saknas — ingen kvalificerad trade.");
+  } else if (!candidate.volumeAsOf || !/^\d{4}-\d{2}-\d{2}$/.test(candidate.volumeAsOf)) {
+    blockers.push("Volymens avslutade kursdatum är inte verifierat — ingen kvalificerad trade.");
   } else if (candidate.volMultiplier < 0.2) {
     warnings.push(`Låg relativ volym (${candidate.volMultiplier.toFixed(1)}x).`);
   }
@@ -128,6 +131,8 @@ export function decideCandidate(
   }
   if (!Number.isFinite(candidate.volMultiplier) || candidate.volMultiplier <= 0) {
     invalid.push("Volymdata saknas eller är ogiltig.");
+  } else if (!candidate.volumeAsOf || !/^\d{4}-\d{2}-\d{2}$/.test(candidate.volumeAsOf) || candidate.volumeAsOf > sessionDate) {
+    invalid.push("Volymens avslutade kursdatum saknas eller är ogiltigt.");
   }
   const isEdgeAi = (candidate.signalSource ?? null) === "edgeai";
   if (!Number.isFinite(candidate.rsi) || (!isEdgeAi && candidate.rsi < 0)) {

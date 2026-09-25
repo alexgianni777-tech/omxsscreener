@@ -12,6 +12,7 @@ const edgeCandidate = {
   signalRsi: 50,
   signalGapPct: 0,
   volMultiplier: 1,
+  volumeAsOf: "2026-07-10",
   earningsInDays: 10,
   earningsKnowledge: "SIGNAL_TIME" as const,
   entryPrice: 100,
@@ -30,6 +31,16 @@ test("negative EdgeAI expectancy is a trade blocker, not invalid RSI data", () =
   const decision = decideCandidate(edgeCandidate, review, new Date().toISOString().slice(0, 10));
   assert.equal(decision.status, "BLOCKED");
   assert.doesNotMatch(decision.reasons.join(" "), /RSI-data saknas/);
+});
+
+test("undated legacy volume cannot qualify a trade", () => {
+  const undated = { ...edgeCandidate, volumeAsOf: null };
+  const review = reviewCandidate(undated, "edgeai");
+  assert.equal(review.status, "BLOCKED");
+  assert.match(review.reasons.join(" "), /kursdatum är inte verifierat/);
+  const decision = decideCandidate(undated, review, "2026-07-11", new Date("2026-07-11T10:00:00Z"));
+  assert.equal(decision.status, "INVALID");
+  assert.match(decision.reasons.join(" "), /kursdatum saknas/);
 });
 
 test("WAIT candidates are not counted as tradable at session level", async () => {

@@ -9,7 +9,8 @@ import { eq } from "drizzle-orm";
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "../lib/omxs30TickerMap";
-import { calculateWilderRsi, volumeMultiplierFromQuote } from "../lib/marketIndicators";
+import { calculateWilderRsi } from "../lib/marketIndicators";
+import { completedVolumeKey, fetchCompletedVolumeBatch } from "../lib/completedVolumeBatch";
 import {
   edgeAiSessionDate,
   edgeAiDataFreshness,
@@ -165,24 +166,30 @@ router.post(
       return;
     }
 
-    // 5. Enrich volume. Missing Yahoo fields stay at 0 but are logged and are
-    //    presented as "saknas", never as a silently valid 0,0x metric.
+    // Use the completed market-data day that produced the signal, not today's
+    // partial live quote or the (possibly later) session/import date.
+    const volumeRequests = uniqueMappedSetups.map((c) => ({
+      ticker: c.ticker,
+      market: c.market,
+      asOfDate: String((c.market === "SE" ? se : us).dataAsOf ?? ""),
+    }));
+    const volumeMap = await fetchCompletedVolumeBatch(yf, volumeRequests);
+    uniqueMappedSetups.forEach((c, index) => {
+      const request = volumeRequests[index];
+      const value = request.asOfDate <= sessionDate ? volumeMap.get(completedVolumeKey(request)) : null;
+      if (value) {
+        c.volMultiplier = value.multiplier;
+        c.volumeAsOf = value.asOf;
+      }
+    });
+    // Earnings calendar remains signal-time evidence only on the actual
+    // import day; it does not reconstruct historical observations.
     await Promise.allSettled(
       uniqueMappedSetups.map(async (c) => {
         try {
-          const q = (await withRetry(() => yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false }))) as any;
           const isSignalDay = sessionDate === new Date().toISOString().slice(0, 10);
           if (isSignalDay) {
-            const volumeMultiplier = volumeMultiplierFromQuote(q);
-            if (volumeMultiplier != null) {
-              c.volMultiplier = volumeMultiplier;
-            } else {
-              logger.warn({ ticker: c.ticker }, "Volume enrichment missing Yahoo volume or average fields");
-            }
-          }
-          // Yahoo only exposes its current calendar. It is signal-time evidence
-          // exclusively for an import whose signal day is today.
-          if (isSignalDay) {
+            const q = (await withRetry(() => yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false }))) as any;
             const earningsInDays = daysUntil(q.earningsTimestamp);
             if (earningsInDays != null) {
               c.earningsInDays = earningsInDays;
