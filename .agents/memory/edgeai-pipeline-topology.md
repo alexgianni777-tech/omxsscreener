@@ -47,6 +47,18 @@ This app's daily screener data comes from **three separate GitHub repos**, each 
 
 **How to apply:** distinguish transient data-not-ready from real failures at the workflow boundary, and keep the delivery-marker step conditional on an actual send.
 
+**Channel-delivery rule:** Telegram delivery and dashboard import are separate states. If Telegram succeeds but the dashboard fails, preserve the exact report and retry only the dashboard; do not generate or send another trading list for that date.
+
+**Why:** the dashboard import can fail independently after Telegram has already accepted a message. Treating both as one success hides a missing dashboard session, while rerunning the whole notification duplicates actionable trade plans.
+
+**How to apply:** base dashboard recovery on the originally sent text, leave a visible pending state until import succeeds, and test the partial-success path without real messages. A crash between external send and durable receipt remains a residual duplicate risk.
+
+**No-data escalation rule:** silent interim retries need one visible late notice if a completed report still cannot be delivered; a waiting retry must not be mistaken for a delivered report.
+
+**Why:** GitHub Actions can start scheduled jobs late, and a quiet waiting status alone leaves the user uncertain whether the report was omitted.
+
+**How to apply:** deduplicate the late notice by report date, keep it separate from trade plans, and leave manual explicit-date backfill available if market data arrives beyond the retry window.
+
 **EdgeAI schedule is separate:** the `edgeai` repository still uses its own 06:00 UTC weekday trigger and needs separate write access to change. Do not assume it follows the `omxs30` schedule.
 
 **Why:** separate GitHub workflows can miss or be delayed independently; a fresh OMXS30 session does not imply a fresh EdgeAI data file.
