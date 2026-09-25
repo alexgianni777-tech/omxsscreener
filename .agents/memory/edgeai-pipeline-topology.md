@@ -23,6 +23,18 @@ This app's daily screener data comes from **three separate GitHub repos**, each 
 
 **How to apply:** keep the index-date gate ahead of stock analysis, and keep the notifier's failure branch separate from the normal Telegram/dashboard delivery. Re-run after fresh data arrives; do not silently switch to a different Stockholm index.
 
+**Delayed-run date rule:** determine the report date from the latest completed Stockholm weekday session, not the process UTC date; before evening close, a manual retry belongs to the previous weekday.
+
+**Why:** GitHub's local-evening cron can start after midnight, and an early-morning retry must not reject yesterday's valid index bar just because today's trading has not started.
+
+**How to apply:** when adjusting freshness checks, test both delayed scheduled runs and next-morning manual reruns across local midnight, weekends, and daylight-saving changes.
+
+**Hourly-data caution:** Yahoo's hourly Swedish share bars may have a fresh close while daily stock bars lag, but summed hourly volume can differ materially from the eventual daily volume.
+
+**Why:** using an hourly-derived bar as a complete daily candle would distort volume-based rankings and could make an incomplete trade plan look authoritative.
+
+**How to apply:** don't silently substitute hourly OHLCV for daily OHLCV. If adding a fallback, explicitly mark volume unavailable or otherwise validate it and disclose the reduced data quality.
+
 **EdgeAI schedule is separate:** the `edgeai` repository still uses its own 06:00 UTC weekday trigger and needs separate write access to change. Do not assume it follows the `omxs30` schedule.
 
 **Why:** separate GitHub workflows can miss or be delayed independently; a fresh OMXS30 session does not imply a fresh EdgeAI data file.
