@@ -77,8 +77,8 @@ This app's daily screener data comes from **three separate GitHub repos**, each 
 
 **How to apply:** warn when the snapshot is older, accept reasonably recent data (including weekends), reject invalid or excessively old timestamps, and permit US-only snapshots when SE has no setups.
 
-**Workflow-edit permission rule:** the existing GitHub connection can edit ordinary source files in the external repositories but cannot update files under `.github/workflows/`; the separate available repository token also lacks workflow-write permission.
+**Workflow-edit permission rule:** the ordinary GitHub connection can edit source files in the external repositories but cannot update `.github/workflows/`. Workflow edits require a separately authorized workflow-write credential.
 
 **Why:** both GitHub API write paths returned HTTP 403 for workflow changes while ordinary code writes succeeded. A repository's contents-write access alone does not authorize workflow-file edits.
 
-**How to apply:** request workflow-write authorization through the secure secrets/connection flow before changing schedules. Do not confuse a successful source-code commit with a completed schedule repair, and do not dispatch a live trading workflow just to test permissions.
+**How to apply:** check whether the dedicated workflow-write credential is available; if not, request authorization through the secure secrets flow. Do not confuse a successful source-code commit with a completed schedule repair, and do not dispatch a live trading workflow just to test permissions.
