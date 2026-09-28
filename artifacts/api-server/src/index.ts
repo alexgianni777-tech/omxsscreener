@@ -18,10 +18,13 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 async function main() {
-  // Apply pending versioned schema migrations before accepting traffic.
-  // runMigrations uses a PostgreSQL advisory lock, so concurrent instances
-  // serialize safely during deployment.
-  await runMigrations();
+  // Replit Publish applies the managed production schema before starting the
+  // service. Running the local Drizzle journal there would attempt to add
+  // columns/tables that Publish has already created and crash startup.
+  // Development still applies versioned migrations before accepting traffic.
+  if (process.env["NODE_ENV"] !== "production") {
+    await runMigrations();
+  }
 
   app.listen(port, (err) => {
     if (err) {
