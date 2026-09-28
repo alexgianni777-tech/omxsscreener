@@ -83,8 +83,8 @@ This app's daily screener data comes from **three separate GitHub repos**, each 
 
 **How to apply:** check whether the dedicated workflow-write credential is available; if not, request authorization through the secure secrets flow. Do not confuse a successful source-code commit with a completed schedule repair, and do not dispatch a live trading workflow just to test permissions.
 
-**Telegram credential isolation rule:** credentials configured as GitHub Actions secrets in `omxs30` are not automatically available to `edgeai`. Successful OMXS30 Telegram delivery does not prove the separate EdgeAI digest can send.
+**Telegram delivery decision:** EdgeAI's GitHub workflow should build and commit its data without a separate Telegram digest; keep the existing OMXS30 Telegram schedule and delivery unchanged. Credentials configured as GitHub Actions secrets in `omxs30` are not automatically available to `edgeai`.
 
-**Why:** a real EdgeAI build completed with verified market data but its notifier found both Telegram environment variables empty, while the independent OMXS30 job delivered successfully.
+**Why:** The user chose to keep the existing Telegram arrangement and only use EdgeAI data in the screener. EdgeAI data builds completed, but an unwanted digest step made the whole workflow appear failed because that repository had no Telegram secrets.
 
-**How to apply:** distinguish source-data recovery and dashboard import from EdgeAI Telegram delivery. If that digest is wanted, configure its bot token and chat ID in the `edgeai` repository's Actions secrets through a secure flow; never copy credentials through logs or chat, and verify a delivery receipt before claiming it works.
+**How to apply:** distinguish EdgeAI data freshness and dashboard import from OMXS30's Telegram delivery. Do not add EdgeAI Telegram credentials or re-enable a separate digest without a new explicit user request.
