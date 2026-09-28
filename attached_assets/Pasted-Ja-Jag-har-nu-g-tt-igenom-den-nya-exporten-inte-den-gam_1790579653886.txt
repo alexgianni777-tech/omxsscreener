@@ -1,0 +1,96 @@
+Ja. Jag har nu gått igenom den nya exporten, inte den gamla. Det är en tydlig förbättring. Flera saker jag pekade ut är faktiskt korrigerade i koden. Jag kan däremot bara verifiera källkoden i snapshoten, inte att migrationerna verkligen är applicerade i produktionsdatabasen eller att deployen kör utan fel.    omxs30-screener-full-code-2026-…
+Det som nu är bra: signalSource ingår i kandidatidentiteten, så samma ticker från EdgeAI och Telegram kan samexistera utan att blandas ihop.    omxs30-screener-full-code-2026-… Parsern är också ändrad från att tyst kasta bort trasiga rader till att faila med ett tydligt fel, vilket är exakt vad jag ville se.    omxs30-screener-full-code-2026-… TIME_EXIT har fått en gemensam performance-funktion och dashboarden inkluderar nu WIN/LOSS/TIME_EXIT i samma R-population.    omxs30-screener-full-code-2026-… Migration 0008 finns dessutom nu registrerad i Drizzle-journalen.    omxs30-screener-full-code-2026-… Och "correlation" har korrekt döpts om till setup-koncentration i UI:t.
+Men jag hittar fyra saker jag skulle fixa innan vi börjar lita på Top 3-statistiken på riktigt.
+1. P0: Top 3 är fortfarande inte point-in-time-fryst. En re-import uppdaterar fortfarande kandidatens rankingdata med ...values, samtidigt som bara utfallsfälten och stjärnan skyddas.    omxs30-screener-full-code-2026-… Sedan räknar analytics fram Top 3 på nytt från kandidatens nuvarande värden.    omxs30-screener-full-code-2026-… Det innebär att dagens auto-Top3 för exempelvis 18 september potentiellt inte behöver vara samma Top3 som systemet faktiskt visade den 18 september.
+Det är fortfarande den största statistiska risken i hela systemet.
+Dessutom kan isTop3Pick ändras via API:t när som helst; endpointen kontrollerar antal stjärnor men inte om utfallet redan är känt eller om sessionen är historisk.    omxs30-screener-full-code-2026-… Analytics låter sedan dessa manuella stjärnor ersätta auto-rankingen.    omxs30-screener-full-code-2026-… I värsta fall kan man alltså omedvetet skapa look-ahead bias genom att stjärnmarkera en historisk vinnare.
+Jag skulle skapa en riktig immutable selection_snapshot när sessionen först blir handelbar:
+candidateId
+selected
+selectionRank
+selectionScore
+reviewStatus
+decisionStatus
+policyVersion
+selectedAt
+selectionType = AUTO | MANUAL
+market
+direction
+source
+
+Official performance får sedan endast läsa denna snapshot. Aldrig räkna om gamla Top3.
+2. P0: "Idag" och Top3-analytics handlar fortfarande två olika strategier. Det här är en ny sak jag upptäckte i denna genomgång.
+Analytics väljer maximalt:
+3 LONG + 3 SHORT totalt.    omxs30-screener-full-code-2026-…
+Men Idag-sidan gör:
+3 SE LONG + 3 US LONG + 3 SE SHORT + 3 US SHORT, alltså potentiellt 12 kandidater.    omxs30-screener-full-code-2026-…
+Det betyder att statistiken som heter Top3 inte mäter samma urval som tradern faktiskt ser.
+Det finns dessutom en andra avvikelse: Idag filtrerar bort kandidater som inte är TRADEABLE, medan analytics rankar direkt från hela kandidatpoolen och gör ingen motsvarande review/decision-filtrering.    omxs30-screener-full-code-2026-…
+Det innebär exempelvis att en kandidat som systemet själv sade WAIT eller BLOCKED till fortfarande kan hamna i den historiska auto-rankingen.
+Det här måste bli en enda server-side selectionPolicy(). Frontend ska inte själv ranka någonting; den ska bara visa serverns val.
+Och frontend har fortfarande en egen kopia av rankingformeln.    omxs30-screener-full-code-2026-… Det är precis den typ av dubbelimplementation som tidigare orsakade EdgeAI-importbuggen.
+3. P0: "Använd idag som handelsdatum" kan kringgå stale-skyddet. Detta är den viktigaste nya buggen jag hittade.
+Vid manuell import kan datumet inne i screenern exempelvis vara 23 september, men UI:t har som standard möjlighet att lägga in den som dagens session. Servern ändrar då session.date till targetDate.    omxs30-screener-full-code-2026-…
+Men volymen hämtas fortfarande för det gamla reportDate.    omxs30-screener-full-code-2026-… Samtidigt räcker det i decideCandidate() att volumeAsOf inte ligger efter sessionDate; ett flera dagar gammalt volumeAsOf accepteras alltså.    omxs30-screener-full-code-2026-…
+Ännu värre: earnings hämtas med den nya session.date, alltså dagens rapportkalender, medan tekniska data fortfarande kommer från den äldre screenern.    omxs30-screener-full-code-2026-…
+Då kan en session i praktiken bli:
+kurs/RSI/ATR från 23 september
+volym från 23 september
+earningsinformation från 28 september
+sessionsdatum = 28 september
+decision = potentiellt TRADEABLE
+
+Det är precis den typ av blandad tidsinformation vi vill undvika.
+Jag skulle aldrig skriva över signaldatumet. Ha i stället:
+signalDate = datumet i originaldatan, immutable
+tradingDate = optional
+
+Och om tradingDate > signalDate ska den ursprungliga signalen automatiskt vara STALE/WAIT tills entry, stop, target och samtliga signal-time-features har räknats om från färsk data.
+Dessutom använder earnings-kontrollen UTC-datum för att avgöra om observationen är "idag"; resten av screenern har redan börjat använda Stockholm-datum. De två bör använda samma exchange-aware kalender.
+4. P1: EdgeAI-migreringen är fortfarande halvfärdig. Ni har nu fina dedikerade fält:
+edgeWinRate, edgeExpectancyR, edgeSampleN, signalAgeBars.
+Men mappingen skriver fortfarande samtidigt:
+perf1m = winRate
+rsi = expectancy
+pctB = sampleN
+atr = oneR
+distFrom20dH = barsAgo
+
+   omxs30-screener-full-code-2026-…
+Och screeningReview använder fortfarande candidate.rsi för att avgöra om EdgeAI-expectancy är negativ.    omxs30-screener-full-code-2026-…
+atr = oneR är den jag ogillar mest. ATR och stop-avstånd är två fundamentalt olika saker.
+Jag skulle nu avsluta migrationen ordentligt: nya EdgeAI-rader ska aldrig behöva legacyaliasen för affärslogik. De gamla fälten kan ligga kvar för äldre data/UI-kompatibilitet, men all ny ranking och review ska läsa de explicita fälten.
+Det finns även två P1/P2-saker jag skulle ta efter dessa. Derivatportföljen har fortfarande bara direction, instrument, priser och antal.    omxs30-screener-full-code-2026-… Samtidigt beräknas P&L och long/short-exponering utifrån samma direction.    omxs30-screener-full-code-2026-…    omxs30-screener-full-code-2026-… För en ägd Turbo S måste vi skilja på att vi är long själva produkten men short underliggande. Lägg alltså productType, productSide, underlyingDirection, underlyingTicker, indicativeLeverage, financingLevel och barrier.
+Och CI är fortfarande ofärdig. API-paketet har många fler tester nu, men scripts exponerar fortfarande bara två specifika testsuiter.    omxs30-screener-full-code-2026-… Det finns fortfarande bara import-workflowen i GitHub-delen av snapshoten. Jag skulle absolut lägga till automatisk alla tester + typecheck + migration check + production build före deploy.
+En liten men viktig semantikfråga också: databasen säger fortfarande att riskPct är "% of account risked per trade",    omxs30-screener-full-code-2026-… medan Idag-sidan delar den risken mellan samtliga picks i samma riktning.    omxs30-screener-full-code-2026-… Välj vilket den ska betyda: risk per trade eller total riskbudget per direction. Just nu säger datamodellen det ena och beräkningen gör det andra.
+Det jag skulle skicka till Replit nu
+Gör en sista correctness-pass, utan att optimera tradingparametrar.
+P0
+1. Implementera immutable point-in-time selection snapshots. Official Top3-performance får aldrig räknas om från muterbara candidate-fält. Persist selected candidate IDs, score, rank, review/decision, policyVersion och selection timestamp vid signaltillfället.
+2. Förhindra post-hoc Top3 bias. Historical/resolved sessions får inte ändra den officiella selection snapshoten. Manuella stjärnor efter signal-lock får vara annotations men får inte skriva om official performance.
+3. Skapa EN server-side selectionPolicy som används av Today och analytics. Bestäm explicit om policyn är 3 per market/direction eller 3 per direction totalt. Frontend får inte ha egen rankingkod. Eligibility (TRADEABLE) måste vara samma i live och analytics.
+4. Fixa targetDate/sourceDate. Datumet i signalens originaldata ska vara immutable signalDate. En gammal signal får inte bli dagens TRADEABLE-signal enbart genom targetDate. Alla point-in-time-features måste ha samma temporal provenance.
+P1
+5. Slutför EdgeAI-migreringen. Affärslogik ska läsa edgeExpectancyR, edgeSampleN, signalAgeBars osv., inte legacy-rsi/pctB/distFrom20dH. ATR får aldrig innehålla oneR.
+6. Separera productSide från underlyingDirection för turbos/minifutures/warranter och beräkna faktisk produkt-P&L separat från underliggande exponering.
+7. Klargör riskPct-semantiken: risk per trade eller total portfolio/direction risk budget. Namn, UI, schema och Challenge Tracker måste använda samma definition.
+8. Lägg CI som automatiskt kör samtliga *.test.ts, alla workspace-typechecks, drizzle migration check och production build.
+Acceptance tests
+- Re-import av en historisk session ändrar aldrig official Top3.
+- En stjärna satt efter resolution ändrar aldrig official historical performance.
+- Today och analytics returnerar exakt samma candidate IDs från samma snapshot.
+- WAIT/BLOCKED kan aldrig finnas i official strategy results.
+- En gammal screener importerad med dagens tradingDate blir aldrig TRADEABLE utan full fresh recomputation.
+- Same ticker LONG och SHORT från olika sources flaggas som signal conflict och väljs inte automatiskt samtidigt.
+- Turbo S: stigande produktpris ger positiv product P&L samtidigt som underlying exposure är SHORT.
+- Alla testfiler körs i CI.
+
+När dessa fyra P0-punkter är klara skulle jag faktiskt säga: sluta modifiera rankingalgoritmen. Då är det dags att frysa policyversion 1 och börja samla riktiga OOS-resultat. Just nu är den stora risken inte att rankingformeln är för enkel; det är att det som mäts historiskt fortfarande inte är exakt samma sak som det som skulle ha handlats i realtid.
+
+
+
+
+
+    
+
+Gillar du den här personligheten?
