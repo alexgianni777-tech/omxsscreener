@@ -94,7 +94,7 @@ export const ImportSessionResponse = zod.object({
   "reasons": zod.array(zod.string())
 }).optional(),
   "decision": zod.object({
-  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE', 'CONFLICT']),
   "reasons": zod.array(zod.string())
 }).optional(),
   "officialSelection": zod.union([zod.object({
@@ -106,7 +106,7 @@ export const ImportSessionResponse = zod.object({
   "reasons": zod.array(zod.string())
 }),
   "decision": zod.object({
-  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE', 'CONFLICT']),
   "reasons": zod.array(zod.string())
 }),
   "policyVersion": zod.string(),
@@ -154,8 +154,14 @@ export const ImportSessionResponse = zod.object({
 }).optional().describe('What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads.'),
   "top3SelectionSnapshot": zod.object({
   "available": zod.boolean(),
+  "state": zod.enum(['AVAILABLE', 'WAITING_FOR_CUTOFF', 'EVALUATING', 'MISSING_SOURCES', 'LEGACY_UNAVAILABLE']),
+  "unavailableReason": zod.string().nullable(),
   "selectedAt": zod.coerce.date().nullable(),
-  "policyVersion": zod.string().nullable()
+  "policyVersion": zod.string().nullable(),
+  "cutoffAt": zod.coerce.date().nullable(),
+  "evaluatedAt": zod.coerce.date().nullable(),
+  "participatingSources": zod.array(zod.enum(['telegram', 'edgeai'])).nullable(),
+  "requiredSources": zod.array(zod.enum(['telegram', 'edgeai']))
 })
 })
 
@@ -266,7 +272,7 @@ export const ReimportSessionResponse = zod.object({
   "reasons": zod.array(zod.string())
 }).optional(),
   "decision": zod.object({
-  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE', 'CONFLICT']),
   "reasons": zod.array(zod.string())
 }).optional(),
   "officialSelection": zod.union([zod.object({
@@ -278,7 +284,7 @@ export const ReimportSessionResponse = zod.object({
   "reasons": zod.array(zod.string())
 }),
   "decision": zod.object({
-  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE', 'CONFLICT']),
   "reasons": zod.array(zod.string())
 }),
   "policyVersion": zod.string(),
@@ -326,8 +332,14 @@ export const ReimportSessionResponse = zod.object({
 }).optional().describe('What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads.'),
   "top3SelectionSnapshot": zod.object({
   "available": zod.boolean(),
+  "state": zod.enum(['AVAILABLE', 'WAITING_FOR_CUTOFF', 'EVALUATING', 'MISSING_SOURCES', 'LEGACY_UNAVAILABLE']),
+  "unavailableReason": zod.string().nullable(),
   "selectedAt": zod.coerce.date().nullable(),
-  "policyVersion": zod.string().nullable()
+  "policyVersion": zod.string().nullable(),
+  "cutoffAt": zod.coerce.date().nullable(),
+  "evaluatedAt": zod.coerce.date().nullable(),
+  "participatingSources": zod.array(zod.enum(['telegram', 'edgeai'])).nullable(),
+  "requiredSources": zod.array(zod.enum(['telegram', 'edgeai']))
 })
 })
 
@@ -408,7 +420,7 @@ export const GetSessionResponse = zod.object({
   "reasons": zod.array(zod.string())
 }).optional(),
   "decision": zod.object({
-  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE', 'CONFLICT']),
   "reasons": zod.array(zod.string())
 }).optional(),
   "officialSelection": zod.union([zod.object({
@@ -420,7 +432,7 @@ export const GetSessionResponse = zod.object({
   "reasons": zod.array(zod.string())
 }),
   "decision": zod.object({
-  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE', 'CONFLICT']),
   "reasons": zod.array(zod.string())
 }),
   "policyVersion": zod.string(),
@@ -468,8 +480,14 @@ export const GetSessionResponse = zod.object({
 }).optional().describe('What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads.'),
   "top3SelectionSnapshot": zod.object({
   "available": zod.boolean(),
+  "state": zod.enum(['AVAILABLE', 'WAITING_FOR_CUTOFF', 'EVALUATING', 'MISSING_SOURCES', 'LEGACY_UNAVAILABLE']),
+  "unavailableReason": zod.string().nullable(),
   "selectedAt": zod.coerce.date().nullable(),
-  "policyVersion": zod.string().nullable()
+  "policyVersion": zod.string().nullable(),
+  "cutoffAt": zod.coerce.date().nullable(),
+  "evaluatedAt": zod.coerce.date().nullable(),
+  "participatingSources": zod.array(zod.enum(['telegram', 'edgeai'])).nullable(),
+  "requiredSources": zod.array(zod.enum(['telegram', 'edgeai']))
 })
 })
 
@@ -494,6 +512,11 @@ export const GetTop3AnalyticsResponse = zod.object({
   "source": zod.string().nullable(),
   "selectionStatus": zod.enum(['AVAILABLE', 'UNAVAILABLE']),
   "selectionUnavailableReason": zod.string().nullable(),
+  "cutoffState": zod.enum(['AVAILABLE', 'WAITING_FOR_CUTOFF', 'EVALUATING', 'MISSING_SOURCES', 'LEGACY_UNAVAILABLE']),
+  "cutoffAt": zod.coerce.date().nullable(),
+  "cutoffEvaluatedAt": zod.coerce.date().nullable(),
+  "participatingSources": zod.array(zod.enum(['telegram', 'edgeai'])).nullable(),
+  "requiredSources": zod.array(zod.enum(['telegram', 'edgeai'])),
   "selectedAt": zod.coerce.date().nullable(),
   "policyVersion": zod.string().nullable(),
   "picks": zod.array(zod.object({
@@ -513,7 +536,7 @@ export const GetTop3AnalyticsResponse = zod.object({
   "reasons": zod.array(zod.string())
 }),
   "decision": zod.object({
-  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE', 'CONFLICT']),
   "reasons": zod.array(zod.string())
 }),
   "earningsWarning": zod.boolean(),
@@ -537,7 +560,7 @@ export const GetTop3AnalyticsResponse = zod.object({
   "reasons": zod.array(zod.string())
 }),
   "decision": zod.object({
-  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE', 'CONFLICT']),
   "reasons": zod.array(zod.string())
 }),
   "earningsWarning": zod.boolean(),
@@ -561,13 +584,14 @@ export const GetTop3AnalyticsResponse = zod.object({
   "reasons": zod.array(zod.string())
 }),
   "decision": zod.object({
-  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE', 'CONFLICT']),
   "reasons": zod.array(zod.string())
 }),
   "earningsWarning": zod.boolean(),
   "outcome": zod.string(),
   "r": zod.number().nullable()
 })),
+  "matured": zod.boolean().describe('True when this available session has at least one selected pick and every selected pick has recorded performance or was explicitly skipped.'),
   "edgeWinRate": zod.number().nullable(),
   "sessionR": zod.number().nullable(),
   "cumulativeR": zod.number()
@@ -576,13 +600,27 @@ export const GetTop3AnalyticsResponse = zod.object({
   "totalSessions": zod.number(),
   "availableSessions": zod.number(),
   "unavailableSessions": zod.number(),
-  "completedSessions": zod.number(),
+  "completedSessions": zod.number().describe('Sessions with any recorded performance, retained for compatibility.'),
+  "selectedTrades": zod.number().describe('Total picks from available immutable Top 3 selection snapshots.'),
+  "resolvedTrades": zod.number().describe('Selected picks with valid recorded realized performance; TIME_EXIT requires actual recorded performance.'),
+  "pendingTrades": zod.number().describe('Selected picks without valid performance, excluding explicit SKIP outcomes.'),
+  "excludedTrades": zod.number().describe('Explicit SKIP picks; excluded from performance calculations and not treated as trades.'),
+  "resolutionRate": zod.number().nullable().describe('Resolved picks divided by all selected picks, or null when no picks were selected.'),
+  "maturedSessions": zod.number().describe('Available sessions with at least one pick and no pending picks; explicit SKIP outcomes do not block maturity.'),
   "totalTrades": zod.number(),
   "wins": zod.number(),
   "losses": zod.number(),
   "winRate": zod.number().nullable(),
   "totalR": zod.number(),
-  "avgRPerTrade": zod.number().nullable(),
+  "avgRPerTrade": zod.number().nullable().describe('Primary expected value (mean R\/trade) for the fully matured session cohort only.'),
+  "expectedValue": zod.number().nullable().describe('Primary expected value (mean R\/trade) for the fully matured session cohort only.'),
+  "resolvedOnlyTrades": zod.number().describe('Recorded-performance picks across all available sessions, including sessions that have not matured.'),
+  "resolvedOnlyWins": zod.number(),
+  "resolvedOnlyLosses": zod.number(),
+  "resolvedOnlyWinRate": zod.number().nullable().describe('Win rate among resolved-only picks; pending picks are excluded from this separate, preliminary cohort.'),
+  "resolvedOnlyExpectedValue": zod.number().nullable().describe('Mean R among resolved-only picks; pending picks are excluded from this separate, preliminary cohort.'),
+  "resolvedOnlyTotalR": zod.number(),
+  "resolvedOnlyAvgRPerTrade": zod.number().nullable(),
   "byDirection": zod.object({
   "LONG": zod.object({
   "totalTrades": zod.number(),
@@ -664,7 +702,7 @@ export const ListCandidatesResponseItem = zod.object({
   "reasons": zod.array(zod.string())
 }).optional(),
   "decision": zod.object({
-  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE', 'CONFLICT']),
   "reasons": zod.array(zod.string())
 }).optional(),
   "officialSelection": zod.union([zod.object({
@@ -676,7 +714,7 @@ export const ListCandidatesResponseItem = zod.object({
   "reasons": zod.array(zod.string())
 }),
   "decision": zod.object({
-  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE', 'CONFLICT']),
   "reasons": zod.array(zod.string())
 }),
   "policyVersion": zod.string(),
@@ -777,7 +815,7 @@ export const UpdateCandidateOutcomeResponse = zod.object({
   "reasons": zod.array(zod.string())
 }).optional(),
   "decision": zod.object({
-  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE', 'CONFLICT']),
   "reasons": zod.array(zod.string())
 }).optional(),
   "officialSelection": zod.union([zod.object({
@@ -789,7 +827,7 @@ export const UpdateCandidateOutcomeResponse = zod.object({
   "reasons": zod.array(zod.string())
 }),
   "decision": zod.object({
-  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE', 'CONFLICT']),
   "reasons": zod.array(zod.string())
 }),
   "policyVersion": zod.string(),

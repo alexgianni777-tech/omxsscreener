@@ -1,8 +1,46 @@
 import { candidateSelectionScore, selectSourceBalancedCandidates } from "./candidateRanking.ts";
 import { decideCandidate, reviewCandidate } from "./screeningReview.ts";
 
-export const TOP3_POLICY_VERSION = "official-top3-v1";
+export const TOP3_POLICY_VERSION = "official-top3-v2";
 export const TOP3_SELECTION_TYPE = "AUTO";
+export const TOP3_CUTOFF_HOUR = 16;
+export const TOP3_CUTOFF_MINUTE = 30;
+export const TOP3_REQUIRED_SOURCES = ["telegram", "edgeai"] as const;
+
+const STOCKHOLM_DATE_TIME = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/Stockholm",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+/** Resolve the fixed local cutoff to an instant, including DST transitions. */
+export function top3CutoffForDate(date: string): Date {
+  const [year, month, day] = date.split("-").map(Number);
+  const desiredLocalAsUtc = Date.UTC(year, month - 1, day, TOP3_CUTOFF_HOUR, TOP3_CUTOFF_MINUTE);
+  let instant = desiredLocalAsUtc;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const parts = Object.fromEntries(
+      STOCKHOLM_DATE_TIME.formatToParts(new Date(instant)).map((part) => [part.type, part.value]),
+    );
+    const representedLocalAsUtc = Date.UTC(
+      Number(parts.year),
+      Number(parts.month) - 1,
+      Number(parts.day),
+      Number(parts.hour),
+      Number(parts.minute),
+    );
+    instant += desiredLocalAsUtc - representedLocalAsUtc;
+  }
+  return new Date(instant);
+}
+
+export function isTop3CutoffDue(date: string, now: Date): boolean {
+  return now.getTime() >= top3CutoffForDate(date).getTime();
+}
 
 export type PolicyCandidate = {
   id: number;
@@ -84,13 +122,43 @@ export function buildTop3SelectionSnapshot(
     Boolean(candidate.signalSource) &&
     (candidate.market === "SE" || candidate.market === "US"),
   );
+  const directionsByTicker = new Map<string, Set<"LONG" | "SHORT">>();
+  for (const { candidate } of eligible) {
+    const key = tickerConflictKey(candidate.ticker);
+    const directions = directionsByTicker.get(key) ?? new Set<"LONG" | "SHORT">();
+    directions.add(candidate.direction);
+    directionsByTicker.set(key, directions);
+  }
+  const conflictingTickers = new Set(
+    [...directionsByTicker]
+      .filter(([, directions]) => directions.size > 1)
+      .map(([ticker]) => ticker),
+  );
+  const conflictingCandidateIds = new Set(
+    eligible
+      .filter(({ candidate }) => conflictingTickers.has(tickerConflictKey(candidate.ticker)))
+      .map(({ candidate }) => candidate.id),
+  );
+  const effectiveEvaluated = evaluated.map((entry) => {
+    if (!conflictingCandidateIds.has(entry.candidate.id)) return entry;
+    return {
+      ...entry,
+      decision: {
+        status: "CONFLICT",
+        reasons: [...entry.decision.reasons, "CONFLICT: opposing LONG and SHORT signals for the same underlying"],
+      },
+    };
+  });
+  const conflictFreeEligible = eligible.filter(
+    ({ candidate }) => !conflictingTickers.has(tickerConflictKey(candidate.ticker)),
+  );
   const selectedIds = new Set<number>();
-  const selectedTickerDirection = new Map<string, "LONG" | "SHORT">();
 
-  // Group order is policy-versioned and resolves opposing signals consistently.
+  // Ranking and source balance are unchanged; opposing underlying signals are
+  // excluded before ranking rather than arbitrarily preferring one direction.
   for (const market of ["SE", "US"] as const) {
     for (const direction of ["LONG", "SHORT"] as const) {
-      const pool = eligible
+      const pool = conflictFreeEligible
         .filter(({ candidate }) => candidate.market === market && candidate.direction === direction)
         .map(({ candidate }) => candidate);
       const ranked = selectSourceBalancedCandidates(pool, pool.length);
@@ -98,11 +166,9 @@ export function buildTop3SelectionSnapshot(
       let groupSelected = 0;
       for (const candidate of ranked) {
         const key = tickerConflictKey(candidate.ticker);
-        const priorDirection = selectedTickerDirection.get(key);
-        if (seenGroupTickers.has(key) || (priorDirection && priorDirection !== direction)) continue;
+        if (seenGroupTickers.has(key)) continue;
         seenGroupTickers.add(key);
         selectedIds.add(candidate.id);
-        if (!priorDirection) selectedTickerDirection.set(key, direction);
         groupSelected++;
         if (groupSelected === 3) break;
       }
@@ -112,7 +178,7 @@ export function buildTop3SelectionSnapshot(
   const eligibleRanks = new Map<number, number>();
   for (const market of ["SE", "US"] as const) {
     for (const direction of ["LONG", "SHORT"] as const) {
-      const pool = eligible
+      const pool = conflictFreeEligible
         .filter(({ candidate }) => candidate.market === market && candidate.direction === direction)
         .map(({ candidate }) => candidate);
       selectSourceBalancedCandidates(pool, pool.length)
@@ -120,7 +186,7 @@ export function buildTop3SelectionSnapshot(
     }
   }
 
-  return evaluated.map(({ candidate, review, decision, score }) => ({
+  return effectiveEvaluated.map(({ candidate, review, decision, score }) => ({
     sessionId,
     candidateId: candidate.id,
     ticker: candidate.ticker,

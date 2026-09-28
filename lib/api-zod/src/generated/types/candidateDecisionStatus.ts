@@ -15,4 +15,5 @@ export const CandidateDecisionStatus = {
   BLOCKED: 'BLOCKED',
   INVALID: 'INVALID',
   STALE: 'STALE',
+  CONFLICT: 'CONFLICT',
 } as const;

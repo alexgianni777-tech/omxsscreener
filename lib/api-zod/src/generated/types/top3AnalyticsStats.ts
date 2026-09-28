@@ -11,14 +11,55 @@ export interface Top3AnalyticsStats {
   totalSessions: number;
   availableSessions: number;
   unavailableSessions: number;
+  /** Sessions with any recorded performance, retained for compatibility. */
   completedSessions: number;
+  /** Total picks from available immutable Top 3 selection snapshots. */
+  selectedTrades: number;
+  /** Selected picks with valid recorded realized performance; TIME_EXIT requires actual recorded performance. */
+  resolvedTrades: number;
+  /** Selected picks without valid performance, excluding explicit SKIP outcomes. */
+  pendingTrades: number;
+  /** Explicit SKIP picks; excluded from performance calculations and not treated as trades. */
+  excludedTrades: number;
+  /**
+     * Resolved picks divided by all selected picks, or null when no picks were selected.
+     * @nullable
+     */
+  resolutionRate: number | null;
+  /** Available sessions with at least one pick and no pending picks; explicit SKIP outcomes do not block maturity. */
+  maturedSessions: number;
   totalTrades: number;
   wins: number;
   losses: number;
   /** @nullable */
   winRate: number | null;
   totalR: number;
-  /** @nullable */
+  /**
+     * Primary expected value (mean R/trade) for the fully matured session cohort only.
+     * @nullable
+     */
   avgRPerTrade: number | null;
+  /**
+     * Primary expected value (mean R/trade) for the fully matured session cohort only.
+     * @nullable
+     */
+  expectedValue: number | null;
+  /** Recorded-performance picks across all available sessions, including sessions that have not matured. */
+  resolvedOnlyTrades: number;
+  resolvedOnlyWins: number;
+  resolvedOnlyLosses: number;
+  /**
+     * Win rate among resolved-only picks; pending picks are excluded from this separate, preliminary cohort.
+     * @nullable
+     */
+  resolvedOnlyWinRate: number | null;
+  /**
+     * Mean R among resolved-only picks; pending picks are excluded from this separate, preliminary cohort.
+     * @nullable
+     */
+  resolvedOnlyExpectedValue: number | null;
+  resolvedOnlyTotalR: number;
+  /** @nullable */
+  resolvedOnlyAvgRPerTrade: number | null;
   byDirection: Top3AnalyticsStatsByDirection;
 }

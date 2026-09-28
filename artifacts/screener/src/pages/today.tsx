@@ -14,6 +14,7 @@ import {
   Target, Settings2, CheckCircle2, XCircle, RefreshCw, Zap, AlertTriangle,
   Star,
 } from "lucide-react";
+import { edgeAiMetrics } from "../lib/edgeAiMetrics";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const api = (p: string) => `${BASE}/api${p}`;
@@ -69,9 +70,15 @@ type Candidate = {
   earningsInDays: number | null;
   market: "SE" | "US" | null;
   signalSource: "edgeai" | "telegram" | "manual" | "screener" | null;
-  pctB: number; // EdgeAI sample size (number of historical observations)
+  edgeWinRate?: number | null;
+  edgeExpectancyR?: number | null;
+  edgeSampleN?: number | null;
+  signalAgeBars?: number | null;
+  maxHoldDays?: number | null;
+  pctB: number;
   volMultiplier: number;
   volumeAsOf?: string | null;
+  signalDate?: string | null;
   signalRsi?: number | null;
   signalGapPct?: number | null;
   review?: { status: "APPROVED" | "WARN" | "BLOCKED"; reasons: string[] };
@@ -105,8 +112,14 @@ type Session = {
   candidates: Candidate[];
   top3SelectionSnapshot?: {
     available: boolean;
+    state: "AVAILABLE" | "WAITING_FOR_CUTOFF" | "EVALUATING" | "MISSING_SOURCES" | "LEGACY_UNAVAILABLE";
+    unavailableReason: string | null;
     selectedAt: string | null;
     policyVersion: string | null;
+    cutoffAt: string | null;
+    evaluatedAt: string | null;
+    participatingSources: string[] | null;
+    requiredSources: string[];
   };
   sessionReview?: { status: "APPROVED" | "WARN" | "BLOCKED"; reasons: string[]; tradableCount: number };
 };
@@ -477,7 +490,11 @@ export function Today() {
                 <span>
                   {session.top3SelectionSnapshot?.available
                     ? `Fryst officiellt urval · ${session.top3SelectionSnapshot.policyVersion}`
-                    : "Officiellt Top 3-urval saknas"}
+                    : session.top3SelectionSnapshot?.state === "WAITING_FOR_CUTOFF"
+                      ? "Officiellt Top 3 fryses kl. 16:30 svensk tid"
+                      : session.top3SelectionSnapshot?.state === "MISSING_SOURCES"
+                        ? "Officiellt Top 3 otillgängligt · källa saknades vid 16:30"
+                        : "Officiellt Top 3-urval saknas"}
                 </span>
                 {session.createdAt && (
                   <span className="opacity-60">
@@ -530,7 +547,7 @@ export function Today() {
                 ? `Officiellt Top 3-urval saknas för äldre session ${session.date}; historiska picks räknas inte om eller återskapas.`
                 : `Senaste sessionen är från ${new Date(`${session.date}T12:00:00`).toLocaleDateString("sv-SE", { weekday: "long", day: "numeric", month: "short" })}. Inga signaler valdes som officiella picks i snapshoten. En ny signal kontrolleras automatiskt var 5:e minut.`
               : session && !session.top3SelectionSnapshot?.available
-                ? "Officiellt Top 3-urval saknas för den här sessionen. Nya importers signal-time-beslut sparas framöver."
+                ? session.top3SelectionSnapshot?.unavailableReason ?? "Officiellt Top 3-urval saknas för den här sessionen."
               : session?.sessionReview?.status === "BLOCKED"
                 ? "Ingen kvalificerad trade idag — signalerna stoppades av risk- och datakvalitetsregler."
                 : "Inga picks idag ännu — kontrolleras automatiskt var 5:e minut från börsöppningen kl 09:00."}
@@ -591,6 +608,7 @@ export function Today() {
             const lossPnl = allocatedRisk != null ? Math.round(-allocatedRisk) : null;
             const quote = quotes[candidate.ticker];
             const autoHit = isToday && !isDone ? autoDetectOutcome(candidate) : null;
+            const edgeMetrics = edgeAiMetrics(candidate);
 
             // price bar: where live price sits between stop and target
             const priceBarPct = quote?.livePrice != null ? (() => {
@@ -690,11 +708,17 @@ export function Today() {
                     </div>
                     <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-x-2">
                       <span>Pick #{i + 1} · R:R {candidate.rr.toFixed(1)}</span>
-                      {session?.source === "edgeai" && candidate.perf1m > 0 && <span>WR {Math.round(candidate.perf1m)}%</span>}
-                      {session?.source === "edgeai" && candidate.rsi > 0 && <span>E {(candidate.rsi / 100).toFixed(2)}R</span>}
-                      {session?.source === "edgeai" && candidate.pctB > 0 && <span>{Math.round(candidate.pctB)} obs</span>}
+                      {edgeMetrics.isEdgeAI && (
+                        <span data-testid={`edgeai-metrics-${candidate.id}`}>
+                          EdgeAI · WR {edgeMetrics.winRate == null ? "okänd" : `${Math.round(edgeMetrics.winRate * 100)}%`}
+                          {" · E[R] "}{edgeMetrics.expectancyR == null ? "okänd" : `${edgeMetrics.expectancyR >= 0 ? "+" : ""}${edgeMetrics.expectancyR.toFixed(2)}R`}
+                          {" · N "}{edgeMetrics.sampleN == null ? "okänd" : Math.round(edgeMetrics.sampleN)}
+                          {" · ålder "}{edgeMetrics.signalAgeBars == null ? "okänd" : `${edgeMetrics.signalAgeBars} bars`}
+                          {" · max "}{edgeMetrics.maxHoldDays == null ? "okänd" : `${edgeMetrics.maxHoldDays} dagar`}
+                        </span>
+                      )}
                       <span>Volym {candidate.volMultiplier > 0
-                        ? `${candidate.volMultiplier.toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}x · ${candidate.volumeAsOf || "datum saknas"}`
+                        ? `${candidate.volMultiplier.toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}x · stängd ${candidate.volumeAsOf || "datum saknas"}${candidate.volumeAsOf && candidate.signalDate && candidate.volumeAsOf < candidate.signalDate ? " (före signal)" : ""}`
                         : "saknas"}</span>
                       {candidate.review?.status === "WARN" && <span className="text-amber-500">⚠ granska</span>}
                     </div>

@@ -172,7 +172,7 @@ paths:
       summary: Official immutable signal-time Top 3 performance
       responses:
         "200":
-          description: Official Top 3 results; legacy sessions without snapshots are unavailable and excluded from performance.
+          description: Official Top 3 results with coverage and mature-cohort performance. Primary EV/win rate use fully resolved sessions; unresolved picks are excluded from the separate resolved-only cohort. Legacy sessions without snapshots are unavailable and excluded from performance.
           content:
             application/json:
               schema:
@@ -1007,7 +1007,7 @@ components:
       properties:
         status:
           type: string
-          enum: [TRADEABLE, WAIT, BLOCKED, INVALID, STALE]
+          enum: [TRADEABLE, WAIT, BLOCKED, INVALID, STALE, CONFLICT]
         reasons:
           type: array
           items:
@@ -1046,15 +1046,36 @@ components:
 
     Top3SelectionSnapshotStatus:
       type: object
-      required: [available, selectedAt, policyVersion]
+      required: [available, state, unavailableReason, selectedAt, policyVersion, cutoffAt, evaluatedAt, participatingSources, requiredSources]
       properties:
         available:
           type: boolean
+        state:
+          type: string
+          enum: [AVAILABLE, WAITING_FOR_CUTOFF, EVALUATING, MISSING_SOURCES, LEGACY_UNAVAILABLE]
+        unavailableReason:
+          type: ["string", "null"]
         selectedAt:
           type: ["string", "null"]
           format: date-time
         policyVersion:
           type: ["string", "null"]
+        cutoffAt:
+          type: ["string", "null"]
+          format: date-time
+        evaluatedAt:
+          type: ["string", "null"]
+          format: date-time
+        participatingSources:
+          type: ["array", "null"]
+          items:
+            type: string
+            enum: [telegram, edgeai]
+        requiredSources:
+          type: array
+          items:
+            type: string
+            enum: [telegram, edgeai]
 
     SessionReview:
       allOf:
@@ -1261,7 +1282,7 @@ components:
 
     Top3AnalyticsSession:
       type: object
-      required: [date, sessionId, source, selectionStatus, selectionUnavailableReason, selectedAt, policyVersion, picks, longPicks, shortPicks, edgeWinRate, sessionR, cumulativeR]
+      required: [date, sessionId, source, selectionStatus, selectionUnavailableReason, cutoffState, cutoffAt, cutoffEvaluatedAt, participatingSources, requiredSources, selectedAt, policyVersion, picks, longPicks, shortPicks, matured, edgeWinRate, sessionR, cumulativeR]
       properties:
         date:
           type: string
@@ -1275,6 +1296,25 @@ components:
           enum: [AVAILABLE, UNAVAILABLE]
         selectionUnavailableReason:
           type: ["string", "null"]
+        cutoffState:
+          type: string
+          enum: [AVAILABLE, WAITING_FOR_CUTOFF, EVALUATING, MISSING_SOURCES, LEGACY_UNAVAILABLE]
+        cutoffAt:
+          type: ["string", "null"]
+          format: date-time
+        cutoffEvaluatedAt:
+          type: ["string", "null"]
+          format: date-time
+        participatingSources:
+          type: ["array", "null"]
+          items:
+            type: string
+            enum: [telegram, edgeai]
+        requiredSources:
+          type: array
+          items:
+            type: string
+            enum: [telegram, edgeai]
         selectedAt:
           type: ["string", "null"]
           format: date-time
@@ -1292,6 +1332,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Top3AnalyticsPick"
+        matured:
+          type: boolean
+          description: True when this available session has at least one selected pick and every selected pick has recorded performance or was explicitly skipped.
         edgeWinRate:
           type: ["number", "null"]
         sessionR:
@@ -1301,7 +1344,7 @@ components:
 
     Top3AnalyticsStats:
       type: object
-      required: [totalSessions, availableSessions, unavailableSessions, completedSessions, totalTrades, wins, losses, winRate, totalR, avgRPerTrade, byDirection]
+      required: [totalSessions, availableSessions, unavailableSessions, completedSessions, selectedTrades, resolvedTrades, pendingTrades, excludedTrades, resolutionRate, maturedSessions, totalTrades, wins, losses, winRate, totalR, avgRPerTrade, expectedValue, resolvedOnlyTrades, resolvedOnlyWins, resolvedOnlyLosses, resolvedOnlyWinRate, resolvedOnlyExpectedValue, resolvedOnlyTotalR, resolvedOnlyAvgRPerTrade, byDirection]
       properties:
         totalSessions:
           type: number
@@ -1311,6 +1354,25 @@ components:
           type: number
         completedSessions:
           type: number
+          description: Sessions with any recorded performance, retained for compatibility.
+        selectedTrades:
+          type: number
+          description: Total picks from available immutable Top 3 selection snapshots.
+        resolvedTrades:
+          type: number
+          description: Selected picks with valid recorded realized performance; TIME_EXIT requires actual recorded performance.
+        pendingTrades:
+          type: number
+          description: Selected picks without valid performance, excluding explicit SKIP outcomes.
+        excludedTrades:
+          type: number
+          description: Explicit SKIP picks; excluded from performance calculations and not treated as trades.
+        resolutionRate:
+          type: ["number", "null"]
+          description: Resolved picks divided by all selected picks, or null when no picks were selected.
+        maturedSessions:
+          type: number
+          description: Available sessions with at least one pick and no pending picks; explicit SKIP outcomes do not block maturity.
         totalTrades:
           type: number
         wins:
@@ -1322,6 +1384,27 @@ components:
         totalR:
           type: number
         avgRPerTrade:
+          type: ["number", "null"]
+          description: Primary expected value (mean R/trade) for the fully matured session cohort only.
+        expectedValue:
+          type: ["number", "null"]
+          description: Primary expected value (mean R/trade) for the fully matured session cohort only.
+        resolvedOnlyTrades:
+          type: number
+          description: Recorded-performance picks across all available sessions, including sessions that have not matured.
+        resolvedOnlyWins:
+          type: number
+        resolvedOnlyLosses:
+          type: number
+        resolvedOnlyWinRate:
+          type: ["number", "null"]
+          description: Win rate among resolved-only picks; pending picks are excluded from this separate, preliminary cohort.
+        resolvedOnlyExpectedValue:
+          type: ["number", "null"]
+          description: Mean R among resolved-only picks; pending picks are excluded from this separate, preliminary cohort.
+        resolvedOnlyTotalR:
+          type: number
+        resolvedOnlyAvgRPerTrade:
           type: ["number", "null"]
         byDirection:
           type: object

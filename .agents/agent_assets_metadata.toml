@@ -84,3 +84,31 @@ mtime_ms = 1790581251058
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/c2af421d-5042-4a8f-ad0b-fa2408ef3310/bc16350d-0e64-4b35-b5de-ce3fdda4547b"
 storage_version_token = "1790581265047634"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "_uAaD8oPKci1llN9TaUg7"
+uri = "file://exports/omxs30-screener-source-2026-09-28-final.zip"
+type = "unspecified"
+title = "OMXS30 Screener – fullständig källkod (ZIP)"
+description = "Källkod, tester, migrationer och genererade API-kontrakt efter sista correctness-passet."
+logical_id = "a6244373-d3af-4ed2-b36b-312603c75360"
+content_hash = "sha256:3f4ba4bb5be4a83d5363f194d5ff81835d2d3b6857028253fb76ef6013ead3aa"
+size = 466212
+mtime_ms = 1790587692941
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/a6244373-d3af-4ed2-b36b-312603c75360/41889e0a-4416-4566-a200-972d00b8c029"
+storage_version_token = "1790587709912051"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "lI0fCfi_4IPrqx9VzER5A"
+uri = "file://exports/omxs30-screener-full-code-2026-09-28-final.txt"
+type = "text"
+title = "OMXS30 Screener – källkod som text"
+description = "Samma slutliga källkod med tydliga filavgränsningar för granskning."
+logical_id = "65978ba7-a7bd-4a89-bd84-ef9f914cb890"
+content_hash = "sha256:dc5a19331603442c5a2c91ca8163b87094dd7f5edbdb7b26fc16fda9d2fc3d12"
+size = 1702842
+mtime_ms = 1790587692853
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/65978ba7-a7bd-4a89-bd84-ef9f914cb890/b5ce1cd1-2929-4191-afb4-02d9bbf86627"
+storage_version_token = "1790587710645277"
+content_type = "text/plain"

@@ -6,6 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { Top3AnalyticsPick } from './top3AnalyticsPick';
+import type { Top3AnalyticsSessionCutoffState } from './top3AnalyticsSessionCutoffState';
+import type { Top3AnalyticsSessionParticipatingSourcesItem } from './top3AnalyticsSessionParticipatingSourcesItem';
+import type { Top3AnalyticsSessionRequiredSourcesItem } from './top3AnalyticsSessionRequiredSourcesItem';
 import type { Top3AnalyticsSessionSelectionStatus } from './top3AnalyticsSessionSelectionStatus';
 
 export interface Top3AnalyticsSession {
@@ -16,6 +19,14 @@ export interface Top3AnalyticsSession {
   selectionStatus: Top3AnalyticsSessionSelectionStatus;
   /** @nullable */
   selectionUnavailableReason: string | null;
+  cutoffState: Top3AnalyticsSessionCutoffState;
+  /** @nullable */
+  cutoffAt: Date | null;
+  /** @nullable */
+  cutoffEvaluatedAt: Date | null;
+  /** @nullable */
+  participatingSources: Top3AnalyticsSessionParticipatingSourcesItem[] | null;
+  requiredSources: Top3AnalyticsSessionRequiredSourcesItem[];
   /** @nullable */
   selectedAt: Date | null;
   /** @nullable */
@@ -23,6 +34,8 @@ export interface Top3AnalyticsSession {
   picks: Top3AnalyticsPick[];
   longPicks: Top3AnalyticsPick[];
   shortPicks: Top3AnalyticsPick[];
+  /** True when this available session has at least one selected pick and every selected pick has recorded performance or was explicitly skipped. */
+  matured: boolean;
   /** @nullable */
   edgeWinRate: number | null;
   /** @nullable */

@@ -12,6 +12,8 @@ import {
   top3SelectionSnapshotsTable,
 } from "@workspace/db";
 import { resolveTradePerformance } from "../lib/tradePerformance.ts";
+import { summarizeTop3Cohorts } from "../lib/top3CohortAnalytics.ts";
+import { describeTop3Snapshot } from "../lib/top3SnapshotStatus.ts";
 
 const router: IRouter = Router();
 
@@ -24,6 +26,11 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
       edgeWinRate: screenerSessionsTable.edgeWinRate,
       snapshotAt: screenerSessionsTable.top3SnapshotAt,
       policyVersion: screenerSessionsTable.top3PolicyVersion,
+      top3SnapshotAt: screenerSessionsTable.top3SnapshotAt,
+      top3PolicyVersion: screenerSessionsTable.top3PolicyVersion,
+      top3CutoffAt: screenerSessionsTable.top3CutoffAt,
+      top3CutoffEvaluatedAt: screenerSessionsTable.top3CutoffEvaluatedAt,
+      top3ParticipatingSources: screenerSessionsTable.top3ParticipatingSources,
     })
     .from(screenerSessionsTable)
     .orderBy(asc(screenerSessionsTable.date));
@@ -52,35 +59,17 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
   }
 
   let cumulativeR = 0;
-  let totalTrades = 0;
-  let wins = 0;
-  let losses = 0;
-  const byDirection = {
-    LONG: { totalTrades: 0, wins: 0, losses: 0, totalR: 0 },
-    SHORT: { totalTrades: 0, wins: 0, losses: 0, totalR: 0 },
-  };
 
   const sessionResults = sessions.map((session) => {
+    const snapshotStatus = describeTop3Snapshot(session);
     const snapshots = session.snapshotAt
       ? (snapshotsBySession.get(session.id) ?? []).filter((snapshot) => snapshot.selected)
       : [];
     const mapPick = (snapshot: (typeof allSnapshots)[number]) => {
       const candidate = candidateById.get(snapshot.candidateId);
       const performance = candidate ? resolveTradePerformance(candidate) : null;
-      const direction = snapshot.direction === "SHORT" ? "SHORT" : "LONG";
       if (performance) {
-        totalTrades++;
         cumulativeR += performance.r;
-        const bucket = byDirection[direction];
-        bucket.totalTrades++;
-        bucket.totalR += performance.r;
-        if (performance.result === "WIN") {
-          wins++;
-          bucket.wins++;
-        } else if (performance.result === "LOSS") {
-          losses++;
-          bucket.losses++;
-        }
       }
       return {
         candidateId: snapshot.candidateId,
@@ -113,29 +102,33 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
       date: session.date,
       sessionId: session.id,
       source: session.source ?? null,
-      selectionStatus: session.snapshotAt ? "AVAILABLE" : "UNAVAILABLE",
-      selectionUnavailableReason: session.snapshotAt ? null : "No signal-time Top 3 snapshot was recorded for this legacy session.",
+      selectionStatus: snapshotStatus.available ? "AVAILABLE" as const : "UNAVAILABLE" as const,
+      selectionUnavailableReason: snapshotStatus.unavailableReason,
+      cutoffState: snapshotStatus.state,
+      cutoffAt: snapshotStatus.cutoffAt,
+      cutoffEvaluatedAt: snapshotStatus.evaluatedAt,
+      participatingSources: snapshotStatus.participatingSources,
+      requiredSources: snapshotStatus.requiredSources,
       selectedAt: session.snapshotAt,
       policyVersion: session.policyVersion,
       picks,
       longPicks: picks.filter((pick) => pick.direction === "LONG"),
       shortPicks: picks.filter((pick) => pick.direction === "SHORT"),
+      matured: picks.length > 0 && picks.every((pick) =>
+        pick.outcome === "SKIP" || (pick.r != null && Number.isFinite(pick.r)),
+      ),
       edgeWinRate: session.edgeWinRate ?? null,
       sessionR: sessionHasResolved ? sessionR : null,
       cumulativeR,
     };
   });
 
-  const winRate = totalTrades > 0 ? wins / totalTrades : null;
-  const avgRPerTrade = totalTrades > 0 ? cumulativeR / totalTrades : null;
-  const summarizeDirection = (bucket: { totalTrades: number; wins: number; losses: number; totalR: number }) => ({
-    totalTrades: bucket.totalTrades,
-    wins: bucket.wins,
-    losses: bucket.losses,
-    winRate: bucket.totalTrades > 0 ? bucket.wins / bucket.totalTrades : null,
-    totalR: bucket.totalR,
-    avgRPerTrade: bucket.totalTrades > 0 ? bucket.totalR / bucket.totalTrades : null,
-  });
+  const cohorts = summarizeTop3Cohorts(sessionResults.map((session) => ({
+    selectionStatus: session.selectionStatus as "AVAILABLE" | "UNAVAILABLE",
+    picks: session.picks,
+  })));
+  const { totalTrades, wins, losses, winRate, totalR, expectedValue } = cohorts.matureCohort;
+  const resolvedOnly = cohorts.resolvedOnly;
 
   res.json({
     sessions: sessionResults,
@@ -144,15 +137,29 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
       availableSessions: sessions.filter((session) => session.snapshotAt != null).length,
       unavailableSessions: sessions.filter((session) => session.snapshotAt == null).length,
       completedSessions: sessionResults.filter((session) => session.sessionR !== null).length,
+      selectedTrades: cohorts.selectedTrades,
+      resolvedTrades: cohorts.resolvedTrades,
+      pendingTrades: cohorts.pendingTrades,
+      excludedTrades: cohorts.excludedTrades,
+      resolutionRate: cohorts.resolutionRate,
+      maturedSessions: cohorts.maturedSessions,
       totalTrades,
       wins,
       losses,
       winRate,
-      totalR: cumulativeR,
-      avgRPerTrade,
+      totalR,
+      avgRPerTrade: expectedValue,
+      expectedValue,
+      resolvedOnlyTrades: resolvedOnly.totalTrades,
+      resolvedOnlyWins: resolvedOnly.wins,
+      resolvedOnlyLosses: resolvedOnly.losses,
+      resolvedOnlyWinRate: resolvedOnly.winRate,
+      resolvedOnlyExpectedValue: resolvedOnly.expectedValue,
+      resolvedOnlyTotalR: resolvedOnly.totalR,
+      resolvedOnlyAvgRPerTrade: resolvedOnly.expectedValue,
       byDirection: {
-        LONG: summarizeDirection(byDirection.LONG),
-        SHORT: summarizeDirection(byDirection.SHORT),
+        LONG: cohorts.byDirection.LONG,
+        SHORT: cohorts.byDirection.SHORT,
       },
     },
   });
@@ -164,12 +171,26 @@ function emptyStats() {
     availableSessions: 0,
     unavailableSessions: 0,
     completedSessions: 0,
+    selectedTrades: 0,
+    resolvedTrades: 0,
+    pendingTrades: 0,
+    excludedTrades: 0,
+    resolutionRate: null,
+    maturedSessions: 0,
     totalTrades: 0,
     wins: 0,
     losses: 0,
     winRate: null,
     totalR: 0,
     avgRPerTrade: null,
+    expectedValue: null,
+    resolvedOnlyTrades: 0,
+    resolvedOnlyWins: 0,
+    resolvedOnlyLosses: 0,
+    resolvedOnlyWinRate: null,
+    resolvedOnlyExpectedValue: null,
+    resolvedOnlyTotalR: 0,
+    resolvedOnlyAvgRPerTrade: null,
     byDirection: {
       LONG: { totalTrades: 0, wins: 0, losses: 0, winRate: null, totalR: 0, avgRPerTrade: null },
       SHORT: { totalTrades: 0, wins: 0, losses: 0, winRate: null, totalR: 0, avgRPerTrade: null },

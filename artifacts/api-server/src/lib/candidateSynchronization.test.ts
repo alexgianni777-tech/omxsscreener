@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { top3SelectionSnapshotsTable } from "@workspace/db";
+import { screenerSessionsTable, top3SelectionSnapshotsTable } from "@workspace/db";
 
 import {
   candidateIdentity,
@@ -15,6 +15,7 @@ import {
   synchronizeCandidates,
 } from "./candidateSynchronization.ts";
 import { reviewCandidate } from "./screeningReview.ts";
+import { top3CutoffForDate } from "./top3SelectionPolicyCore.ts";
 
 type Row = {
   market: "SE" | "US";
@@ -36,6 +37,7 @@ function synchronizationTx(
   candidates: any[],
   snapshots: Array<{ candidateId: number; selected: boolean }>,
   incoming: any[],
+  session?: any,
 ) {
   const tx: any = {
     select: () => {
@@ -55,6 +57,8 @@ function synchronizationTx(
           return Promise.resolve(
             selectedTable === top3SelectionSnapshotsTable
               ? snapshots.filter((snapshot) => snapshot.selected)
+              : selectedTable === screenerSessionsTable
+                ? (session ? [session] : [])
               : candidates,
           ).then(resolve, reject);
         },
@@ -190,6 +194,55 @@ test("unsnapshotted legacy candidates retain ordinary update and removal behavio
   assert.equal(candidates.find((candidate) => candidate.id === 301)?.entryPrice, 125);
   assert.deepEqual(diff.updated.map((entry) => entry.ticker), ["LEGACY-UPDATE"]);
   assert.deepEqual(diff.removed.map((entry) => entry.ticker), ["LEGACY-REMOVE"]);
+});
+
+test("pre-cutoff reimports may correct source inputs, but post-cutoff updates are frozen", async () => {
+  const date = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Stockholm",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const cutoff = top3CutoffForDate(date);
+  const original = syncCandidate(310, "COHORT", {
+    signalSource: "edgeai",
+    signalDate: date,
+    createdAt: new Date(cutoff.getTime() - 60 * 60_000),
+    entryPrice: 100,
+  });
+  const beforeCutoffIncoming = [syncCandidate(999, "COHORT", {
+    signalSource: "edgeai",
+    signalDate: date,
+    entryPrice: 125,
+  })];
+  const txSession = {
+    date,
+    top3SnapshotAt: null,
+    top3CutoffEvaluatedAt: null,
+  };
+  const preCutoff = await synchronizeCandidates(
+    synchronizationTx([original], [], beforeCutoffIncoming, txSession),
+    77,
+    beforeCutoffIncoming,
+    new Date(cutoff.getTime() - 1),
+  );
+
+  assert.equal(preCutoff.candidates[0].entryPrice, 125);
+  assert.deepEqual(preCutoff.diff.updated.map((entry) => entry.ticker), ["COHORT"]);
+
+  const afterCutoffIncoming = [syncCandidate(1_000, "COHORT", {
+    signalSource: "edgeai",
+    signalDate: date,
+    entryPrice: 150,
+  })];
+  const postCutoff = await synchronizeCandidates(
+    synchronizationTx(preCutoff.candidates, [], afterCutoffIncoming, txSession),
+    77,
+    afterCutoffIncoming,
+    new Date(cutoff.getTime() + 5 * 60_000),
+  );
+  assert.equal(postCutoff.candidates[0].entryPrice, 125);
+  assert.deepEqual(postCutoff.diff.updated, []);
 });
 
 test("explicit reimport policy preserves US pending and removes absent SE pending", () => {

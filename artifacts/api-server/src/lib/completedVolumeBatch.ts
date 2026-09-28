@@ -1,4 +1,4 @@
-import { fetchCompletedVolumeMultiplier } from "./completedVolume";
+import { fetchCompletedVolumeMultiplier, fetchPriorCompletedVolumeMultiplier, isCurrentSessionIncomplete } from "./completedVolume";
 import { resolveYahooTicker } from "./omxs30TickerMap";
 import { logger } from "./logger";
 
@@ -25,12 +25,12 @@ export async function fetchCompletedVolumeBatch(
         return;
       }
       try {
-        const result = await fetchCompletedVolumeMultiplier(
-          yf,
-          resolveYahooTicker(request.ticker),
-          request.asOfDate,
-          request.market,
-        );
+        const ticker = resolveYahooTicker(request.ticker);
+        // A 16:30 signal cannot use a partial current-day daily volume bar.
+        // The prior *completed* bar is context, recorded with its real date.
+        const result = isCurrentSessionIncomplete(request.asOfDate, request.market)
+          ? await fetchPriorCompletedVolumeMultiplier(yf, ticker, request.asOfDate)
+          : await fetchCompletedVolumeMultiplier(yf, ticker, request.asOfDate, request.market);
         if (result) results.set(completedVolumeKey(request), result);
         else logger.warn({ ...request }, "Completed Yahoo daily volume unavailable");
       } catch (err: any) {

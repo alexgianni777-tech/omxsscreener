@@ -6,20 +6,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { CandlestickChart } from "../components/CandlestickChart";
 import { AddToPortfolioModal } from "../components/AddToPortfolioModal";
+import { edgeAiMetrics, edgeAiScore } from "../lib/edgeAiMetrics";
 
-type Candidate = ApiCandidate & { volumeAsOf?: string | null };
-
-// ── Edge score helpers ────────────────────────────────────────────────────────
-// For EdgeAI sessions: rsi stores expectancyR × 100, pctB stores sample N,
-// and distFrom20dH stores signal age. Do not multiply by win rate again because
-// expectancy already includes the strategy's payoff and hit rate.
-function edgeScore(c: Candidate): number {
-  const expectancyR = c.rsi / 100; // stored as rsi×100
-  const reliability = c.pctB / (Math.max(0, c.pctB) + 20);
-  const maxHoldDays = c.category === "SQUEEZE" ? 15 : c.category === "STUDS" ? 5 : 10;
-  const ageDecay = Math.max(0, 1 - Math.max(0, c.distFrom20dH) / maxHoldDays);
-  return expectancyR * reliability * ageDecay;
-}
+type Candidate = ApiCandidate & {
+  volumeAsOf?: string | null;
+  edgeWinRate?: number | null;
+  edgeExpectancyR?: number | null;
+  edgeSampleN?: number | null;
+  signalAgeBars?: number | null;
+  maxHoldDays?: number | null;
+};
 
 function edgeScoreColor(score: number): string {
   if (score >= 0.15) return "text-success border-success/30 bg-success/10";
@@ -229,7 +225,7 @@ export function SessionDetail() {
   }
 
   const { marketWeather, candidates } = session;
-  const isEdgeAI = session.source === "edgeai";
+  const isEdgeAI = candidates.some((candidate) => candidate.signalSource === "edgeai");
   const categories = ["MOMENTUM", "SQUEEZE", "STUDS", "WEAKEST"] as const;
   const top3Snapshot = (session as any).top3SelectionSnapshot;
   const totalLongStars = Object.entries(pickedIdsByGroup).filter(([key]) => key.endsWith(":LONG")).reduce((count, [, ids]) => count + ids.size, 0);
@@ -287,8 +283,8 @@ export function SessionDetail() {
           : "border-amber-500/30 bg-amber-500/5 text-amber-700"
       }`}>
         {top3Snapshot?.available
-          ? `Officiellt Top 3 fryst ${new Date(top3Snapshot.selectedAt).toLocaleString("sv-SE")} · ${top3Snapshot.policyVersion}. Stjärnor är separata anteckningar.`
-          : "Officiellt Top 3-urval saknas för denna session. Historiken räknas inte om; stjärnor nedan är endast anteckningar."}
+          ? `Officiellt Top 3 fryst ${new Date(top3Snapshot.selectedAt).toLocaleString("sv-SE")} · ${top3Snapshot.policyVersion}. Källor: ${top3Snapshot.participatingSources?.join(" + ") || "äldre policy"}. Stjärnor är separata anteckningar.`
+          : `${top3Snapshot?.unavailableReason ?? "Officiellt Top 3-urval saknas för denna session."} Historiken räknas inte om; stjärnor nedan är endast anteckningar.`}
       </div>
 
       {/* Market Weather Banner */}
@@ -407,13 +403,15 @@ export function SessionDetail() {
       <div className="space-y-12">
         {categories.map(cat => {
           let catCandidates = candidates.filter(c => c.category === cat);
-          // For EdgeAI sessions: sort by composite edge score (winRate × expectancyR) descending
-          if (catCandidates.some((candidate) => (candidate.signalSource ?? session.source) === "edgeai")) {
+          // EdgeAI candidates sort by their dedicated edge score; legacy metrics
+          // are deliberately not interpreted as EdgeAI values.
+          if (catCandidates.some((candidate) => candidate.signalSource === "edgeai")) {
             catCandidates = [...catCandidates].sort((a, b) => {
-              const aEdge = (a.signalSource ?? session.source) === "edgeai";
-              const bEdge = (b.signalSource ?? session.source) === "edgeai";
+              const aEdge = a.signalSource === "edgeai";
+              const bEdge = b.signalSource === "edgeai";
               if (aEdge !== bEdge) return aEdge ? -1 : 1;
-              return aEdge ? edgeScore(b) - edgeScore(a) : a.rank - b.rank;
+              if (!aEdge) return a.rank - b.rank;
+              return (edgeAiScore(b) ?? -Infinity) - (edgeAiScore(a) ?? -Infinity) || a.rank - b.rank;
             });
           } else if (cat === "MOMENTUM") {
             // #58: Momentum should reward stocks with actual price gains, not just
@@ -433,7 +431,7 @@ export function SessionDetail() {
                 <div className="w-2 h-2 rounded-full bg-primary"></div>
                 {cat}
                 <span className="ml-2 text-sm font-normal text-muted-foreground px-2 py-0.5 bg-muted rounded-full">{catCandidates.length}</span>
-                {catCandidates.some((candidate) => (candidate.signalSource ?? session.source) === "edgeai") && <span className="ml-1 text-[10px] text-muted-foreground">sorterat efter sannolikhet</span>}
+                {catCandidates.some((candidate) => candidate.signalSource === "edgeai") && <span className="ml-1 text-[10px] text-muted-foreground">sorterat efter EdgeAI-data</span>}
               </h3>
               
               <div className="grid gap-4">
@@ -444,7 +442,7 @@ export function SessionDetail() {
                     sessionId={id}
                     quote={quoteMap[candidate.ticker]}
                     daysOld={daysOld}
-                    isEdgeAI={(candidate.signalSource ?? session.source) === "edgeai"}
+                    isEdgeAI={candidate.signalSource === "edgeai"}
                     rank={idx + 1}
                     isPicked={pickedIdsByGroup[pickGroupKey(candidate.market, candidate.direction)]?.has(candidate.id) ?? false}
                     pickedCount={pickedIdsByGroup[pickGroupKey(candidate.market, candidate.direction)]?.size ?? 0}
@@ -698,20 +696,15 @@ function CandidateRow({
     ? ((candidate.entryPrice - refPrice) / refPrice * 100)
     : null;
 
-  // EdgeAI per-candidate edge score
-  const score = edgeScore(candidate);
-  const expectancyR = candidate.rsi / 100;
-  // perf1m is stored as decimal (0–1) in EdgeAI sessions OR as integer percent (e.g. 49)
-  // depending on how the import was done. Guard against showing 4900 % instead of 49 %.
-  const winRatePct = candidate.perf1m > 1
-    ? Math.round(candidate.perf1m)           // already an integer percent
-    : Math.round(candidate.perf1m * 100);    // decimal 0–1
-  const sampleN = candidate.pctB;
-  const barsAgo = Math.round(candidate.distFrom20dH);
+  const edgeMetrics = edgeAiMetrics(candidate);
+  const score = edgeAiScore(candidate);
   const decision = candidate.decision;
 
   return (
-    <div className="bg-card border border-border rounded-lg shadow-sm text-sm group">
+    <div
+      className="bg-card border border-border rounded-lg shadow-sm text-sm group"
+      data-testid={isEdgeAI ? `edgeai-candidate-${candidate.id}` : undefined}
+    >
     <div className="p-4 flex flex-col 2xl:flex-row gap-4 2xl:items-stretch">
       
       {/* Identity & Core Metrics */}
@@ -791,9 +784,13 @@ function CandidateRow({
             )}
             {/* Edge probability score badge — only for EdgeAI sessions */}
             {isEdgeAI && (
-              <div className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold font-mono ${edgeScoreColor(score)}`}
-                   title={`Sannolikhet = WR × E[R] = ${winRatePct}% × ${expectancyR.toFixed(2)}R`}>
-                E[R] {expectancyR >= 0 ? "+" : ""}{expectancyR.toFixed(2)}
+              <div
+                className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold font-mono ${
+                  score == null ? "text-muted-foreground border-border bg-muted" : edgeScoreColor(score)
+                }`}
+                title={score == null ? "EdgeAI-score okänd: dedikerade fält saknas" : "EdgeAI-score baserad på dedikerad expectancy, sample size och signalålder"}
+              >
+                Edge {score == null ? "okänd" : score.toFixed(2)}
               </div>
             )}
             {isTargetFar && (
@@ -838,7 +835,7 @@ function CandidateRow({
           {isEdgeAI ? (
             <div>
               <span className="text-muted-foreground block text-[10px]">WIN%</span>
-              <span className="font-mono">{winRatePct}%</span>
+              <span className="font-mono">{edgeMetrics.winRate == null ? "okänd" : `${Math.round(edgeMetrics.winRate * 100)}%`}</span>
             </div>
           ) : (
             <div>
@@ -849,8 +846,10 @@ function CandidateRow({
           {isEdgeAI ? (
             <div>
               <span className="text-muted-foreground block text-[10px]">E[R]</span>
-              <span className={`font-mono font-semibold ${expectancyR > 0 ? "text-success" : "text-destructive"}`}>
-                {expectancyR >= 0 ? "+" : ""}{expectancyR.toFixed(2)}
+              <span className={`font-mono font-semibold ${
+                edgeMetrics.expectancyR == null ? "text-muted-foreground" : edgeMetrics.expectancyR > 0 ? "text-success" : "text-destructive"
+              }`}>
+                {edgeMetrics.expectancyR == null ? "okänd" : `${edgeMetrics.expectancyR >= 0 ? "+" : ""}${edgeMetrics.expectancyR.toFixed(2)}R`}
               </span>
             </div>
           ) : (
@@ -866,13 +865,21 @@ function CandidateRow({
           {isEdgeAI ? (
             <>
               <div>
-                <span className="text-muted-foreground block text-[10px]">N / {barsAgo}b</span>
-                <span className="font-mono">{sampleN > 0 ? Math.round(sampleN) : "—"}</span>
+                <span className="text-muted-foreground block text-[10px]">Sample N</span>
+                <span className="font-mono">{edgeMetrics.sampleN == null ? "okänd" : Math.round(edgeMetrics.sampleN)}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground block text-[10px]">Signalålder</span>
+                <span className="font-mono">{edgeMetrics.signalAgeBars == null ? "okänd" : `${edgeMetrics.signalAgeBars} bars`}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground block text-[10px]">Max innehav</span>
+                <span className="font-mono">{edgeMetrics.maxHoldDays == null ? "okänd" : `${edgeMetrics.maxHoldDays} dagar`}</span>
               </div>
               <div>
                 <span className="text-muted-foreground block text-[10px]">VOL</span>
                 <span className="font-mono">{candidate.volMultiplier > 0
-                  ? `${candidate.volMultiplier.toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}x · ${candidate.volumeAsOf || "datum saknas"}`
+                  ? `${candidate.volMultiplier.toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}x · stängd ${candidate.volumeAsOf || "datum saknas"}${candidate.volumeAsOf && candidate.signalDate && candidate.volumeAsOf < candidate.signalDate ? " (före signal)" : ""}`
                   : "saknas"}</span>
               </div>
             </>
@@ -880,7 +887,7 @@ function CandidateRow({
             <div>
               <span className="text-muted-foreground block text-[10px]">VOL</span>
               <span className="font-mono">{candidate.volMultiplier > 0
-                ? `${candidate.volMultiplier.toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}x · ${candidate.volumeAsOf || "datum saknas"}`
+                ? `${candidate.volMultiplier.toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}x · stängd ${candidate.volumeAsOf || "datum saknas"}${candidate.volumeAsOf && candidate.signalDate && candidate.volumeAsOf < candidate.signalDate ? " (före signal)" : ""}`
                 : "saknas"}</span>
             </div>
           )}

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { fetchCompletedVolumeMultiplier } from "./completedVolume.ts";
+import { fetchCompletedVolumeMultiplier, fetchPriorCompletedVolumeMultiplier } from "./completedVolume.ts";
+import { decideCandidate, reviewCandidate } from "./screeningReview.ts";
 
 type Bar = {
   date: Date;
@@ -65,6 +66,38 @@ test("matches the exact daily bar and compares its volume with the prior ten pos
   assert.equal(calls.length, 1);
   assert.equal(calls[0].ticker, "ABC.ST");
   assert.equal(calls[0].options.interval, "1d");
+});
+
+test("16:30 Monday signal uses Friday's verified volume, not an incomplete Monday bar", async () => {
+  const signalDate = "2026-09-28"; // Monday in Stockholm
+  const previous = "2026-09-25";
+  const bars = [...priorTradingDays(previous), day(previous, 1100), day(signalDate, 99_999)];
+  const { yf, calls } = fakeYahoo(bars);
+  const volume = await fetchPriorCompletedVolumeMultiplier(yf, "ABC.ST", signalDate);
+  assert.equal(volume?.asOf, previous);
+  assert.ok(volume && volume.multiplier > 0);
+  assert.equal(calls[0].options.period2.toISOString(), "2026-09-28T00:00:00.000Z");
+  // The recorded prior-day date is evidence; the current-day partial bar is never used.
+  const candidate = {
+    category: "MOMENTUM", direction: "LONG", rs3m: 5, perf1m: 4, rsi: 52,
+    signalRsi: null, signalGapPct: null,
+    volMultiplier: volume.multiplier, volumeAsOf: volume.asOf,
+    earningsInDays: 20, earningsKnowledge: "SIGNAL_TIME" as const,
+    entryPrice: 100, stopPrice: 95, targetPrice: 110, rr: 2, price: 100,
+    signalSource: "telegram", signalDate,
+  };
+  const review = reviewCandidate(candidate, null);
+  assert.equal(decideCandidate(candidate, review, signalDate, new Date("2026-09-28T14:30:00.000Z")).status, "TRADEABLE");
+});
+
+test("latest prior completed volume skips a holiday and fails when evidence is missing", async () => {
+  const previous = "2026-09-24";
+  const bars = [...priorTradingDays(previous), day(previous, 550)];
+  assert.deepEqual(await fetchPriorCompletedVolumeMultiplier(fakeYahoo(bars).yf, "ABC.ST", "2026-09-28"), {
+    multiplier: 1, asOf: previous,
+  });
+  assert.equal(await fetchPriorCompletedVolumeMultiplier(fakeYahoo(bars.slice(-6)).yf, "ABC.ST", "2026-09-28"), null);
+  assert.equal(await fetchPriorCompletedVolumeMultiplier(fakeYahoo(bars).yf, "ABC.ST", "2026-02-30"), null);
 });
 
 test("returns null if the exact as-of date is missing", async () => {

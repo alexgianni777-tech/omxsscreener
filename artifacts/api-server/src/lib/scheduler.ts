@@ -24,6 +24,7 @@ import {
 } from "./candidateSynchronization";
 import { aggregateSessionSource } from "./candidateSynchronizationPolicy";
 import { snapshotNewSessionTop3 } from "./top3SelectionPolicy";
+import { isTop3CutoffDue } from "./top3SelectionPolicyCore";
 import { calendarDaysUntil } from "./marketCalendar";
 import { mapEdgeAiSetup } from "./edgeAiMapping";
 import { withRetry } from "./retry";
@@ -274,6 +275,18 @@ async function runImport(date: string): Promise<void> {
   }
 }
 
+async function evaluateTop3Cutoff(date: string, now: Date): Promise<void> {
+  await db.transaction(async (tx) => {
+    await lockScreenerSession(tx, date);
+    const [session] = await tx
+      .select({ id: screenerSessionsTable.id, source: screenerSessionsTable.source })
+      .from(screenerSessionsTable)
+      .where(eq(screenerSessionsTable.date, date));
+    if (!session) return;
+    await snapshotNewSessionTop3(tx, { ...session, date }, [], now);
+  });
+}
+
 
 
 let tickInFlight = false;
@@ -289,6 +302,14 @@ async function tick() {
   schedulerStatus.lastChecked = now.toISOString();
 
   const stockholm = stockholmClock(now);
+  if (isTop3CutoffDue(stockholm.date, now)) {
+    try {
+      await evaluateTop3Cutoff(stockholm.date, now);
+    } catch (err: any) {
+      schedulerStatus.lastError = err.message ?? String(err);
+      logger.warn({ err: err.message }, "[scheduler] Top 3 cutoff evaluation failed");
+    }
+  }
   if (stockholm.weekday === "Sat" || stockholm.weekday === "Sun") return;
 
   // ── Daily import (Mon–Fri from 09:00 Europe/Stockholm) ──────────────────────

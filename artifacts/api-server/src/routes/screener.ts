@@ -39,6 +39,7 @@ import {
 } from "../lib/candidateSynchronization";
 import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
 import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
+import { describeTop3Snapshot } from "../lib/top3SnapshotStatus";
 
 const router: IRouter = Router();
 
@@ -677,6 +678,7 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     candidatesWithReview.map((candidate) => candidate.review),
     session.marketRsi,
   );
+  const snapshotStatus = describeTop3Snapshot(session);
 
   const parsed = GetSessionResponse.parse({
     id: session.id,
@@ -695,11 +697,7 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     candidates: candidatesWithReview,
     sessionReview,
     importDiff: (session.lastImportDiff as any) ?? undefined,
-    top3SelectionSnapshot: session.top3SnapshotAt ? {
-      available: true,
-      selectedAt: session.top3SnapshotAt,
-      policyVersion: session.top3PolicyVersion,
-    } : { available: false, selectedAt: null, policyVersion: null },
+    top3SelectionSnapshot: snapshotStatus,
   });
 
   // Append fields not in Zod schema — passed through directly
@@ -714,11 +712,7 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     edgePF: session.edgePF ?? null,
     edgeN: session.edgeN ?? null,
     lastImportAt: session.lastImportAt ?? null,
-    top3SelectionSnapshot: session.top3SnapshotAt ? {
-      available: true,
-      selectedAt: session.top3SnapshotAt,
-      policyVersion: session.top3PolicyVersion,
-    } : { available: false, selectedAt: null, policyVersion: null },
+    top3SelectionSnapshot: snapshotStatus,
   });
 });
 

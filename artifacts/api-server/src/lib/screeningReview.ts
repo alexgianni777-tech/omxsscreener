@@ -9,6 +9,7 @@ export type CandidateReviewInput = {
   edgeExpectancyR?: number | null;
   edgeSampleN?: number | null;
   signalAgeBars?: number | null;
+  maxHoldDays?: number | null;
   signalRsi: number | null;
   signalGapPct: number | null;
   volMultiplier: number;
@@ -144,6 +145,20 @@ export function decideCandidate(
     return {
       status: "STALE",
       reasons: [`Sessionen ${sessionDate} ligger efter källsignalen ${candidate.signalDate}; ny signal krävs före trade.`, ...review.reasons],
+    };
+  }
+  if (
+    candidate.signalSource === "edgeai" &&
+    candidate.signalAgeBars != null &&
+    candidate.maxHoldDays != null &&
+    Number.isFinite(candidate.signalAgeBars) &&
+    Number.isFinite(candidate.maxHoldDays) &&
+    candidate.maxHoldDays > 0 &&
+    candidate.signalAgeBars >= candidate.maxHoldDays
+  ) {
+    return {
+      status: "STALE",
+      reasons: [`EdgeAI-signalen har nått sin maxålder (${candidate.signalAgeBars}/${candidate.maxHoldDays} bars).`, ...review.reasons],
     };
   }
 

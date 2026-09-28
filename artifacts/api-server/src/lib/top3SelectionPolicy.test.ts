@@ -84,16 +84,20 @@ test("official Top 3 includes only tradeable rows and caps each market/direction
   assert.equal(selected.filter((row) => row.market === "US" && row.direction === "LONG").length, 1);
   assert.equal(rows.find((row) => row.candidateId === 10)?.decision.status, "INVALID");
   assert.equal(rows.find((row) => row.candidateId === 10)?.selected, false);
-  assert.ok(rows.every((row) => row.policyVersion === "official-top3-v1"));
+  assert.ok(rows.every((row) => row.policyVersion === "official-top3-v2"));
 });
 
-test("same ticker cannot be automatically selected in opposing directions", () => {
+test("opposing directions for the same canonical underlying are neither auto-selected and carry CONFLICT", () => {
   const now = new Date();
+  const yesterday = new Date();
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
   const rows = buildTop3SelectionSnapshot(
     [
       candidate(1, "SAME.ST", "LONG", "SE"),
       candidate(2, "SAME", "SHORT", "US"),
       candidate(3, "OTHER", "SHORT", "SE"),
+      candidate(4, "SAME", "SHORT", "SE", { signalDate: yesterday.toISOString().slice(0, 10) }),
+      candidate(5, "SAME", "LONG", "SE", { earningsInDays: 3 }),
     ] as any,
     101,
     currentStockholmDate(),
@@ -102,8 +106,15 @@ test("same ticker cannot be automatically selected in opposing directions", () =
   );
 
   const sameTicker = rows.filter((row) => row.ticker.startsWith("SAME"));
-  assert.equal(sameTicker.filter((row) => row.selected).length, 1);
-  assert.equal(sameTicker.filter((row) => row.selected)[0].direction, "LONG");
+  assert.equal(sameTicker.filter((row) => row.selected).length, 0);
+  assert.equal(sameTicker.find((row) => row.candidateId === 1)?.decision.status, "CONFLICT");
+  assert.equal(sameTicker.find((row) => row.candidateId === 2)?.decision.status, "CONFLICT");
+  assert.equal(sameTicker.find((row) => row.candidateId === 4)?.decision.status, "STALE");
+  assert.equal(sameTicker.find((row) => row.candidateId === 5)?.decision.status, "BLOCKED");
+  assert.ok(sameTicker.filter((row) => row.candidateId <= 2).every((row) =>
+    row.decision.reasons.some((reason) => reason.startsWith("CONFLICT:")),
+  ));
+  assert.equal(rows.find((row) => row.ticker === "OTHER")?.selected, true);
 });
 
 test("snapshot captures the selected-at signal-time policy result independent of stars", () => {

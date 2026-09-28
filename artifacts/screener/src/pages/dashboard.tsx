@@ -959,24 +959,42 @@ function isLosingTop3Pick(pick: Top3Session["picks"][number]): boolean {
 }
 
 function computeMarketStats(sessions: Top3Session[]) {
-  let wins = 0, losses = 0, flats = 0, totalR = 0;
-  for (const s of sessions) {
-    for (const p of s.picks) {
-      if (!isCountedTop3Pick(p)) continue;
-      totalR += p.r!;
-      if (isWinningTop3Pick(p)) wins++;
-      else if (isLosingTop3Pick(p)) losses++;
+  const available = sessions.filter((s) => s.selectionStatus === "AVAILABLE");
+  const matured = available.filter((s) => s.matured);
+  const summarize = (picks: Top3Session["picks"]) => {
+    let wins = 0, losses = 0, flats = 0, totalR = 0;
+    for (const pick of picks) {
+      if (!isCountedTop3Pick(pick)) continue;
+      totalR += pick.r!;
+      if (isWinningTop3Pick(pick)) wins++;
+      else if (isLosingTop3Pick(pick)) losses++;
       else flats++;
     }
-  }
-  const total = wins + losses + flats;
+    const total = wins + losses + flats;
+    return {
+      wins, losses, flats, total, totalR,
+      winRate: total > 0 ? wins / total : null,
+      avgR: total > 0 ? totalR / total : null,
+    };
+  };
+  const matureStats = summarize(matured.flatMap((session) => session.picks));
+  const resolvedOnly = summarize(available.flatMap((session) => session.picks));
+  const selectedTrades = available.reduce((count, session) => count + session.picks.length, 0);
+  const resolvedTrades = available.flatMap((session) => session.picks).filter(isCountedTop3Pick).length;
+  const pendingTrades = available.flatMap((session) => session.picks)
+    .filter((pick) => pick.outcome !== "SKIP" && !isCountedTop3Pick(pick)).length;
+  const excludedTrades = available.flatMap((session) => session.picks)
+    .filter((pick) => pick.outcome === "SKIP").length;
   return {
-    wins, losses, flats, total,
-    winRate: total > 0 ? wins / total : null,
-    totalR,
-    avgR: total > 0 ? totalR / total : null,
-    completedSessions: sessions.filter((s) => s.selectionStatus === "AVAILABLE" && s.sessionR !== null).length,
-    totalSessions: sessions.filter((s) => s.selectionStatus === "AVAILABLE").length,
+    ...matureStats,
+    resolvedOnly,
+    selectedTrades,
+    resolvedTrades,
+    pendingTrades,
+    excludedTrades,
+    resolutionRate: selectedTrades > 0 ? resolvedTrades / selectedTrades : null,
+    completedSessions: matured.length,
+    totalSessions: available.length,
     unavailableSessions: sessions.filter((s) => s.selectionStatus === "UNAVAILABLE").length,
   };
 }
@@ -999,7 +1017,7 @@ function Top3MarketCard({
     }));
   }, [sessions, excludeEarnings]);
 
-  const chartData = computeMarketChartData(displaySessions);
+  const chartData = computeMarketChartData(displaySessions.filter((s) => s.matured));
   const hasData = chartData.length > 1;
   const stats = computeMarketStats(displaySessions);
   const finalR = hasData ? chartData[chartData.length - 1].cumulativeR : null;
@@ -1050,25 +1068,36 @@ function Top3MarketCard({
       )}
 
       {/* Stat pills */}
-      {stats.total > 0 && (
+      {stats.selectedTrades > 0 && (
         <div className="flex flex-wrap gap-2">
-          <Pill label="Trades" value={`${stats.wins}V / ${stats.losses}F / ${stats.flats}0R`} />
+          <Pill label="Mogen kohort" value={`${stats.wins}V / ${stats.losses}F / ${stats.flats}0R`} />
           <Pill
-            label="Hitrate"
+            label="Mogen hitrate"
             value={stats.winRate != null ? formatPercent(stats.winRate) : "–"}
             color={stats.winRate != null ? (stats.winRate >= 0.5 ? "success" : "destructive") : ""}
           />
           <Pill
-            label="Snitt-R"
+            label="Mogen EV"
             value={stats.avgR != null ? `${stats.avgR >= 0 ? "+" : ""}${formatNumber(stats.avgR, 2)}R` : "–"}
             color={stats.avgR != null ? (stats.avgR > 0 ? "success" : "destructive") : ""}
           />
-          <Pill label="Sessioner" value={`${stats.completedSessions}/${stats.totalSessions}`} />
+          <Pill label="Mogna sessioner" value={`${stats.completedSessions}/${stats.totalSessions}`} />
+          <Pill label="Täckning" value={`${stats.resolvedTrades}/${stats.selectedTrades} · ${stats.resolutionRate != null ? formatPercent(stats.resolutionRate) : "–"}`} />
+          <Pill label="Väntar / SKIP" value={`${stats.pendingTrades} / ${stats.excludedTrades}`} />
+          {stats.resolvedOnly.total > 0 && (
+            <Pill
+              label="Endast lösta (preliminärt)"
+              value={`${stats.resolvedOnly.winRate != null ? formatPercent(stats.resolvedOnly.winRate) : "–"} · ${stats.resolvedOnly.avgR != null ? `${stats.resolvedOnly.avgR >= 0 ? "+" : ""}${formatNumber(stats.resolvedOnly.avgR, 2)}R` : "–"}`}
+            />
+          )}
           {stats.unavailableSessions > 0 && (
             <Pill label="Historik utan snapshot" value={String(stats.unavailableSessions)} />
           )}
         </div>
       )}
+      <p className="text-[11px] text-muted-foreground">
+        Primärt visas bara fullt mogna sessioner. Väntande picks saknar resultat och är exkluderade; den separat märkta endast-lösta statistiken är preliminär. SKIP räknas inte som trade.
+      </p>
 
       {/* #28 Rule 7 comparison — shown when earnings exclusions make a real difference */}
       {earningsWarningCount > 0 && rawStats.total > 0 && (
@@ -1097,8 +1126,9 @@ function Top3MarketCard({
 
       {/* #56 Direction split — LONG vs SHORT hitrate (shown when there is resolved data) */}
       {(() => {
-        const allLong = sessions.flatMap((s) => s.longPicks ?? []);
-        const allShort = sessions.flatMap((s) => s.shortPicks ?? []);
+        const matureSessions = sessions.filter((s) => s.matured);
+        const allLong = matureSessions.flatMap((s) => s.longPicks ?? []);
+        const allShort = matureSessions.flatMap((s) => s.shortPicks ?? []);
         const longRes = allLong.filter(isCountedTop3Pick);
         const shortRes = allShort.filter(isCountedTop3Pick);
         if (longRes.length === 0 && shortRes.length === 0) return null;
@@ -1113,7 +1143,7 @@ function Top3MarketCard({
         return (
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="bg-success/5 border border-success/15 rounded-md p-2">
-              <div className="text-[10px] text-success font-semibold mb-0.5">📈 Köp-picks</div>
+              <div className="text-[10px] text-success font-semibold mb-0.5">📈 Mogna köp-picks</div>
               <div className="flex items-baseline gap-2">
                 <span className="font-mono">{longWR != null ? formatPercent(longWR) : "—"} hitrate</span>
                 <span className={`font-mono font-bold ${longAvgR != null ? (longAvgR >= 0 ? "text-success" : "text-destructive") : ""}`}>
@@ -1123,7 +1153,7 @@ function Top3MarketCard({
               <div className="text-[10px] text-muted-foreground">{longRes.length}/{allLong.length} avslutade</div>
             </div>
             <div className="bg-destructive/5 border border-destructive/15 rounded-md p-2">
-              <div className="text-[10px] text-destructive font-semibold mb-0.5">📉 Sälj-picks</div>
+              <div className="text-[10px] text-destructive font-semibold mb-0.5">📉 Mogna sälj-picks</div>
               <div className="flex items-baseline gap-2">
                 <span className="font-mono">{shortWR != null ? formatPercent(shortWR) : "—"} hitrate</span>
                 <span className={`font-mono font-bold ${shortAvgR != null ? (shortAvgR >= 0 ? "text-success" : "text-destructive") : ""}`}>
@@ -1141,7 +1171,7 @@ function Top3MarketCard({
         const withRate = sessions.filter((s) => s.selectionStatus === "AVAILABLE" && s.edgeWinRate != null);
         if (withRate.length === 0) return null;
         const avgPromised = withRate.reduce((a, s) => a + (s.edgeWinRate ?? 0), 0) / withRate.length;
-        const allResolved = sessions.flatMap((s) => s.picks).filter(isCountedTop3Pick);
+        const allResolved = sessions.filter((s) => s.matured).flatMap((s) => s.picks).filter(isCountedTop3Pick);
         const actualWR = allResolved.length > 0 ? allResolved.filter(isWinningTop3Pick).length / allResolved.length : null;
         return (
           <div className="bg-blue-500/5 border border-blue-500/20 rounded-md px-3 py-2 space-y-1.5">
@@ -1154,7 +1184,7 @@ function Top3MarketCard({
                 <div className="font-mono font-bold">{formatPercent(avgPromised)}</div>
               </div>
               <div>
-                <div className="text-muted-foreground text-[10px]">Faktisk WR</div>
+                <div className="text-muted-foreground text-[10px]">Mogen faktisk WR</div>
                 <div className={`font-mono font-bold ${actualWR != null ? (actualWR >= avgPromised ? "text-success" : "text-destructive") : ""}`}>
                   {actualWR != null ? formatPercent(actualWR) : "—"}
                 </div>
@@ -1173,7 +1203,7 @@ function Top3MarketCard({
       ) : !hasData ? (
         <div className="flex flex-col items-center justify-center h-40 text-muted-foreground gap-2">
           <Trophy className="h-6 w-6 opacity-30" />
-          <p className="text-xs">Logga utfall för att se kurvan.</p>
+          <p className="text-xs">Inga mogna sessioner med registrerade utfall ännu.</p>
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={160}>
@@ -1195,7 +1225,7 @@ function Top3MarketCard({
             <div key={s.date} className="flex items-start gap-2 text-xs">
               <span className="text-muted-foreground w-12 shrink-0 pt-0.5">{s.date.slice(5)}</span>
                 {s.selectionStatus === "UNAVAILABLE" ? (
-                  <span className="flex-1 text-amber-600">Officiellt resultat saknas · historisk snapshot ej tillgänglig</span>
+                  <span className="flex-1 text-amber-600">{s.selectionUnavailableReason ?? "Officiellt Top 3-urval saknas."}</span>
                 ) : <div className="flex gap-1 flex-1 flex-wrap">
                 {s.picks.map((p) => (
                   <span

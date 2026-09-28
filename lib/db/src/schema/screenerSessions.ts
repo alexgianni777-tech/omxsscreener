@@ -28,6 +28,13 @@ export const screenerSessionsTable = pgTable("screener_sessions", {
   // not yet reached its first signal-time enrichment).
   top3SnapshotAt: timestamp("top3_snapshot_at", { withTimezone: true }),
   top3PolicyVersion: text("top3_policy_version"),
+  // The policy's deterministic 16:30 Europe/Stockholm instant for this date;
+  // null for legacy sessions or before evaluation.
+  top3CutoffAt: timestamp("top3_cutoff_at", { withTimezone: true }),
+  // Actual instant at which the cutoff cohort was evaluated/sealed.
+  top3CutoffEvaluatedAt: timestamp("top3_cutoff_evaluated_at", { withTimezone: true }),
+  // Empty means evaluated but unavailable due to missing arrivals.
+  top3ParticipatingSources: jsonb("top3_participating_sources").$type<string[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

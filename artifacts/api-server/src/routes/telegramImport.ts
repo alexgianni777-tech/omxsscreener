@@ -21,7 +21,9 @@ import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import { parseScreenerText, ScreenerParseError } from "../lib/screenerParser";
 import { logger } from "../lib/logger";
 import YahooFinance from "yahoo-finance2";
+import { resolveYahooTicker } from "../lib/omxs30TickerMap";
 import { fetchCompletedVolumeBatch } from "../lib/completedVolumeBatch";
+import { calendarDaysBetween } from "../lib/marketCalendar";
 import { timingSafeEqual } from "node:crypto";
 import {
   deduplicateCandidates,
@@ -34,6 +36,61 @@ import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
 import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
+
+type EarningsObservation = {
+  earningsInDays: number | null;
+  knowledge: "SIGNAL_TIME" | "UNKNOWN";
+  observedAt: Date | null;
+};
+
+const UNKNOWN_EARNINGS: EarningsObservation = {
+  earningsInDays: null,
+  knowledge: "UNKNOWN",
+  observedAt: null,
+};
+
+function stockholmCalendarDate(date = new Date()): string {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Stockholm",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+/** Current Yahoo calendar data is evidence only for a genuinely same-day signal. */
+async function fetchEarningsBatch(
+  tickers: string[],
+  signalDate: string,
+): Promise<Map<string, EarningsObservation>> {
+  if (signalDate !== stockholmCalendarDate()) {
+    return new Map(tickers.map((ticker) => [ticker, UNKNOWN_EARNINGS]));
+  }
+
+  const uniqueTickers = [...new Set(tickers)];
+  const observations = await Promise.all(uniqueTickers.map(async (ticker) => {
+    try {
+      const quote = await yf.quote(resolveYahooTicker(ticker));
+      const earningsTimestamp: Date | null = (quote as any).earningsTimestamp ?? null;
+      if (!earningsTimestamp || !(earningsTimestamp instanceof Date) || !Number.isFinite(earningsTimestamp.getTime())) {
+        return [ticker, UNKNOWN_EARNINGS] as const;
+      }
+      const observedAt = new Date();
+      if (stockholmCalendarDate(observedAt) !== signalDate) {
+        return [ticker, UNKNOWN_EARNINGS] as const;
+      }
+      return [ticker, {
+        earningsInDays: calendarDaysBetween(earningsTimestamp, new Date(`${signalDate}T00:00:00.000Z`)),
+        knowledge: "SIGNAL_TIME",
+        observedAt,
+      }] as const;
+    } catch (err: any) {
+      logger.warn({ ticker, err: err.message }, "[telegram-import] Yahoo earnings calendar lookup failed");
+      return [ticker, UNKNOWN_EARNINGS] as const;
+    }
+  }));
+  return new Map(observations);
+}
 
 /** Verify report-date volume against the preceding ten completed Yahoo trading days. */
 async function enrichVolMultiplier(
@@ -151,10 +208,12 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
 
   // The report date, not import time, is the provenance of its daily signal.
   const verifiedVolumes = await enrichVolMultiplier(candidates, date);
+  const earningsBatch = await fetchEarningsBatch(candidates.map((candidate) => candidate.ticker), date);
 
   const buildRow = (
     sessionId: number,
     c: (typeof candidates)[number],
+    earnings: EarningsObservation,
     preserved?: {
       outcome: string; exitPrice: number | null; outcomeNotes: string | null;
       resolutionMethod: "MANUAL_EXIT" | "TARGET_HIT" | "STOP_HIT" | null;
@@ -177,8 +236,13 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
     atr: c.atr,
     volMultiplier: c.volMultiplier,
     volumeAsOf: verifiedVolumes.get(c.ticker)?.asOf ?? null,
+    signalRsi: c.rsi,
+    signalGapPct: c.gapWarning ?? null,
     distFrom20dH: c.distFrom20dH,
     gapWarning: c.gapWarning ?? undefined,
+    earningsInDays: earnings.earningsInDays ?? undefined,
+    earningsKnowledge: earnings.knowledge,
+    earningsObservedAt: earnings.observedAt,
     direction: c.direction,
     entryPrice: c.entryPrice,
     stopPrice: c.stopPrice,
@@ -222,7 +286,9 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
       tx,
       stored.id,
       mergeCandidateInputs(
-        candidates.map((candidate) => buildRow(stored.id, candidate)),
+        candidates.map((candidate) =>
+          buildRow(stored.id, candidate, earningsBatch.get(candidate.ticker) ?? UNKNOWN_EARNINGS),
+        ),
         existingCandidates.map(({ id, ...candidate }) => candidate),
       ),
     );

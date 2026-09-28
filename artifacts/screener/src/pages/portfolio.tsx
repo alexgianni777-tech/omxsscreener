@@ -111,18 +111,32 @@ function SummaryBar({ summary, fetchedAt }: { summary: PortfolioData["summary"];
           sub={summary.maxStopLossKr == null ? "Minst en position saknar stop" : "Endast negativ nedsida vid stop"}
           valueClass={summary.maxStopLossKr == null ? "text-amber-500" : "text-destructive"}
         />
-        <Tile label="Long-exponering" value={`${fmt(summary.longExposureKr)} kr`} valueClass="text-success" />
-        <Tile label="Short-exponering" value={`${fmt(summary.shortExposureKr)} kr`} valueClass="text-destructive" />
+        <Tile
+          label="LONG-produktvärde · legacy riktning"
+          value={`${fmt(summary.longExposureKr)} kr`}
+          sub="Klassificerat efter legacy position-riktning · ej underliggande notional"
+          valueClass="text-success"
+        />
+        <Tile
+          label="SHORT-produktvärde · legacy riktning"
+          value={`${fmt(summary.shortExposureKr)} kr`}
+          sub="Klassificerat efter legacy position-riktning · ej underliggande notional"
+          valueClass="text-destructive"
+        />
         <Tile
           label="Underliggande riktning"
           value={`L ${fmt(summary.underlyingLongCount, 0)} · S ${fmt(summary.underlyingShortCount, 0)}`}
-          sub={`${fmt(summary.underlyingDirectionUnknownCount, 0)} okända · nominell exponering ej beräknad`}
+          sub={`${fmt(summary.underlyingDirectionUnknownCount, 0)} okända · nominell exponering kräver produktdata och underliggande kurs`}
         />
-        <Tile label="Bruttoexponering" value={`${fmt(summary.grossExposureKr)} kr`} />
         <Tile
-          label="Nettoexponering"
+          label="Brutto produktvärde · legacy riktning"
+          value={`${fmt(summary.grossExposureKr)} kr`}
+          sub="Efter legacy position-riktning · ej underliggande notional"
+        />
+        <Tile
+          label="Netto produktvärde · legacy riktning"
           value={`${sgn(summary.netExposureKr, 0)} kr`}
-          sub={netLong ? "Netto long" : "Netto short"}
+          sub={`${netLong ? "Netto long" : "Netto short"} · legacy position-riktning`}
           valueClass={netLong ? "text-success" : "text-destructive"}
         />
       </div>
@@ -386,7 +400,8 @@ function EditPositionForm({ pos, onCancel, onSuccess }: { pos: Position; onCance
 
 // ── single position card ───────────────────────────────────────────────────────
 function PositionCard({ pos, onDelete, onEdited }: { pos: Position; onDelete: (id: number) => void; onEdited: () => void }) {
-  const isShort = pos.direction === "SHORT";
+  const productSide = pos.productSide ?? pos.direction;
+  const isShort = productSide === "SHORT";
   const pnlUp = (pos.unrealisedKr ?? 0) >= 0;
   const rVal = pos.currentR ?? 0;
   const rColor = rVal >= 1 ? "text-success" : rVal <= -0.5 ? "text-destructive" : "text-amber-500";
@@ -414,11 +429,11 @@ function PositionCard({ pos, onDelete, onEdited }: { pos: Position; onDelete: (i
               {pos.productType}
             </span>
           )}
-          {pos.productSide && (
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-              Ägd produkt {pos.productSide}
-            </span>
-          )}
+          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+            isShort ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success"
+          }`}>
+            {pos.productSide ? `Ägd produkt ${pos.productSide}` : `Produkt ${productSide} (legacy riktning)`}
+          </span>
           {pos.underlyingDirection && (
             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
               pos.underlyingDirection === "LONG" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
@@ -429,10 +444,8 @@ function PositionCard({ pos, onDelete, onEdited }: { pos: Position; onDelete: (i
           {pos.instrument && (!pos.productSide || !pos.underlyingDirection) && (
             <span className="text-[10px] text-amber-500">Instrumentdata okänd</span>
           )}
-          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
-            isShort ? "bg-destructive/15 text-destructive" : "bg-success/15 text-success"
-          }`}>
-            {isShort ? "▼ SHORT" : "▲ LONG"}
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground uppercase tracking-wider">
+            Legacy riktning {pos.direction}
           </span>
           {pos.market && (
             <span className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded text-muted-foreground">

@@ -650,6 +650,7 @@ export const CandidateDecisionStatus = {
   BLOCKED: 'BLOCKED',
   INVALID: 'INVALID',
   STALE: 'STALE',
+  CONFLICT: 'CONFLICT',
 } as const;
 
 export interface CandidateDecision {
@@ -843,12 +844,49 @@ export interface CandidateTop3Annotation {
   isTop3Pick: boolean;
 }
 
+export type Top3SelectionSnapshotStatusState = typeof Top3SelectionSnapshotStatusState[keyof typeof Top3SelectionSnapshotStatusState];
+
+
+export const Top3SelectionSnapshotStatusState = {
+  AVAILABLE: 'AVAILABLE',
+  WAITING_FOR_CUTOFF: 'WAITING_FOR_CUTOFF',
+  EVALUATING: 'EVALUATING',
+  MISSING_SOURCES: 'MISSING_SOURCES',
+  LEGACY_UNAVAILABLE: 'LEGACY_UNAVAILABLE',
+} as const;
+
+export type Top3SelectionSnapshotStatusParticipatingSourcesItem = typeof Top3SelectionSnapshotStatusParticipatingSourcesItem[keyof typeof Top3SelectionSnapshotStatusParticipatingSourcesItem];
+
+
+export const Top3SelectionSnapshotStatusParticipatingSourcesItem = {
+  telegram: 'telegram',
+  edgeai: 'edgeai',
+} as const;
+
+export type Top3SelectionSnapshotStatusRequiredSourcesItem = typeof Top3SelectionSnapshotStatusRequiredSourcesItem[keyof typeof Top3SelectionSnapshotStatusRequiredSourcesItem];
+
+
+export const Top3SelectionSnapshotStatusRequiredSourcesItem = {
+  telegram: 'telegram',
+  edgeai: 'edgeai',
+} as const;
+
 export interface Top3SelectionSnapshotStatus {
   available: boolean;
+  state: Top3SelectionSnapshotStatusState;
+  /** @nullable */
+  unavailableReason: string | null;
   /** @nullable */
   selectedAt: string | null;
   /** @nullable */
   policyVersion: string | null;
+  /** @nullable */
+  cutoffAt: string | null;
+  /** @nullable */
+  evaluatedAt: string | null;
+  /** @nullable */
+  participatingSources: Top3SelectionSnapshotStatusParticipatingSourcesItem[] | null;
+  requiredSources: Top3SelectionSnapshotStatusRequiredSourcesItem[];
 }
 
 export type SessionReview = SignalReview & {
@@ -1098,6 +1136,33 @@ export const Top3AnalyticsSessionSelectionStatus = {
   UNAVAILABLE: 'UNAVAILABLE',
 } as const;
 
+export type Top3AnalyticsSessionCutoffState = typeof Top3AnalyticsSessionCutoffState[keyof typeof Top3AnalyticsSessionCutoffState];
+
+
+export const Top3AnalyticsSessionCutoffState = {
+  AVAILABLE: 'AVAILABLE',
+  WAITING_FOR_CUTOFF: 'WAITING_FOR_CUTOFF',
+  EVALUATING: 'EVALUATING',
+  MISSING_SOURCES: 'MISSING_SOURCES',
+  LEGACY_UNAVAILABLE: 'LEGACY_UNAVAILABLE',
+} as const;
+
+export type Top3AnalyticsSessionParticipatingSourcesItem = typeof Top3AnalyticsSessionParticipatingSourcesItem[keyof typeof Top3AnalyticsSessionParticipatingSourcesItem];
+
+
+export const Top3AnalyticsSessionParticipatingSourcesItem = {
+  telegram: 'telegram',
+  edgeai: 'edgeai',
+} as const;
+
+export type Top3AnalyticsSessionRequiredSourcesItem = typeof Top3AnalyticsSessionRequiredSourcesItem[keyof typeof Top3AnalyticsSessionRequiredSourcesItem];
+
+
+export const Top3AnalyticsSessionRequiredSourcesItem = {
+  telegram: 'telegram',
+  edgeai: 'edgeai',
+} as const;
+
 export interface Top3AnalyticsSession {
   date: string;
   sessionId: number;
@@ -1106,6 +1171,14 @@ export interface Top3AnalyticsSession {
   selectionStatus: Top3AnalyticsSessionSelectionStatus;
   /** @nullable */
   selectionUnavailableReason: string | null;
+  cutoffState: Top3AnalyticsSessionCutoffState;
+  /** @nullable */
+  cutoffAt: string | null;
+  /** @nullable */
+  cutoffEvaluatedAt: string | null;
+  /** @nullable */
+  participatingSources: Top3AnalyticsSessionParticipatingSourcesItem[] | null;
+  requiredSources: Top3AnalyticsSessionRequiredSourcesItem[];
   /** @nullable */
   selectedAt: string | null;
   /** @nullable */
@@ -1113,6 +1186,8 @@ export interface Top3AnalyticsSession {
   picks: Top3AnalyticsPick[];
   longPicks: Top3AnalyticsPick[];
   shortPicks: Top3AnalyticsPick[];
+  /** True when this available session has at least one selected pick and every selected pick has recorded performance or was explicitly skipped. */
+  matured: boolean;
   /** @nullable */
   edgeWinRate: number | null;
   /** @nullable */
@@ -1129,15 +1204,56 @@ export interface Top3AnalyticsStats {
   totalSessions: number;
   availableSessions: number;
   unavailableSessions: number;
+  /** Sessions with any recorded performance, retained for compatibility. */
   completedSessions: number;
+  /** Total picks from available immutable Top 3 selection snapshots. */
+  selectedTrades: number;
+  /** Selected picks with valid recorded realized performance; TIME_EXIT requires actual recorded performance. */
+  resolvedTrades: number;
+  /** Selected picks without valid performance, excluding explicit SKIP outcomes. */
+  pendingTrades: number;
+  /** Explicit SKIP picks; excluded from performance calculations and not treated as trades. */
+  excludedTrades: number;
+  /**
+     * Resolved picks divided by all selected picks, or null when no picks were selected.
+     * @nullable
+     */
+  resolutionRate: number | null;
+  /** Available sessions with at least one pick and no pending picks; explicit SKIP outcomes do not block maturity. */
+  maturedSessions: number;
   totalTrades: number;
   wins: number;
   losses: number;
   /** @nullable */
   winRate: number | null;
   totalR: number;
-  /** @nullable */
+  /**
+     * Primary expected value (mean R/trade) for the fully matured session cohort only.
+     * @nullable
+     */
   avgRPerTrade: number | null;
+  /**
+     * Primary expected value (mean R/trade) for the fully matured session cohort only.
+     * @nullable
+     */
+  expectedValue: number | null;
+  /** Recorded-performance picks across all available sessions, including sessions that have not matured. */
+  resolvedOnlyTrades: number;
+  resolvedOnlyWins: number;
+  resolvedOnlyLosses: number;
+  /**
+     * Win rate among resolved-only picks; pending picks are excluded from this separate, preliminary cohort.
+     * @nullable
+     */
+  resolvedOnlyWinRate: number | null;
+  /**
+     * Mean R among resolved-only picks; pending picks are excluded from this separate, preliminary cohort.
+     * @nullable
+     */
+  resolvedOnlyExpectedValue: number | null;
+  resolvedOnlyTotalR: number;
+  /** @nullable */
+  resolvedOnlyAvgRPerTrade: number | null;
   byDirection: Top3AnalyticsStatsByDirection;
 }
 

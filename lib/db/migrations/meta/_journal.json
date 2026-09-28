@@ -85,6 +85,13 @@
       "when": 1790580543529,
       "tag": "0011_huge_ricochet",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790584251683,
+      "tag": "0012_skinny_radioactive_man",
+      "breakpoints": true
     }
   ]
 }

@@ -52,6 +52,45 @@ test("EdgeAI review prefers dedicated expectancy over legacy RSI compatibility",
   assert.doesNotMatch(decision.reasons.join(" "), /RSI-data saknas/);
 });
 
+test("a fully enriched same-day Telegram candidate is tradeable", () => {
+  const signalDate = "2026-07-10";
+  const telegramCandidate = {
+    signalDate,
+    category: "MOMENTUM",
+    direction: "LONG",
+    rs3m: 1.2,
+    perf1m: 2.1,
+    rsi: 54,
+    signalRsi: 54,
+    signalGapPct: 0.8,
+    volMultiplier: 1.4,
+    volumeAsOf: signalDate,
+    earningsInDays: 12,
+    earningsKnowledge: "SIGNAL_TIME" as const,
+    earningsObservedAt: new Date(`${signalDate}T09:00:00.000Z`),
+    entryPrice: 100,
+    stopPrice: 95,
+    targetPrice: 110,
+    rr: 2,
+    signalSource: "telegram",
+    price: 100,
+  };
+
+  const review = reviewCandidate(telegramCandidate, "telegram");
+  const decision = decideCandidate(
+    telegramCandidate,
+    review,
+    signalDate,
+    new Date(`${signalDate}T10:00:00.000Z`),
+  );
+
+  assert.equal(telegramCandidate.signalGapPct, 0.8);
+  assert.equal(telegramCandidate.signalRsi, 54);
+  assert.equal(telegramCandidate.earningsKnowledge, "SIGNAL_TIME");
+  assert.equal(review.status, "APPROVED");
+  assert.equal(decision.status, "TRADEABLE");
+});
+
 test("legacy EdgeAI expectancy in RSI remains supported when explicit field is absent", () => {
   const { edgeExpectancyR: _expectancy, ...legacyCandidate } = edgeCandidate;
   const legacy = { ...legacyCandidate, rsi: -20 };
@@ -123,4 +162,16 @@ test("volume newer than the original signal cannot qualify under a later trading
   );
   assert.equal(decision.status, "INVALID");
   assert.match(decision.reasons.join(" "), /Volymens avslutade kursdatum/);
+});
+
+test("EdgeAI signal age boundary is an eligibility rule, not only a score penalty", () => {
+  const approved = { status: "APPROVED" as const, reasons: [] };
+  const base = { ...edgeCandidate, maxHoldDays: 10 };
+  const beforeExpiry = decideCandidate({ ...base, signalAgeBars: 9 }, approved, base.signalDate);
+  const atExpiry = decideCandidate({ ...base, signalAgeBars: 10 }, approved, base.signalDate);
+  const afterExpiry = decideCandidate({ ...base, signalAgeBars: 11 }, approved, base.signalDate);
+  assert.equal(beforeExpiry.status, "TRADEABLE");
+  assert.equal(atExpiry.status, "STALE");
+  assert.equal(afterExpiry.status, "STALE");
+  assert.match(atExpiry.reasons.join(" "), /maxålder/);
 });

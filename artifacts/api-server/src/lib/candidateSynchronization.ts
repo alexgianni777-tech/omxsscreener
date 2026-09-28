@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 
-import { candidatesTable, top3SelectionSnapshotsTable } from "@workspace/db";
+import { candidatesTable, screenerSessionsTable, top3SelectionSnapshotsTable } from "@workspace/db";
 import { logger } from "./logger";
 import {
   candidateIdentity as policyCandidateIdentity,
@@ -8,6 +8,7 @@ import {
   pendingRemovalIdentities,
   synchronizedSignalSource,
 } from "./candidateSynchronizationPolicy";
+import { top3CutoffForDate } from "./top3SelectionPolicyCore";
 
 type CandidateInput = Record<string, unknown> & {
   market?: string | null;
@@ -177,6 +178,7 @@ export async function synchronizeCandidates(
   tx: any,
   sessionId: number,
   incoming: CandidateInput[],
+  now = new Date(),
 ): Promise<{ candidates: any[]; diff: CandidateSyncDiff }> {
   const { candidates: deduped, skipped } = deduplicateCandidates(incoming);
   if (skipped.length > 0) logger.warn({ skipped }, "Candidate synchronization skipped duplicate identities");
@@ -193,6 +195,26 @@ export async function synchronizeCandidates(
     );
   const selectedCandidateIds = new Set(selectedSnapshotRows.map((row) => row.candidateId));
 
+  const [session] = await tx
+    .select({
+      date: screenerSessionsTable.date,
+      top3SnapshotAt: screenerSessionsTable.top3SnapshotAt,
+      top3CutoffEvaluatedAt: screenerSessionsTable.top3CutoffEvaluatedAt,
+    })
+    .from(screenerSessionsTable)
+    .where(eq(screenerSessionsTable.id, sessionId));
+  const today = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Stockholm",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+  const protectPreCutoffCohort =
+    session?.date === today &&
+    now.getTime() >= top3CutoffForDate(session.date).getTime() &&
+    !session.top3SnapshotAt &&
+    !session.top3CutoffEvaluatedAt;
+
   const existing: any[] = await tx
     .select()
     .from(candidatesTable)
@@ -201,6 +223,20 @@ export async function synchronizeCandidates(
     existing.map((candidate) => [candidateIdentity(candidate), candidate]),
   );
   const incomingIdentities = new Set(incoming.map(candidateIdentity));
+  const protectedCandidateIds = new Set<number>();
+  if (protectPreCutoffCohort && session) {
+    const cutoff = top3CutoffForDate(session.date);
+    for (const candidate of existing) {
+      if (
+        candidate.createdAt instanceof Date &&
+        candidate.createdAt.getTime() < cutoff.getTime() &&
+        candidate.signalDate === session.date &&
+        (candidate.signalSource === "telegram" || candidate.signalSource === "edgeai")
+      ) {
+        protectedCandidateIds.add(candidate.id);
+      }
+    }
+  }
 
   const diff: CandidateSyncDiff = { added: [], updated: [], removed: [] };
 
@@ -210,6 +246,10 @@ export async function synchronizeCandidates(
     const values: Record<string, unknown> = { ...candidate, sessionId };
 
     if (current) {
+      // The first source row before the daily cutoff is the immutable cohort
+      // input. A later import may not silently rewrite its signal-time fields.
+      if (protectedCandidateIds.has(current.id)) continue;
+
       // The signal-time selection is immutable evidence. Do not let later
       // imports rewrite either its signal/plan fields or its identity fields.
       // Outcome updates remain handled by the dedicated outcome PATCH path.
@@ -260,7 +300,13 @@ export async function synchronizeCandidates(
         .where(eq(candidatesTable.id, current.id));
     } else {
       diff.added.push(toDiffEntry(candidate));
-      await tx.insert(candidatesTable).values(values as any);
+      // PostgreSQL now() is the transaction start, which can precede a wait
+      // on the session lock. Use the wall clock when this INSERT actually runs
+      // so a post-16:30 arrival cannot appear to have joined before cutoff.
+      await tx.insert(candidatesTable).values({
+        ...values,
+        createdAt: sql`clock_timestamp()`,
+      } as any);
     }
   }
 
@@ -268,6 +314,7 @@ export async function synchronizeCandidates(
     (candidate: any) =>
       candidate.outcome === "PENDING" &&
       !selectedCandidateIds.has(candidate.id) &&
+      !protectedCandidateIds.has(candidate.id) &&
       !incomingIdentities.has(candidateIdentity(candidate)),
   );
   const stalePendingIds = stalePending.map((candidate: any) => candidate.id);
