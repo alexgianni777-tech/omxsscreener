@@ -28,3 +28,31 @@ mtime_ms = 1790571167858
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/7946b892-0d46-46d9-b476-c775d688c1da/1392b05b-95b9-4fc1-83d1-69c8c0cd2ad8"
 storage_version_token = "1790571173229911"
 content_type = "text/plain"
+
+[[outputs]]
+id = "xyr2LrjohTCnNaCP53LFv"
+uri = "file://exports/omxs30-screener-full-code-2026-09-28.txt"
+type = "text"
+title = "Hela uppdaterade koden – text för ChatGPT"
+description = "Aktuellt källkodspaket för granskning, 265 projektfiler med tydliga filavsnitt. Inga hemligheter, uppladdningar eller databasposter."
+logical_id = "bcc63a6b-91e3-448e-9dfd-a5c745d72e50"
+content_hash = "sha256:c89d4c22b58de3cb6d841c4c34e1a13fddce5c003beaa33b180611953e18d224"
+size = 1393931
+mtime_ms = 1790578039534
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/bcc63a6b-91e3-448e-9dfd-a5c745d72e50/8265aacd-b2e8-4491-8f25-d031d696226f"
+storage_version_token = "1790578061102927"
+content_type = "text/plain"
+
+[[outputs]]
+id = "ao5mbk5SDLSM0FBO6E3CC"
+uri = "file://exports/omxs30-screener-source-2026-09-28.zip"
+type = "unspecified"
+title = "Hela uppdaterade koden – ZIP"
+description = "Samma aktuella projektkällkod som separata filer, med migrationsjournal, tester och konfiguration."
+logical_id = "d8a3060c-6335-4b53-be2e-810564b225b5"
+content_hash = "sha256:0a67811672424b64b848354dafc5ddd51862ec0805245108cf0c1f0a4bc7820f"
+size = 418154
+mtime_ms = 1790578039594
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/d8a3060c-6335-4b53-be2e-810564b225b5/f0fea10d-5d77-4236-b212-f1e6f78eee32"
+storage_version_token = "1790578061679082"
+content_type = "application/octet-stream"

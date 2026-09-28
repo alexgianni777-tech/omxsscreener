@@ -5,6 +5,7 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 export interface Top3Pick {
   ticker: string;
   direction: string;
+  signalSource: string | null;
   edgeScore: number;
   outcome: string;
   r: number | null;

@@ -442,15 +442,16 @@ function TodaySessionPanel() {
             <div className="flex flex-wrap gap-1">
               {top3Session.picks.map((p) => (
                 <span
-                  key={p.ticker}
+                  key={`${p.direction}:${p.ticker}:${p.signalSource ?? "unknown"}`}
                   className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded border ${
                     p.direction === "SHORT"
                       ? "bg-destructive/10 text-destructive border-destructive/20"
                       : "bg-success/10 text-success border-success/20"
                   } ${p.outcome === "LOSS" ? "opacity-40 line-through" : p.outcome === "WIN" ? "opacity-70" : ""}`}
-                  title={`${p.direction} · ${p.outcome ?? "PENDING"}`}
+                  title={`${p.direction} · ${p.signalSource ?? "okänd källa"} · ${p.outcome ?? "PENDING"}`}
                 >
                   {p.ticker.replace(/\.ST$/i, "")}
+                  {p.signalSource === "edgeai" ? " · E" : p.signalSource === "telegram" ? " · T" : ""}
                   {p.outcome === "WIN" ? " ✓" : p.outcome === "LOSS" ? " ✗" : ""}
                 </span>
               ))}
@@ -1189,8 +1190,8 @@ function Top3MarketCard({
               <div className="flex gap-1 flex-1 flex-wrap">
                 {s.picks.map((p) => (
                   <span
-                    key={p.ticker}
-                    title={p.earningsWarning ? "Rapportvarning — Regel 7 hade exkluderat denna" : undefined}
+                     key={`${p.direction}:${p.ticker}:${p.signalSource ?? "unknown"}`}
+                     title={`${p.signalSource ?? "okänd källa"}${p.earningsWarning ? " · Rapportvarning — Regel 7 hade exkluderat denna" : ""}`}
                     className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded font-mono font-medium ${
                       p.earningsWarning ? "ring-1 ring-amber-500/50" : ""
                     } ${
@@ -1205,6 +1206,7 @@ function Top3MarketCard({
                       <AlertTriangle className="h-2.5 w-2.5 text-amber-500 shrink-0" />
                     )}
                     {p.ticker.replace(/\.ST$/i, "")}
+                     {p.signalSource === "edgeai" ? " · E" : p.signalSource === "telegram" ? " · T" : ""}
                     {p.r != null ? ` ${p.r >= 0 ? "+" : ""}${formatNumber(p.r, 1)}R` : ""}
                   </span>
                 ))}
@@ -1261,10 +1263,10 @@ function Top3Tooltip({
     <div className="bg-popover border border-border rounded-lg p-3 shadow-lg text-xs space-y-2 min-w-[180px]">
       <div className="font-semibold text-muted-foreground">{fullDate ?? d.date}</div>
       {session?.picks.map((p) => (
-        <div key={p.ticker} className="flex justify-between gap-4">
+        <div key={`${p.direction}:${p.ticker}:${p.signalSource ?? "unknown"}`} className="flex justify-between gap-4">
           <span className="font-mono flex items-center gap-1">
             {p.earningsWarning && <AlertTriangle className="h-2.5 w-2.5 text-amber-500" />}
-            {p.ticker}
+            {p.ticker} · {p.signalSource ?? "okänd"}
           </span>
           <span
             className={

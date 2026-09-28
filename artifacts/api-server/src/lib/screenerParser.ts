@@ -216,19 +216,31 @@ export function parseScreenerText(rawText: string): ParsedSession {
 
     if (!currentCategory) continue;
 
-    // Detect candidate lines: start with "N. TICKER ..."
-    const candidateLineMatch = line.match(/^\s*(\d+)\.\s+\S/);
+    // Only treat ranked, ticker-shaped entries as candidates. This avoids
+    // interpreting numbered prose or headings as candidates, while catching
+    // malformed data lines when they still look like a ticker row.
+    const candidateLineMatch = line.match(/^\s*(\d+)\.\s+([A-ZÅÄÖ][A-ZÅÄÖ0-9.-]*)(?=\s|$)(.*)$/);
     if (candidateLineMatch) {
       const rank = parseInt(candidateLineMatch[1], 10);
+      const ticker = candidateLineMatch[2];
       // Next line should be the plan line
       const planLine = lines[i + 1] ?? "";
-      if (!planLine.includes("plan(")) continue; // skip if no plan (e.g. "Inga kvalificerade idag")
+      const looksLikeCandidate = planLine.includes("plan(")
+        || candidateLineMatch[3].includes("|")
+        || /\s[\d.]/.test(candidateLineMatch[3]);
+      if (!looksLikeCandidate) continue; // e.g. a numbered heading or prose
+      if (!planLine.includes("plan(")) {
+        throw new ScreenerParseError(
+          `Line ${i + 1} (${ticker}): candidate is missing its plan line`,
+        );
+      }
 
       try {
         const candidate = parseCandidate(line, planLine, currentCategory, rank);
         candidates.push(candidate);
-      } catch {
-        // skip malformed candidate rather than failing the whole import
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "invalid candidate";
+        throw new ScreenerParseError(`Line ${i + 1} (${ticker}): ${detail}`);
       }
       i++; // skip plan line
     }

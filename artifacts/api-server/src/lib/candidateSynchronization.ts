@@ -18,8 +18,9 @@ type CandidateInput = Record<string, unknown> & {
 
 /**
  * A stable identity for an individual setup. Ticker alone is not enough: a
- * session can contain the same ticker in multiple categories, markets or
- * directions.
+ * session can contain the same ticker in multiple categories, markets,
+ * directions, or signal sources. A null source remains distinct as unknown
+ * provenance; it is not inferred from a session or a later import.
  */
 export function candidateIdentity(candidate: CandidateInput): string {
   return policyCandidateIdentity(candidate);
@@ -32,7 +33,7 @@ export function assertUniqueCandidateIdentities(_candidates: CandidateInput[]) {
 
 /**
  * Remove duplicate candidates from an incoming batch, keeping the first
- * occurrence of each (market|category|ticker|direction) identity.
+ * occurrence of each (market|category|ticker|direction|signalSource) identity.
  * Returns the deduplicated list and the identities that were skipped.
  */
 export function deduplicateCandidates<T extends CandidateInput>(
@@ -56,8 +57,8 @@ export function deduplicateCandidates<T extends CandidateInput>(
 /**
  * Merge a new import into an existing session without dropping candidates
  * from the other source. Incoming candidates come first, so an exact
- * identity match uses the latest import's values while synchronization still
- * preserves any already-recorded outcome.
+ * source-aware identity match uses the latest import's values while
+ * synchronization still preserves any already-recorded outcome.
  */
 export function mergeCandidateInputs<T extends CandidateInput>(
   incoming: T[],

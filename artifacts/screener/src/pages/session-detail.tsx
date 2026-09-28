@@ -232,7 +232,7 @@ export function SessionDetail() {
   const todayMs   = new Date(todayStr).getTime();
   const daysOld   = Math.round((todayMs - sessionMs) / 86_400_000);
 
-  // ── Correlation / concentration analysis ────────────────────────────────────
+  // ── Same-setup concentration (not measured market correlation) ────────────
   const pending = candidates.filter(c => c.outcome === "PENDING");
   type GroupKey = string;
   const groups: Record<GroupKey, number> = {};
@@ -240,13 +240,13 @@ export function SessionDetail() {
     const key = `${c.category} ${c.direction}`;
     groups[key] = (groups[key] ?? 0) + 1;
   });
-  const correlationWarnings: string[] = [];
+  const concentrationWarnings: string[] = [];
   Object.entries(groups).forEach(([key, count]) => {
-    if (count >= 2) correlationWarnings.push(`${count}× ${key}`);
+    if (count >= 2) concentrationWarnings.push(`${count}× ${key}`);
   });
   const totalPending = pending.length;
   const dominantCount = Math.max(0, ...Object.values(groups));
-  const isHighlyCorrelated = totalPending >= 2 && dominantCount === totalPending;
+  const isSingleSetupGroup = totalPending >= 2 && dominantCount === totalPending;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-12">
@@ -327,17 +327,17 @@ export function SessionDetail() {
         </div>
       )}
 
-      {/* ── Correlation / concentration notice ── */}
-      {correlationWarnings.length > 0 && (
+      {/* ── Same-setup concentration notice ── */}
+      {concentrationWarnings.length > 0 && (
         <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-500/20 bg-amber-500/5">
           <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <div>
             <span className="font-semibold text-amber-400 text-sm">
-              {isHighlyCorrelated ? "Alla " : ""}{totalPending} pendande setups är korrelerade
+              Koncentration i liknande setups
             </span>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {correlationWarnings.join(", ")} — det är inte diversifiering, det är samma edge {isHighlyCorrelated ? "i " + totalPending + " positioner" : "upprepat"}.
-              Tar du alla tar du {isHighlyCorrelated ? "exakt" : "i princip"} samma risk flera gånger.
+              {concentrationWarnings.join(", ")} — {isSingleSetupGroup ? "alla" : "flera"} väntande förslag har samma kategori och riktning.
+              Detta visar upprepade setup-etiketter, inte uppmätt korrelation mellan aktier eller likvärdig portföljrisk.
             </p>
           </div>
         </div>

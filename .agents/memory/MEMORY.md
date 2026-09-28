@@ -7,6 +7,7 @@
 - [Portfolio Instrument Imports](portfolio-instrument-imports.md) — leveraged products use pasted broker prices and refresh by ticker plus instrument.
 - [EdgeAI Mapping Duplication](edgeai-mapping-duplication.md) — RESOLVED: now one shared edgeAiMapping.ts; don't reintroduce a second copy in scheduler.ts/edgeai.ts.
 - [DB Push Safety Guard](db-push-safety-guard.md) — `db run push` now runs a pre-check that blocks column/table drops and type mismatches before drizzle-kit push touches the live DB.
+- [Drizzle migration journal](drizzle-migration-journal.md) — an SQL file alone is invisible to migrate; verify journal, applied history, and actual columns separately.
 - [Import Conflict Preview](import-conflict-wouldremove.md) — 409 re-import conflict responses preview which still-pending candidates would be deleted, not just which outcomes are preserved.
 - [EdgeAI Pipeline Topology](edgeai-pipeline-topology.md) — three separate GitHub repos feed this app; each has its own cron that can silently miss independently of the others.
 - [GitHub Connector Git Data API Limits](github-connector-git-data-api-limits.md) — the Replit GitHub connector's proxyFetch unreliably 404s POST /git/trees above ~1.4KB body size; batch small and expect flakiness.

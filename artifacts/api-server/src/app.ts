@@ -1,5 +1,4 @@
 import express, { type Express } from "express";
-import cors from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import rateLimit from "express-rate-limit";
@@ -34,7 +33,8 @@ app.use(
     },
   }),
 );
-app.use(cors({ credentials: true, origin: true }));
+// The dashboard and API share one origin through the Replit proxy. No
+// credentialed cross-origin browser access is required.
 app.use(cookieParser());
 app.use(express.json());
 

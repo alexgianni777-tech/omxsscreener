@@ -13,7 +13,7 @@ import { reviewCandidate } from "./screeningReview.ts";
 
 type Row = {
   market: "SE" | "US";
-  signalSource: "edgeai" | "telegram";
+  signalSource: "edgeai" | "telegram" | "manual" | null;
   category: "MOMENTUM";
   ticker: string;
   direction: "LONG";
@@ -38,7 +38,7 @@ test("explicit reimport policy preserves US pending and removes absent SE pendin
     (candidate) => candidate.outcome === "PENDING" && !effectiveIdentities.has(candidateIdentity(candidate)),
   );
 
-  assert.deepEqual(preview, ["SE|MOMENTUM|REMOVE|LONG"]);
+  assert.deepEqual(preview, ["SE|MOMENTUM|REMOVE|LONG|edgeai"]);
   assert.deepEqual(
     actual.map((candidate) => candidateIdentity(candidate)),
     preview,
@@ -69,7 +69,7 @@ test("only a genuinely separate market is carried into effective input", () => {
   assert.deepEqual(effective.map((candidate) => candidate.ticker), ["NEW-SE", "OLD-US"]);
   assert.deepEqual(
     pendingRemovalIdentities(existing, incoming),
-    ["SE|MOMENTUM|OLD-SE|LONG"],
+    ["SE|MOMENTUM|OLD-SE|LONG|edgeai"],
   );
 });
 
@@ -87,7 +87,7 @@ test("EdgeAI reimport preserves pending Telegram candidates in the same market",
   );
   assert.deepEqual(
     pendingRemovalIdentities(existing, incoming),
-    ["SE|MOMENTUM|OLD-EDGEAI|LONG"],
+    ["SE|MOMENTUM|OLD-EDGEAI|LONG|edgeai"],
   );
 });
 
@@ -105,7 +105,38 @@ test("Telegram reimport preserves pending EdgeAI candidates in the same market",
   );
   assert.deepEqual(
     pendingRemovalIdentities(existing, incoming),
-    ["SE|MOMENTUM|OLD-TELEGRAM|LONG"],
+    ["SE|MOMENTUM|OLD-TELEGRAM|LONG|telegram"],
+  );
+});
+
+test("same setup from different sources coexists and keeps its resolved outcome", () => {
+  const resolvedEdgeAi = row("SAME", "SE", "WIN", "edgeai");
+  const incomingTelegram = row("SAME", "SE", "PENDING", "telegram");
+  const effective = effectiveCandidateInputs([incomingTelegram], [resolvedEdgeAi]);
+
+  assert.notEqual(candidateIdentity(resolvedEdgeAi), candidateIdentity(incomingTelegram));
+  assert.deepEqual(
+    effective.map((candidate) => [candidate.signalSource, candidate.outcome]),
+    [["telegram", "PENDING"], ["edgeai", "WIN"]],
+  );
+  assert.deepEqual(pendingRemovalIdentities([resolvedEdgeAi], [incomingTelegram]), []);
+});
+
+test("preview keeps legacy null-source provenance distinct from an imported source", () => {
+  const legacyPending = row("SAME", "SE", "PENDING", null);
+  const staleEdgeAi = row("STALE", "SE", "PENDING", "edgeai");
+  const incomingEdgeAi = row("SAME", "SE", "PENDING", "edgeai");
+
+  assert.notEqual(candidateIdentity(legacyPending), candidateIdentity(incomingEdgeAi));
+  assert.equal(candidateIdentity(legacyPending), "SE|MOMENTUM|SAME|LONG|<unknown>");
+  assert.deepEqual(
+    effectiveCandidateInputs([incomingEdgeAi], [legacyPending, staleEdgeAi])
+      .map((candidate) => [candidate.ticker, candidate.signalSource]),
+    [["SAME", "edgeai"], ["SAME", null]],
+  );
+  assert.deepEqual(
+    pendingRemovalIdentities([legacyPending, staleEdgeAi], [incomingEdgeAi]),
+    ["SE|MOMENTUM|STALE|LONG|edgeai"],
   );
 });
 

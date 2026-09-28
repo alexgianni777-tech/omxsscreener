@@ -12,6 +12,7 @@ export function candidateIdentity(candidate: CandidatePolicyInput): string {
     candidate.category,
     candidate.ticker.trim().toUpperCase(),
     candidate.direction,
+    candidate.signalSource ?? "<unknown>",
   ].join("|");
 }
 

@@ -26,6 +26,14 @@ test("mixed sources are interleaved instead of compared in incompatible units", 
   assert.deepEqual(selected.map((row) => row.ticker), ["EDGE-1", "TELEGRAM-1", "EDGE-2"]);
 });
 
+test("same-ticker candidates from different sources remain independently ranked", () => {
+  const selected = selectSourceBalancedCandidates([
+    candidate("SAME", "edgeai"),
+    candidate("SAME", "telegram", { perf1m: 12, rs3m: 10 }),
+  ], 2);
+  assert.deepEqual(selected.map((row) => row.signalSource), ["edgeai", "telegram"]);
+});
+
 test("manual short weakness ranks in the correct direction", () => {
   const weak = candidate("WEAK", "telegram", { direction: "SHORT", perf1m: -12, rs3m: -8 });
   const strong = candidate("STRONG", "telegram", { direction: "SHORT", perf1m: 5, rs3m: 4 });

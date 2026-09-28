@@ -12,6 +12,7 @@ export type ListCandidatesOutcome = typeof ListCandidatesOutcome[keyof typeof Li
 export const ListCandidatesOutcome = {
   WIN: 'WIN',
   LOSS: 'LOSS',
+  TIME_EXIT: 'TIME_EXIT',
   SKIP: 'SKIP',
   PENDING: 'PENDING',
 } as const;

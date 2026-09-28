@@ -414,7 +414,7 @@ export const DeleteSessionResponse = zod.void()
  */
 export const ListCandidatesQueryParams = zod.object({
   "category": zod.enum(['MOMENTUM', 'SQUEEZE', 'STUDS', 'WEAKEST']).optional(),
-  "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']).optional(),
+  "outcome": zod.enum(['WIN', 'LOSS', 'TIME_EXIT', 'SKIP', 'PENDING']).optional(),
   "direction": zod.enum(['LONG', 'SHORT']).optional()
 })
 

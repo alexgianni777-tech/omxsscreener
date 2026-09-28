@@ -108,6 +108,7 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
       return {
         ticker: c.ticker,
         direction: c.direction,
+        signalSource: c.signalSource ?? null,
         edgeScore: Number(candidateSelectionScore(c).toFixed(4)),
         outcome: c.outcome,
         r,
@@ -122,6 +123,7 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
       return {
         ticker: c.ticker,
         direction: c.direction,
+        signalSource: c.signalSource ?? null,
         edgeScore: Number(candidateSelectionScore(c).toFixed(4)),
         outcome: c.outcome,
         r: performance?.r ?? null,

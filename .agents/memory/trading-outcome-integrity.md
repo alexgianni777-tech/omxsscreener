@@ -44,3 +44,10 @@ description: Methodology rules that keep historical outcomes, earnings context, 
 **Why:** a later import or post-outcome star can change which past candidates appear selected without changing the actual decisions available at signal time, overstating or understating strategy performance.
 
 **How to apply:** label legacy recalculated statistics as provisional. For future official performance, save immutable signal-time eligibility, selection, ranking policy and source timestamps first; keep older cohorts explicitly unknown unless contemporaneous evidence exists.
+
+## Legacy signal-source provenance
+**Rule:** Missing per-candidate source remains an unknown source, not a source inferred from the session or a later import. Treat source as part of candidate identity, including the unknown case.
+
+**Why:** Mixed sessions and past imports can contain indistinguishable ticker/setup pairs from different sources; retroactively assigning a missing source could silently contaminate outcome history.
+
+**How to apply:** preserve legacy null-source rows separately when importing a known source. Explain any duplicate-looking rows instead of rewriting history without contemporaneous evidence.

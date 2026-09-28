@@ -366,7 +366,7 @@ export function Today() {
           return {
             date: session.date,
             ticker: candidate.ticker.replace(/\.ST$/i, ""),
-            strategy: "trend pullback",
+            strategy: `${candidate.category} (${candidate.signalSource ?? "okänd källa"})`,
             direction: candidate.direction,
             pnlKr,
             riskAllocationKr: allocatedRisk,
