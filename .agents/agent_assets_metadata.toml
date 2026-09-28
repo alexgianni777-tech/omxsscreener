@@ -14,3 +14,17 @@ mtime_ms = 1789805652677
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/94323e27-2bc3-468f-b6cb-231437a6bc8f/cd57ecf4-0d39-4017-b2ff-17890c804414"
 storage_version_token = "1789805653291243"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "dvfD0sncRRvJBmvpapxXT"
+uri = "file://exports/omxs30-screener-full-code.txt"
+type = "text"
+title = "OMXS30 Screener – hela koden"
+description = "Ett dokument med 254 fullständiga källfiler: webbapp, API, delade bibliotek, databasschema, migrationer, tester och konfiguration. Inga hemligheter eller byggfiler."
+logical_id = "7946b892-0d46-46d9-b476-c775d688c1da"
+content_hash = "sha256:1a44bc9d6cdd1e41e7556555e6db25bf69fcb861499d726bc8cd86bbab086298"
+size = 1154450
+mtime_ms = 1790571167858
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/7946b892-0d46-46d9-b476-c775d688c1da/1392b05b-95b9-4fc1-83d1-69c8c0cd2ad8"
+storage_version_token = "1790571173229911"
+content_type = "text/plain"
