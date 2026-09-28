@@ -12,9 +12,7 @@ import { and, eq } from "drizzle-orm";
 import { logger } from "./logger";
 import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "./omxs30TickerMap";
-import {
-  calculateWilderRsi,
-} from "./marketIndicators";
+import { fetchOmxsMarketWeather } from "./omxsMarketWeather";
 import { completedVolumeKey, fetchCompletedVolumeBatch } from "./completedVolumeBatch";
 import { edgeAiSessionDate, fetchFreshEdgeAiData } from "./edgeAiSource";
 import {
@@ -91,27 +89,6 @@ async function sessionHasEdgeAiForDate(date: string): Promise<boolean> {
   return Boolean(edgeAiCandidate);
 }
 
-async function fetchOmxsMarketWeather(): Promise<{
-  omxsValue: number; perf5d: number; perf1m: number; perf3m: number; marketRsi: number;
-}> {
-  const now = new Date();
-  const ninetyFiveDaysAgo = new Date(now.getTime() - 95 * 86_400_000);
-  const history = await withRetry(() => yf.historical("^OMX", {
-    period1: ninetyFiveDaysAgo,
-    period2: now,
-    interval: "1d",
-  })) as Array<{ close: number }>;
-
-  if (history.length === 0) return { omxsValue: 0, perf5d: 0, perf1m: 0, perf3m: 0, marketRsi: 0 };
-
-  const omxsValue = history[history.length - 1].close;
-  const perf5d  = history.length >= 6  ? ((omxsValue - history[history.length - 6].close)  / history[history.length - 6].close)  * 100 : 0;
-  const perf1m  = history.length >= 22 ? ((omxsValue - history[history.length - 22].close) / history[history.length - 22].close) * 100 : 0;
-  const perf3m  = history.length >= 64 ? ((omxsValue - history[history.length - 64].close) / history[history.length - 64].close) * 100 : 0;
-  const marketRsi = calculateWilderRsi(history.map((bar) => Number(bar.close))) ?? 0;
-  return { omxsValue, perf5d, perf1m, perf3m, marketRsi };
-}
-
 async function runImport(date: string): Promise<void> {
   logger.info({ date }, "[scheduler] Fetching EdgeAI data.json");
 
@@ -128,13 +105,11 @@ async function runImport(date: string): Promise<void> {
     return;
   }
 
-  // Fetch real OMXS30 market data
-  let mw = { omxsValue: 0, perf5d: 0, perf1m: 0, perf3m: 0, marketRsi: 0 };
-  try {
-    mw = await fetchOmxsMarketWeather();
-  } catch (err: any) {
-    logger.warn({ err: err.message }, "[scheduler] OMXS30 market weather fetch failed — using zeros");
-  }
+  // The SE data date may be yesterday even when EdgeAI was generated today.
+  // Do not replace that completed index bar with today's partial quote.
+  const mw = seSetups.length > 0
+    ? await fetchOmxsMarketWeather(yf, String(se?.dataAsOf ?? ""))
+    : { omxsValue: 0, perf5d: 0, perf1m: 0, perf3m: 0, marketRsi: 0 };
 
   const rankCounterSE: Record<string, number> = {};
   const rankCounterUS: Record<string, number> = {};

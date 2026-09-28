@@ -14,7 +14,7 @@ import {
 } from "@workspace/db";
 import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "../lib/omxs30TickerMap";
-import { calculateWilderRsi } from "../lib/marketIndicators";
+import { fetchOmxsMarketWeather } from "../lib/omxsMarketWeather";
 import { completedVolumeKey, fetchCompletedVolumeBatch } from "../lib/completedVolumeBatch";
 import {
   edgeAiSessionDate,
@@ -87,34 +87,19 @@ router.post(
     const sessionDate = edgeAiSessionDate(edgeData);
     const freshness = edgeAiDataFreshness(edgeData);
 
-    // 2b. Fetch OMXS30 market weather as it existed on the signal date.
-    // A stale/manual EdgeAI import must not attach today's later market context
-    // to an older signal, because that creates look-ahead bias in history.
-    let omxsValue = 0, perf5d = 0, perf1m = 0, perf3m = 0, marketRsi = 0;
+    // EdgeAI generated today can still use yesterday's completed market bars.
+    // Keep index context on the SE data day, never the partial import-day bar.
+    let mw;
     try {
-      const now = new Date();
-      const todayUtc = now.toISOString().slice(0, 10);
-      const signalDayStartMs = Date.parse(`${sessionDate}T00:00:00.000Z`);
-      const historyEnd =
-        sessionDate < todayUtc
-          ? new Date(signalDayStartMs + 86_400_000)
-          : now;
-      const ninetyFiveDaysAgo = new Date(historyEnd.getTime() - 95 * 86_400_000);
-      const history = await withRetry(() => yf.historical("^OMX", {
-        period1: ninetyFiveDaysAgo,
-        period2: historyEnd,
-        interval: "1d",
-      })) as Array<{ close: number }>;
-      if (history.length > 0) {
-        omxsValue = history[history.length - 1].close;
-        if (history.length >= 6)  perf5d  = ((omxsValue - history[history.length - 6].close)  / history[history.length - 6].close)  * 100;
-        if (history.length >= 22) perf1m  = ((omxsValue - history[history.length - 22].close) / history[history.length - 22].close) * 100;
-        if (history.length >= 64) perf3m  = ((omxsValue - history[history.length - 64].close) / history[history.length - 64].close) * 100;
-        marketRsi = calculateWilderRsi(history.map((bar) => Number(bar.close))) ?? 0;
-      }
+      mw = setups.length > 0
+        ? await fetchOmxsMarketWeather(yf, String(se.dataAsOf ?? ""))
+        : { omxsValue: 0, perf5d: 0, perf1m: 0, perf3m: 0, marketRsi: 0 };
     } catch (err: any) {
-      logger.warn({ err: err.message }, "Manual EdgeAI import could not calculate OMXS30 weather");
+      logger.warn({ err: err.message }, "Manual EdgeAI import could not verify completed OMXS30 weather");
+      res.status(502).json({ error: "Stängd OMXS30-kurs för EdgeAI:s datadag saknas. Försök igen när kursdata finns." });
+      return;
     }
+    const { omxsValue, perf5d, perf1m, perf3m, marketRsi } = mw;
 
     // 3. Map setups → candidates (SE + US combined), rank each market separately.
     //    mapEdgeAiSetup is the single shared mapping function (see edgeAiMapping.ts) —
