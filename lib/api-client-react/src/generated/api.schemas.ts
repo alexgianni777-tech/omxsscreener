@@ -743,12 +743,16 @@ export interface QuoteResult {
   error?: string | null;
 }
 
+/**
+ * Recorded outcome method; TIME_EXIT is classified as a win, loss, or flat result by the sign of r.
+ */
 export type EquityCurvePointOutcome = typeof EquityCurvePointOutcome[keyof typeof EquityCurvePointOutcome];
 
 
 export const EquityCurvePointOutcome = {
   WIN: 'WIN',
   LOSS: 'LOSS',
+  TIME_EXIT: 'TIME_EXIT',
 } as const;
 
 export interface EquityCurvePoint {
@@ -761,6 +765,7 @@ export interface EquityCurvePoint {
   /** Session date (YYYY-MM-DD) */
   date: string;
   ticker: string;
+  /** Recorded outcome method; TIME_EXIT is classified as a win, loss, or flat result by the sign of r. */
   outcome: EquityCurvePointOutcome;
 }
 
@@ -789,7 +794,7 @@ export interface DashboardSummary {
      */
   payoffRatio: number | null;
   /**
-     * Expected R per trade (winRate * avgRWin + lossRate * avgRLoss)
+     * Mean realized R over all resolved trades with a valid R, including TIME_EXIT and flat results.
      * @nullable
      */
   expectedValue: number | null;

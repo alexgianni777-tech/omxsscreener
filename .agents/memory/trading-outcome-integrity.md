@@ -37,3 +37,10 @@ description: Methodology rules that keep historical outcomes, earnings context, 
 **Why:** current Yahoo earnings data does not reconstruct what was available on an earlier signal date and would introduce hindsight into historical analytics.
 
 **How to apply:** persist observation provenance, exclude unknown observations from Rule 7-adjusted comparisons, and label current context separately without changing the signal-day review.
+
+## Historical Top 3 selection provenance
+**Rule:** a Top 3 list recalculated from mutable candidate fields or stars is retrospective analysis, not a point-in-time record of an executable strategy. Never fabricate historical eligibility or picks from their current values.
+
+**Why:** a later import or post-outcome star can change which past candidates appear selected without changing the actual decisions available at signal time, overstating or understating strategy performance.
+
+**How to apply:** label legacy recalculated statistics as provisional. For future official performance, save immutable signal-time eligibility, selection, ranking policy and source timestamps first; keep older cohorts explicitly unknown unless contemporaneous evidence exists.

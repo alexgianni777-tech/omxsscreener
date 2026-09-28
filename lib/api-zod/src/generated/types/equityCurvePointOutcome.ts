@@ -6,10 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * Recorded outcome method; TIME_EXIT is classified as a win, loss, or flat result by the sign of r.
+ */
 export type EquityCurvePointOutcome = typeof EquityCurvePointOutcome[keyof typeof EquityCurvePointOutcome];
 
 
 export const EquityCurvePointOutcome = {
   WIN: 'WIN',
   LOSS: 'LOSS',
+  TIME_EXIT: 'TIME_EXIT',
 } as const;

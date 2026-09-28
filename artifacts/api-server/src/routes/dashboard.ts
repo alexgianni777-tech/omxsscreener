@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
-import { sql, eq, and, ne, inArray } from "drizzle-orm";
+import { sql, eq, inArray } from "drizzle-orm";
 import { db, candidatesTable, screenerSessionsTable } from "@workspace/db";
 import { GetDashboardSummaryResponse } from "@workspace/api-zod";
+import { resolveTradePerformance } from "../lib/tradePerformance.ts";
 
 const router: IRouter = Router();
 
@@ -13,31 +14,19 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
     .from(screenerSessionsTable);
   const totalSessions = Number(sessionCountRow?.count ?? 0);
 
-  // Total candidates and outcome breakdown
-  const outcomeRows = await db
-    .select({
-      outcome: candidatesTable.outcome,
-      count: sql<number>`cast(count(*) as integer)`,
-    })
-    .from(candidatesTable)
-    .groupBy(candidatesTable.outcome);
-
   let wins = 0;
   let losses = 0;
-  let totalCandidates = 0;
+  let resolvedTrades = 0;
 
-  for (const row of outcomeRows) {
-    const count = Number(row.count);
-    totalCandidates += count;
-    if (row.outcome === "WIN") wins = count;
-    if (row.outcome === "LOSS") losses = count;
-  }
+  const categoryMap: Record<
+    string,
+    { total: number; resolved: number; wins: number; losses: number; skips: number; pending: number }
+  > = {};
 
-  const resolvedTrades = wins + losses;
-  const overallWinRate = resolvedTrades > 0 ? wins / resolvedTrades : null;
-
-  // Per-category stats
-  const categoryRows = await db
+  // All-candidate performance is intentionally distinct from the retrospectively
+  // selected Top3 population. Keep count aggregation in SQL rather than loading
+  // every still-pending candidate just to count it.
+  const categoryCounts = await db
     .select({
       category: candidatesTable.category,
       outcome: candidatesTable.outcome,
@@ -45,42 +34,21 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
     })
     .from(candidatesTable)
     .groupBy(candidatesTable.category, candidatesTable.outcome);
-
-  const categoryMap: Record<
-    string,
-    { total: number; wins: number; losses: number; skips: number; pending: number }
-  > = {};
-
-  for (const row of categoryRows) {
+  let totalCandidates = 0;
+  for (const row of categoryCounts) {
     const count = Number(row.count);
-    if (!categoryMap[row.category]) {
-      categoryMap[row.category] = { total: 0, wins: 0, losses: 0, skips: 0, pending: 0 };
-    }
-    categoryMap[row.category].total += count;
-    if (row.outcome === "WIN") categoryMap[row.category].wins += count;
-    if (row.outcome === "LOSS") categoryMap[row.category].losses += count;
-    if (row.outcome === "SKIP") categoryMap[row.category].skips += count;
-    if (row.outcome === "PENDING") categoryMap[row.category].pending += count;
+    totalCandidates += count;
+    const stats = categoryMap[row.category] ??= {
+      total: 0, resolved: 0, wins: 0, losses: 0, skips: 0, pending: 0,
+    };
+    stats.total += count;
+    if (row.outcome === "SKIP") stats.skips += count;
+    if (row.outcome === "PENDING") stats.pending += count;
   }
 
-  const allCategories = ["MOMENTUM", "SQUEEZE", "STUDS", "WEAKEST"] as const;
-  const byCategory = allCategories.map((cat) => {
-    const stats = categoryMap[cat] ?? { total: 0, wins: 0, losses: 0, skips: 0, pending: 0 };
-    const resolved = stats.wins + stats.losses;
-    return {
-      category: cat,
-      total: stats.total,
-      wins: stats.wins,
-      losses: stats.losses,
-      skips: stats.skips,
-      pending: stats.pending,
-      winRate: resolved > 0 ? stats.wins / resolved : null,
-    };
-  });
-
-  // P&L / R-multiple stats — fetch resolved trades with prices, ordered by session date
   const resolvedRows = await db
     .select({
+      category: candidatesTable.category,
       ticker: candidatesTable.ticker,
       outcome: candidatesTable.outcome,
       direction: candidatesTable.direction,
@@ -95,7 +63,7 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
     })
     .from(candidatesTable)
     .innerJoin(screenerSessionsTable, eq(candidatesTable.sessionId, screenerSessionsTable.id))
-    .where(inArray(candidatesTable.outcome, ["WIN", "LOSS"]))
+    .where(inArray(candidatesTable.outcome, ["WIN", "LOSS", "TIME_EXIT"]))
     .orderBy(screenerSessionsTable.date, candidatesTable.id);
 
   // Calculate R for each trade: R = signed gain / |entry - stop|
@@ -103,37 +71,48 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
     r: number;
     date: string;
     ticker: string;
-    outcome: "WIN" | "LOSS";
+    outcome: "WIN" | "LOSS" | "TIME_EXIT";
+    result: "WIN" | "LOSS" | "FLAT";
   }
   const tradeRs: TradeR[] = [];
 
   for (const row of resolvedRows) {
-    if (
-      row.exitPrice == null ||
-      row.entryPrice == null ||
-      row.stopPrice == null
-    ) {
-      continue;
-    }
-    // New resolutions persist R at the time they are recorded, so later
-    // signal re-imports cannot rewrite their realized performance. Keep the
-    // calculation as a fallback for all legacy outcome rows.
-    const entryPrice = row.resolutionEntryPrice ?? row.entryPrice;
-    const stopPrice = row.resolutionStopPrice ?? row.stopPrice;
-    const direction = row.resolutionDirection ?? row.direction;
-    const oneRUnit = Math.abs(entryPrice - stopPrice);
-    if (oneRUnit === 0) continue;
-    const r = row.realizedR ?? (direction === "LONG"
-      ? (row.exitPrice - entryPrice) / oneRUnit
-      : (entryPrice - row.exitPrice) / oneRUnit);
+    const performance = resolveTradePerformance(row);
+    if (!performance) continue;
 
+    const stats = categoryMap[row.category];
+    resolvedTrades++;
+    stats.resolved++;
+    if (performance.result === "WIN") {
+      wins++;
+      stats.wins++;
+    } else if (performance.result === "LOSS") {
+      losses++;
+      stats.losses++;
+    }
     tradeRs.push({
-      r,
+      r: performance.r,
       date: row.sessionDate,
       ticker: row.ticker,
-      outcome: row.outcome as "WIN" | "LOSS",
+      outcome: row.outcome as TradeR["outcome"],
+      result: performance.result,
     });
   }
+  const overallWinRate = resolvedTrades > 0 ? wins / resolvedTrades : null;
+
+  const allCategories = ["MOMENTUM", "SQUEEZE", "STUDS", "WEAKEST"] as const;
+  const byCategory = allCategories.map((cat) => {
+    const stats = categoryMap[cat] ?? { total: 0, resolved: 0, wins: 0, losses: 0, skips: 0, pending: 0 };
+    return {
+      category: cat,
+      total: stats.total,
+      wins: stats.wins,
+      losses: stats.losses,
+      skips: stats.skips,
+      pending: stats.pending,
+      winRate: stats.resolved > 0 ? stats.wins / stats.resolved : null,
+    };
+  });
 
   // Equity curve
   let cumulative = 0;
@@ -150,8 +129,8 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
   });
 
   // Aggregate stats
-  const winRs = tradeRs.filter((t) => t.outcome === "WIN").map((t) => t.r);
-  const lossRs = tradeRs.filter((t) => t.outcome === "LOSS").map((t) => t.r);
+  const winRs = tradeRs.filter((t) => t.result === "WIN").map((t) => t.r);
+  const lossRs = tradeRs.filter((t) => t.result === "LOSS").map((t) => t.r);
 
   const avgRWin =
     winRs.length > 0 ? winRs.reduce((a, b) => a + b, 0) / winRs.length : null;
@@ -163,16 +142,9 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
       ? avgRWin / Math.abs(avgRLoss)
       : null;
 
-  // EV is computed from the same exit-priced population as the R stats
-  const pricedWins = winRs.length;
-  const pricedLosses = lossRs.length;
-  const pricedResolved = pricedWins + pricedLosses;
-  const pricedWinRate = pricedResolved > 0 ? pricedWins / pricedResolved : null;
-
-  const expectedValue =
-    pricedWinRate != null && avgRWin != null && avgRLoss != null
-      ? pricedWinRate * avgRWin + (1 - pricedWinRate) * avgRLoss
-      : null;
+  const expectedValue = tradeRs.length > 0
+    ? tradeRs.reduce((sum, trade) => sum + trade.r, 0) / tradeRs.length
+    : null;
 
   res.json(
     GetDashboardSummaryResponse.parse({

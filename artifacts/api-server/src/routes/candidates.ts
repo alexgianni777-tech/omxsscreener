@@ -31,7 +31,7 @@ type ResolutionMethod = "MANUAL_EXIT" | "TARGET_HIT" | "STOP_HIT" | "TIME_EXIT";
  * always produces its actual R. Planned stop/target levels remain available
  * only as deliberate, auditable assumptions.
  */
-function resolveOutcome(
+export function resolveOutcome(
   candidate: {
     entryPrice: number; stopPrice: number; targetPrice: number; direction: string;
     resolutionEntryPrice?: number | null; resolutionStopPrice?: number | null; resolutionDirection?: string | null;
@@ -66,7 +66,7 @@ function resolveOutcome(
   }
 
   const assumedPrice = method === "TARGET_HIT" ? candidate.targetPrice : method === "STOP_HIT" ? candidate.stopPrice : null;
-  if (method !== "MANUAL_EXIT" && input.exitPrice != null && Math.abs(input.exitPrice - assumedPrice!) > 0.0001) {
+  if ((method === "TARGET_HIT" || method === "STOP_HIT") && input.exitPrice != null && Math.abs(input.exitPrice - assumedPrice!) > 0.0001) {
     return { success: false, error: `${method} måste använda signalens ${method === "TARGET_HIT" ? "target" : "stop"}-pris.` };
   }
   if ((method === "MANUAL_EXIT" || method === "TIME_EXIT") && input.actualExitConfirmed !== true) {

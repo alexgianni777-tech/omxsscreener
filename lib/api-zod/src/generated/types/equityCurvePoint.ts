@@ -17,5 +17,6 @@ export interface EquityCurvePoint {
   /** Session date (YYYY-MM-DD) */
   date: string;
   ticker: string;
+  /** Recorded outcome method; TIME_EXIT is classified as a win, loss, or flat result by the sign of r. */
   outcome: EquityCurvePointOutcome;
 }

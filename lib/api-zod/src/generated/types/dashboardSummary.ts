@@ -33,7 +33,7 @@ export interface DashboardSummary {
      */
   payoffRatio: number | null;
   /**
-     * Expected R per trade (winRate * avgRWin + lossRate * avgRLoss)
+     * Mean realized R over all resolved trades with a valid R, including TIME_EXIT and flat results.
      * @nullable
      */
   expectedValue: number | null;

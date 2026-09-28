@@ -40,7 +40,7 @@ export function Dashboard() {
   }
 
   const winRateColor =
-    summary.overallWinRate
+    summary.overallWinRate != null
       ? summary.overallWinRate >= 0.5
         ? "text-success"
         : "text-destructive"
@@ -105,15 +105,15 @@ export function Dashboard() {
           icon={<Target className="h-4 w-4 text-muted-foreground" />}
         />
         <StatCard
-          title="Resolved Trades"
+          title="Utfall med beräknat R"
           value={summary.resolvedTrades.toString()}
           icon={<Clock className="h-4 w-4 text-muted-foreground" />}
-          subtitle={`${summary.wins}W – ${summary.losses}L`}
+          subtitle={`${summary.wins}V – ${summary.losses}F – ${summary.resolvedTrades - summary.wins - summary.losses} 0R`}
         />
         <StatCard
           title="Overall Win Rate"
           value={
-            summary.overallWinRate ? formatPercent(summary.overallWinRate) : "–"
+            summary.overallWinRate != null ? formatPercent(summary.overallWinRate) : "–"
           }
           icon={<CheckCircle2 className="h-4 w-4 text-muted-foreground" />}
           valueClass={winRateColor}
@@ -123,8 +123,11 @@ export function Dashboard() {
       {/* P&L / R-multiple stats */}
       <div>
         <h3 className="text-lg font-semibold mb-4 border-b border-border pb-2">
-          Edge-statistik (R-multiplar)
+          Edge-statistik — alla kandidater (R-multiplar)
         </h3>
+        <p className="text-xs text-muted-foreground -mt-2 mb-4">
+          Endast utfall med beräknat R ingår. Väntande förslag saknas i snittet, så siffrorna är preliminära.
+        </p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard
             title="Snitt-R vinster"
@@ -189,7 +192,7 @@ export function Dashboard() {
           <div className="flex flex-col items-center justify-center h-48 bg-card border border-border rounded-lg text-muted-foreground gap-2">
             <BarChart2 className="h-8 w-8 opacity-30" />
             <p className="text-sm">
-              Logga utfall med exit-pris för att se R-kurvan.
+              Logga utfall med beräknat R för att se R-kurvan.
             </p>
           </div>
         ) : (
@@ -263,7 +266,7 @@ export function Dashboard() {
                   {cat.category}
                 </span>
                 <span className="text-xl font-bold font-mono">
-                  {cat.winRate ? formatPercent(cat.winRate) : "–"}
+                  {cat.winRate != null ? formatPercent(cat.winRate) : "–"}
                 </span>
               </div>
               <div className="grid grid-cols-4 gap-2 text-center text-sm font-mono bg-muted/50 rounded-md p-2">
@@ -303,9 +306,9 @@ function CurveDot(props: any) {
   const { cx, cy, payload } = props;
   if (!payload?.outcome) return null; // origin point
   const color =
-    payload.outcome === "WIN"
+    payload.r > 0
       ? "hsl(var(--success, 142 71% 45%))"
-      : "hsl(var(--destructive))";
+      : payload.r < 0 ? "hsl(var(--destructive))" : "hsl(var(--muted-foreground))";
   return <circle cx={cx} cy={cy} r={3} fill={color} stroke="none" />;
 }
 
@@ -315,13 +318,15 @@ function EquityCurveTooltip({ active, payload }: TooltipProps<number, string>) {
   const d = payload[0].payload;
   if (!d?.outcome) return null; // origin point
 
-  const isWin = d.outcome === "WIN";
+  const isWin = d.r > 0;
   return (
     <div className="bg-popover border border-border rounded-lg p-3 shadow-lg text-xs space-y-1 min-w-[160px]">
       <div className="flex items-center justify-between gap-4">
-        <span className="font-bold font-mono">{d.ticker}</span>
+        <span className="font-bold font-mono">
+          {d.ticker}{d.outcome === "TIME_EXIT" ? " · Tidsavslut" : ""}
+        </span>
         <span
-          className={`font-mono font-bold ${isWin ? "text-success" : "text-destructive"}`}
+          className={`font-mono font-bold ${isWin ? "text-success" : d.r < 0 ? "text-destructive" : "text-muted-foreground"}`}
         >
           {d.r >= 0 ? "+" : ""}
           {Number(d.r).toFixed(2)}R
@@ -504,8 +509,8 @@ function WeekSummarySection({ equityCurve }: { equityCurve: EquityPoint[] }) {
     let wins = 0, losses = 0, totalR = 0;
     let bestPick: { ticker: string; r: number } | null = null;
     for (const t of thisWeek) {
-      if (t.outcome === "WIN") wins++;
-      else losses++;
+      if (t.r > 0) wins++;
+      else if (t.r < 0) losses++;
       totalR += t.r;
       if (!bestPick || t.r > bestPick.r) bestPick = { ticker: t.ticker, r: t.r };
     }
@@ -515,7 +520,7 @@ function WeekSummarySection({ equityCurve }: { equityCurve: EquityPoint[] }) {
       trades: thisWeek.length,
       wins,
       losses,
-      winRate: wins + losses > 0 ? wins / (wins + losses) : null,
+      winRate: thisWeek.length > 0 ? wins / thisWeek.length : null,
       totalR: Math.round(totalR * 100) / 100,
       bestPick,
     };
@@ -531,7 +536,7 @@ function WeekSummarySection({ equityCurve }: { equityCurve: EquityPoint[] }) {
         <span className="text-xs text-muted-foreground">{mondayStr} →</span>
       </div>
       {trades === 0 ? (
-        <p className="text-sm text-muted-foreground">Inga avslutade trades med exit-pris denna vecka.</p>
+        <p className="text-sm text-muted-foreground">Inga utfall med beräknat R denna vecka.</p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="text-center">
@@ -551,6 +556,7 @@ function WeekSummarySection({ equityCurve }: { equityCurve: EquityPoint[] }) {
               <span className="text-success">{wins}V</span>
               <span className="text-muted-foreground mx-1">/</span>
               <span className="text-destructive">{losses}F</span>
+              {trades > wins + losses && <span className="text-muted-foreground"> / {trades - wins - losses} 0R</span>}
             </div>
             <div className="text-xs text-muted-foreground mt-1">Trades</div>
           </div>
@@ -720,7 +726,7 @@ interface EquityPoint {
   date: string;
   r: number;
   ticker: string;
-  outcome: "WIN" | "LOSS";
+  outcome: "WIN" | "LOSS" | "TIME_EXIT";
   tradeIndex: number;
   cumulativeR: number;
 }
@@ -756,13 +762,15 @@ function RollingExpectancySection({ equityCurve }: { equityCurve: EquityPoint[] 
 
   if (total < 5) return null; // too few data points to show anything meaningful
 
-  const wins   = recent.filter(pt => pt.outcome === "WIN").length;
-  const losses = recent.filter(pt => pt.outcome === "LOSS").length;
+  const winTrades = recent.filter(pt => pt.r > 0);
+  const lossTrades = recent.filter(pt => pt.r < 0);
+  const wins = winTrades.length;
+  const losses = lossTrades.length;
   const winRate = total > 0 ? wins / total : 0;
 
-  const avgWinR  = wins   > 0 ? recent.filter(pt => pt.outcome === "WIN" ).reduce((s, pt) => s + pt.r, 0) / wins   : 0;
-  const avgLossR = losses > 0 ? Math.abs(recent.filter(pt => pt.outcome === "LOSS").reduce((s, pt) => s + pt.r, 0) / losses) : 1;
-  const expectancy = winRate * avgWinR - (1 - winRate) * avgLossR;
+  const avgWinR = wins > 0 ? winTrades.reduce((s, pt) => s + pt.r, 0) / wins : 0;
+  const avgLossR = losses > 0 ? Math.abs(lossTrades.reduce((s, pt) => s + pt.r, 0) / losses) : 0;
+  const expectancy = recent.reduce((sum, pt) => sum + pt.r, 0) / total;
 
   const isPositive = expectancy > 0;
   const label = total < WINDOW ? `Senaste ${total} trades` : `Senaste ${WINDOW} trades`;
@@ -780,7 +788,7 @@ function RollingExpectancySection({ equityCurve }: { equityCurve: EquityPoint[] 
           <div className={`text-2xl font-bold ${winRate >= 0.5 ? "text-success" : "text-destructive"}`}>
             {(winRate * 100).toFixed(0)}%
           </div>
-          <div className="text-[10px] text-muted-foreground mt-1">{wins}V / {losses}F</div>
+            <div className="text-[10px] text-muted-foreground mt-1">{wins}V / {losses}F / {total - wins - losses} 0R</div>
         </div>
         <div className="bg-card border border-border rounded-lg p-4 text-center shadow-sm">
           <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Avg vinst</div>
@@ -907,8 +915,11 @@ function Top3Section() {
     <div className="space-y-6">
       <div className="flex items-center gap-2 border-b border-border pb-2">
         <Trophy className="h-5 w-5 text-muted-foreground" />
-        <h3 className="text-lg font-semibold">Top 3 picks — hypotetisk avkastning</h3>
+        <h3 className="text-lg font-semibold">Top 3 — retrospektiv simulering</h3>
       </div>
+      <p className="text-xs text-muted-foreground -mt-4">
+        Separat population från all-kandidatstatistiken ovan. Urvalet räknas om från aktuella kandidatfält och stjärnmarkeringar; det är inte frysta signal-time-picks, verifierad strategi-edge eller ett tradebart urval och motsvarar inte nödvändigtvis Dagens session.
+      </p>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Top3MarketCard label="📋 Manuella sessioner" sessions={seSessions} isLoading={isLoading} accentColor="hsl(var(--primary))" />
         <Top3MarketCard label="⚡ EdgeAI (SE + US)" sessions={usSessions} isLoading={isLoading} accentColor="hsl(var(--success, 142 71% 45%))" />
@@ -929,17 +940,35 @@ function computeMarketChartData(sessions: Top3Session[]) {
   return points;
 }
 
+function isCountedTop3Pick(pick: Top3Session["picks"][number]): boolean {
+  return pick.r != null &&
+    (pick.outcome === "WIN" || pick.outcome === "LOSS" || pick.outcome === "TIME_EXIT");
+}
+
+function isWinningTop3Pick(pick: Top3Session["picks"][number]): boolean {
+  return pick.r != null &&
+    (pick.outcome === "WIN" || (pick.outcome === "TIME_EXIT" && pick.r > 0));
+}
+
+function isLosingTop3Pick(pick: Top3Session["picks"][number]): boolean {
+  return pick.r != null &&
+    (pick.outcome === "LOSS" || (pick.outcome === "TIME_EXIT" && pick.r < 0));
+}
+
 function computeMarketStats(sessions: Top3Session[]) {
-  let wins = 0, losses = 0, totalR = 0;
+  let wins = 0, losses = 0, flats = 0, totalR = 0;
   for (const s of sessions) {
     for (const p of s.picks) {
-      if (p.outcome === "WIN") { wins++; totalR += (p.r ?? 0); }
-      else if (p.outcome === "LOSS") { losses++; totalR += (p.r ?? 0); }
+      if (!isCountedTop3Pick(p)) continue;
+      totalR += p.r!;
+      if (isWinningTop3Pick(p)) wins++;
+      else if (isLosingTop3Pick(p)) losses++;
+      else flats++;
     }
   }
-  const total = wins + losses;
+  const total = wins + losses + flats;
   return {
-    wins, losses, total,
+    wins, losses, flats, total,
     winRate: total > 0 ? wins / total : null,
     totalR,
     avgR: total > 0 ? totalR / total : null,
@@ -1019,7 +1048,7 @@ function Top3MarketCard({
       {/* Stat pills */}
       {stats.total > 0 && (
         <div className="flex flex-wrap gap-2">
-          <Pill label="Trades" value={`${stats.wins}V / ${stats.losses}F`} />
+          <Pill label="Trades" value={`${stats.wins}V / ${stats.losses}F / ${stats.flats}0R`} />
           <Pill
             label="Hitrate"
             value={stats.winRate != null ? formatPercent(stats.winRate) : "–"}
@@ -1063,11 +1092,11 @@ function Top3MarketCard({
       {(() => {
         const allLong = sessions.flatMap((s) => s.longPicks ?? []);
         const allShort = sessions.flatMap((s) => s.shortPicks ?? []);
-        const longRes = allLong.filter((p) => p.outcome === "WIN" || p.outcome === "LOSS");
-        const shortRes = allShort.filter((p) => p.outcome === "WIN" || p.outcome === "LOSS");
+        const longRes = allLong.filter(isCountedTop3Pick);
+        const shortRes = allShort.filter(isCountedTop3Pick);
         if (longRes.length === 0 && shortRes.length === 0) return null;
-        const longWR = longRes.length > 0 ? longRes.filter((p) => p.outcome === "WIN").length / longRes.length : null;
-        const shortWR = shortRes.length > 0 ? shortRes.filter((p) => p.outcome === "WIN").length / shortRes.length : null;
+        const longWR = longRes.length > 0 ? longRes.filter(isWinningTop3Pick).length / longRes.length : null;
+        const shortWR = shortRes.length > 0 ? shortRes.filter(isWinningTop3Pick).length / shortRes.length : null;
         const avgR = (pool: typeof longRes) => {
           const rs = pool.map((p) => p.r).filter((r): r is number => r != null);
           return rs.length > 0 ? rs.reduce((a, b) => a + b, 0) / rs.length : null;
@@ -1104,8 +1133,8 @@ function Top3MarketCard({
       {sessions.some((s) => s.edgeWinRate != null) && (() => {
         const withRate = sessions.filter((s) => s.edgeWinRate != null);
         const avgPromised = withRate.reduce((a, s) => a + (s.edgeWinRate ?? 0), 0) / withRate.length;
-        const allResolved = sessions.flatMap((s) => s.picks).filter((p) => p.outcome === "WIN" || p.outcome === "LOSS");
-        const actualWR = allResolved.length > 0 ? allResolved.filter((p) => p.outcome === "WIN").length / allResolved.length : null;
+        const allResolved = sessions.flatMap((s) => s.picks).filter(isCountedTop3Pick);
+        const actualWR = allResolved.length > 0 ? allResolved.filter(isWinningTop3Pick).length / allResolved.length : null;
         return (
           <div className="bg-blue-500/5 border border-blue-500/20 rounded-md px-3 py-2 space-y-1.5">
             <div className="text-[10px] text-blue-400 font-semibold uppercase tracking-wide">
@@ -1165,9 +1194,9 @@ function Top3MarketCard({
                     className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded font-mono font-medium ${
                       p.earningsWarning ? "ring-1 ring-amber-500/50" : ""
                     } ${
-                      p.outcome === "WIN"
+                      isWinningTop3Pick(p)
                         ? "bg-success/15 text-success"
-                        : p.outcome === "LOSS"
+                        : isLosingTop3Pick(p)
                         ? "bg-destructive/15 text-destructive"
                         : "bg-muted text-muted-foreground"
                     }`}
@@ -1239,9 +1268,9 @@ function Top3Tooltip({
           </span>
           <span
             className={
-              p.outcome === "WIN"
+              isWinningTop3Pick(p)
                 ? "text-success font-mono"
-                : p.outcome === "LOSS"
+                : isLosingTop3Pick(p)
                 ? "text-destructive font-mono"
                 : "text-muted-foreground"
             }

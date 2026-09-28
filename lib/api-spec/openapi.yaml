@@ -1067,7 +1067,8 @@ components:
           type: string
         outcome:
           type: string
-          enum: [WIN, LOSS]
+          description: Recorded outcome method; TIME_EXIT is classified as a win, loss, or flat result by the sign of r.
+          enum: [WIN, LOSS, TIME_EXIT]
 
     DashboardSummary:
       type: object
@@ -1100,7 +1101,7 @@ components:
           description: avgRWin divided by absolute avgRLoss
         expectedValue:
           type: ["number", "null"]
-          description: Expected R per trade (winRate * avgRWin + lossRate * avgRLoss)
+          description: Mean realized R over all resolved trades with a valid R, including TIME_EXIT and flat results.
         equityCurve:
           type: array
           description: Chronological sequence of resolved trades for equity curve chart

@@ -16,6 +16,7 @@ import { Router, type IRouter } from "express";
 import { asc } from "drizzle-orm";
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import { candidateSelectionScore, selectSourceBalancedCandidates } from "../lib/candidateRanking.ts";
+import { resolveTradePerformance } from "../lib/tradePerformance.ts";
 
 const router: IRouter = Router();
 
@@ -82,56 +83,20 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
 
     const picks = top3.map((c) => {
       const dirBucket = c.direction === "SHORT" ? byDirection.SHORT : byDirection.LONG;
-
-      let r: number | null = null;
-      // Resolutions written after realized-R support persist the authoritative
-      // value. For old rows, only use a conservatively reconstructable exit;
-      // never turn a planned R:R or a bare WIN/LOSS label into a performance
-      // number.
-      const legacyR = c.exitPrice != null
-        ? (() => {
-            const entry = c.resolutionEntryPrice ?? c.entryPrice;
-            const stop = c.resolutionStopPrice ?? c.stopPrice;
-            const direction = c.resolutionDirection ?? c.direction;
-            const oneR = Math.abs(entry - stop);
-            return oneR > 0
-              ? (direction === "LONG" ? (c.exitPrice! - entry) / oneR : (entry - c.exitPrice!) / oneR)
-              : null;
-          })()
-        : null;
-      const persistedR = c.realizedR ?? legacyR;
-      if (c.outcome === "WIN" && persistedR != null && persistedR > 0) {
-        r = persistedR;
-        wins++;
+      const performance = resolveTradePerformance(c);
+      const r = performance?.r ?? null;
+      if (performance) {
+        const resolvedR = performance.r;
         totalTrades++;
         sessionHasResolved = true;
-        sessionR += r;
-        cumulativeR += r;
-        dirBucket.wins++;
+        sessionR += resolvedR;
+        cumulativeR += resolvedR;
         dirBucket.totalTrades++;
-        dirBucket.totalR += r;
-      } else if (c.outcome === "LOSS" && persistedR != null && persistedR < 0) {
-        r = persistedR;
-        losses++;
-        totalTrades++;
-        sessionHasResolved = true;
-        sessionR += r;
-        cumulativeR += r;
-        dirBucket.losses++;
-        dirBucket.totalTrades++;
-        dirBucket.totalR += r;
-      } else if (c.outcome === "TIME_EXIT" && persistedR != null && Number.isFinite(persistedR)) {
-        r = persistedR;
-        totalTrades++;
-        sessionHasResolved = true;
-        sessionR += r;
-        cumulativeR += r;
-        dirBucket.totalTrades++;
-        dirBucket.totalR += r;
-        if (r > 0) {
+        dirBucket.totalR += resolvedR;
+        if (performance.result === "WIN") {
           wins++;
           dirBucket.wins++;
-        } else if (r < 0) {
+        } else if (performance.result === "LOSS") {
           losses++;
           dirBucket.losses++;
         }
@@ -153,24 +118,13 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
     // Direction split — informational picks per direction, not counted in cumulative R
     const mapInfoPick = (c: (typeof allCandidates)[0]) => {
       const eid = c.earningsInDays;
-      const entry = c.resolutionEntryPrice ?? c.entryPrice;
-      const stop = c.resolutionStopPrice ?? c.stopPrice;
-      const direction = c.resolutionDirection ?? c.direction;
-      const oneR = Math.abs(entry - stop);
-      const legacyR = c.exitPrice != null && oneR > 0
-        ? (direction === "LONG" ? (c.exitPrice - entry) / oneR : (entry - c.exitPrice) / oneR)
-        : null;
-      const persistedR = c.realizedR ?? legacyR;
+      const performance = resolveTradePerformance(c);
       return {
         ticker: c.ticker,
         direction: c.direction,
         edgeScore: Number(candidateSelectionScore(c).toFixed(4)),
         outcome: c.outcome,
-        r: (c.outcome === "WIN" && persistedR != null && persistedR > 0) ||
-          (c.outcome === "LOSS" && persistedR != null && persistedR < 0) ||
-          (c.outcome === "TIME_EXIT" && persistedR != null && Number.isFinite(persistedR))
-          ? persistedR
-          : null,
+        r: performance?.r ?? null,
         earningsWarning: c.earningsKnowledge === "SIGNAL_TIME" && eid != null && eid >= 0 && eid <= 5,
       };
     };
