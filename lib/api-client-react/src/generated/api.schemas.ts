@@ -63,12 +63,64 @@ export const PortfolioPositionDirection = {
   SHORT: 'SHORT',
 } as const;
 
+/**
+ * Direction held in the quoted product. LONG means owning the product; P&L follows product price movement and is never multiplied by leverage.
+ * @nullable
+ */
+export type PortfolioPositionProductSide = typeof PortfolioPositionProductSide[keyof typeof PortfolioPositionProductSide] | null;
+
+
+export const PortfolioPositionProductSide = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
+/**
+ * Directional exposure to the underlying; null means unknown
+ * @nullable
+ */
+export type PortfolioPositionUnderlyingDirection = typeof PortfolioPositionUnderlyingDirection[keyof typeof PortfolioPositionUnderlyingDirection] | null;
+
+
+export const PortfolioPositionUnderlyingDirection = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
 export interface PortfolioPosition {
   id: number;
   ticker: string;
   /** @nullable */
   instrument: string | null;
   direction: PortfolioPositionDirection;
+  /**
+     * Product classification
+     * @nullable
+     */
+  productType: string | null;
+  /**
+     * Direction held in the quoted product. LONG means owning the product; P&L follows product price movement and is never multiplied by leverage.
+     * @nullable
+     */
+  productSide: PortfolioPositionProductSide;
+  /**
+     * Directional exposure to the underlying; null means unknown
+     * @nullable
+     */
+  underlyingDirection: PortfolioPositionUnderlyingDirection;
+  /** @nullable */
+  underlyingTicker: string | null;
+  /**
+     * Informational leverage only; not applied to product P&L.
+     * @nullable
+     */
+  indicativeLeverage: number | null;
+  /** @nullable */
+  financingLevel: number | null;
+  /** @nullable */
+  barrierLevel: number | null;
+  /** @nullable */
+  barrierType: string | null;
   /** @nullable */
   market: string | null;
   /** @nullable */
@@ -139,14 +191,237 @@ export interface PortfolioSummary {
      * @nullable
      */
   maxStopLossKr: number | null;
-  /** Current long market exposure. */
+  /** Current position market value grouped by the legacy position direction; for leveraged products this is product value */
   longExposureKr: number;
-  /** Current short market exposure */
+  /** Current position market value grouped by the legacy position direction */
   shortExposureKr: number;
   /** Long exposure plus short exposure. */
   grossExposureKr: number;
   /** Long exposure minus short exposure. */
   netExposureKr: number;
+  /** Count of positions with explicitly known LONG underlying direction; not a notional exposure. */
+  underlyingLongCount: number;
+  /** Count of positions with explicitly known SHORT underlying direction; not a notional exposure. */
+  underlyingShortCount: number;
+  /** Count of positions whose underlying direction is unspecified. */
+  underlyingDirectionUnknownCount: number;
+}
+
+export type PortfolioPositionRecordDirection = typeof PortfolioPositionRecordDirection[keyof typeof PortfolioPositionRecordDirection];
+
+
+export const PortfolioPositionRecordDirection = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
+/**
+ * @nullable
+ */
+export type PortfolioPositionRecordProductSide = typeof PortfolioPositionRecordProductSide[keyof typeof PortfolioPositionRecordProductSide] | null;
+
+
+export const PortfolioPositionRecordProductSide = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
+/**
+ * @nullable
+ */
+export type PortfolioPositionRecordUnderlyingDirection = typeof PortfolioPositionRecordUnderlyingDirection[keyof typeof PortfolioPositionRecordUnderlyingDirection] | null;
+
+
+export const PortfolioPositionRecordUnderlyingDirection = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
+export interface PortfolioPositionRecord {
+  id: number;
+  ticker: string;
+  /** @nullable */
+  instrument: string | null;
+  direction: PortfolioPositionRecordDirection;
+  /** @nullable */
+  productType: string | null;
+  /** @nullable */
+  productSide: PortfolioPositionRecordProductSide;
+  /** @nullable */
+  underlyingDirection: PortfolioPositionRecordUnderlyingDirection;
+  /** @nullable */
+  underlyingTicker: string | null;
+  /** @nullable */
+  indicativeLeverage: number | null;
+  /** @nullable */
+  financingLevel: number | null;
+  /** @nullable */
+  barrierLevel: number | null;
+  /** @nullable */
+  barrierType: string | null;
+  entryPrice: number;
+  /** @nullable */
+  lastPrice: number | null;
+  shares: number;
+  /** @nullable */
+  stopPrice: number | null;
+  /** @nullable */
+  targetPrice: number | null;
+  /** @nullable */
+  market: string | null;
+  /** @nullable */
+  notes: string | null;
+  createdAt: string;
+}
+
+export type PortfolioPositionInputDirection = typeof PortfolioPositionInputDirection[keyof typeof PortfolioPositionInputDirection];
+
+
+export const PortfolioPositionInputDirection = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
+/**
+ * @nullable
+ */
+export type PortfolioPositionInputProductSide = typeof PortfolioPositionInputProductSide[keyof typeof PortfolioPositionInputProductSide] | null;
+
+
+export const PortfolioPositionInputProductSide = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
+/**
+ * @nullable
+ */
+export type PortfolioPositionInputUnderlyingDirection = typeof PortfolioPositionInputUnderlyingDirection[keyof typeof PortfolioPositionInputUnderlyingDirection] | null;
+
+
+export const PortfolioPositionInputUnderlyingDirection = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
+export interface PortfolioPositionInput {
+  /** @minLength 1 */
+  ticker: string;
+  /** @nullable */
+  instrument?: string | null;
+  direction: PortfolioPositionInputDirection;
+  /** @nullable */
+  productType?: string | null;
+  /** @nullable */
+  productSide?: PortfolioPositionInputProductSide;
+  /** @nullable */
+  underlyingDirection?: PortfolioPositionInputUnderlyingDirection;
+  /** @nullable */
+  underlyingTicker?: string | null;
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  indicativeLeverage?: number | null;
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  financingLevel?: number | null;
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  barrierLevel?: number | null;
+  /** @nullable */
+  barrierType?: string | null;
+  /** @exclusiveMinimum 0 */
+  entryPrice: number;
+  /** @exclusiveMinimum 0 */
+  shares: number;
+  /** @nullable */
+  stopPrice?: number | null;
+  /** @nullable */
+  targetPrice?: number | null;
+  /** @nullable */
+  market?: string | null;
+  /** @nullable */
+  notes?: string | null;
+}
+
+export type PortfolioPositionUpdateDirection = typeof PortfolioPositionUpdateDirection[keyof typeof PortfolioPositionUpdateDirection];
+
+
+export const PortfolioPositionUpdateDirection = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
+/**
+ * @nullable
+ */
+export type PortfolioPositionUpdateProductSide = typeof PortfolioPositionUpdateProductSide[keyof typeof PortfolioPositionUpdateProductSide] | null;
+
+
+export const PortfolioPositionUpdateProductSide = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
+/**
+ * @nullable
+ */
+export type PortfolioPositionUpdateUnderlyingDirection = typeof PortfolioPositionUpdateUnderlyingDirection[keyof typeof PortfolioPositionUpdateUnderlyingDirection] | null;
+
+
+export const PortfolioPositionUpdateUnderlyingDirection = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
+export interface PortfolioPositionUpdate {
+  /** @minLength 1 */
+  ticker?: string;
+  /** @nullable */
+  instrument?: string | null;
+  direction?: PortfolioPositionUpdateDirection;
+  /** @nullable */
+  productType?: string | null;
+  /** @nullable */
+  productSide?: PortfolioPositionUpdateProductSide;
+  /** @nullable */
+  underlyingDirection?: PortfolioPositionUpdateUnderlyingDirection;
+  /** @nullable */
+  underlyingTicker?: string | null;
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  indicativeLeverage?: number | null;
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  financingLevel?: number | null;
+  /**
+     * @exclusiveMinimum 0
+     * @nullable
+     */
+  barrierLevel?: number | null;
+  /** @nullable */
+  barrierType?: string | null;
+  /** @exclusiveMinimum 0 */
+  entryPrice?: number;
+  /** @exclusiveMinimum 0 */
+  shares?: number;
+  /** @nullable */
+  stopPrice?: number | null;
+  /** @nullable */
+  targetPrice?: number | null;
+  /** @nullable */
+  market?: string | null;
+  /** @nullable */
+  notes?: string | null;
 }
 
 export interface PortfolioResponse {
@@ -382,9 +657,63 @@ export interface CandidateDecision {
   reasons: string[];
 }
 
+/**
+ * @nullable
+ */
+export type OfficialCandidateSelectionMarket = typeof OfficialCandidateSelectionMarket[keyof typeof OfficialCandidateSelectionMarket] | null;
+
+
+export const OfficialCandidateSelectionMarket = {
+  SE: 'SE',
+  US: 'US',
+} as const;
+
+export type OfficialCandidateSelectionDirection = typeof OfficialCandidateSelectionDirection[keyof typeof OfficialCandidateSelectionDirection];
+
+
+export const OfficialCandidateSelectionDirection = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
+/**
+ * @nullable
+ */
+export type OfficialCandidateSelectionSource = typeof OfficialCandidateSelectionSource[keyof typeof OfficialCandidateSelectionSource] | null;
+
+
+export const OfficialCandidateSelectionSource = {
+  edgeai: 'edgeai',
+  telegram: 'telegram',
+  manual: 'manual',
+  screener: 'screener',
+} as const;
+
+export interface OfficialCandidateSelection {
+  selected: boolean;
+  /** @nullable */
+  rank: number | null;
+  score: number;
+  review: SignalReview;
+  decision: CandidateDecision;
+  policyVersion: string;
+  selectedAt: string;
+  type: string;
+  /** @nullable */
+  market: OfficialCandidateSelectionMarket;
+  direction: OfficialCandidateSelectionDirection;
+  /** @nullable */
+  source: OfficialCandidateSelectionSource;
+}
+
 export interface Candidate {
   id: number;
   sessionId: number;
+  /**
+     * YYYY-MM-DD immutable date supplied by the signal source; null for legacy rows where source date is unknown
+     * @nullable
+     */
+  signalDate: string | null;
   category: CandidateCategory;
   rank: number;
   ticker: string;
@@ -502,6 +831,24 @@ export interface Candidate {
   hasLinkedTrade?: boolean;
   review?: SignalReview;
   decision?: CandidateDecision;
+  officialSelection?: OfficialCandidateSelection | null;
+}
+
+export interface CandidateTop3AnnotationInput {
+  isTop3Pick: boolean;
+}
+
+export interface CandidateTop3Annotation {
+  id: number;
+  isTop3Pick: boolean;
+}
+
+export interface Top3SelectionSnapshotStatus {
+  available: boolean;
+  /** @nullable */
+  selectedAt: string | null;
+  /** @nullable */
+  policyVersion: string | null;
 }
 
 export type SessionReview = SignalReview & {
@@ -674,6 +1021,129 @@ export interface SessionDetail {
   sessionReview?: SessionReview;
   /** What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads. */
   importDiff?: ImportDiff;
+  top3SelectionSnapshot: Top3SelectionSnapshotStatus;
+}
+
+/**
+ * @nullable
+ */
+export type Top3AnalyticsPickMarket = typeof Top3AnalyticsPickMarket[keyof typeof Top3AnalyticsPickMarket] | null;
+
+
+export const Top3AnalyticsPickMarket = {
+  SE: 'SE',
+  US: 'US',
+} as const;
+
+export type Top3AnalyticsPickDirection = typeof Top3AnalyticsPickDirection[keyof typeof Top3AnalyticsPickDirection];
+
+
+export const Top3AnalyticsPickDirection = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
+/**
+ * @nullable
+ */
+export type Top3AnalyticsPickSignalSource = typeof Top3AnalyticsPickSignalSource[keyof typeof Top3AnalyticsPickSignalSource] | null;
+
+
+export const Top3AnalyticsPickSignalSource = {
+  edgeai: 'edgeai',
+  telegram: 'telegram',
+  manual: 'manual',
+  screener: 'screener',
+} as const;
+
+export interface Top3AnalyticsPick {
+  candidateId: number;
+  ticker: string;
+  category: string;
+  /** @nullable */
+  market: Top3AnalyticsPickMarket;
+  direction: Top3AnalyticsPickDirection;
+  /** @nullable */
+  signalSource: Top3AnalyticsPickSignalSource;
+  edgeScore: number;
+  /** @nullable */
+  rank: number | null;
+  type: string;
+  policyVersion: string;
+  selectedAt: string;
+  review: SignalReview;
+  decision: CandidateDecision;
+  earningsWarning: boolean;
+  outcome: string;
+  /** @nullable */
+  r: number | null;
+}
+
+export interface Top3DirectionStats {
+  totalTrades: number;
+  wins: number;
+  losses: number;
+  /** @nullable */
+  winRate: number | null;
+  totalR: number;
+  /** @nullable */
+  avgRPerTrade: number | null;
+}
+
+export type Top3AnalyticsSessionSelectionStatus = typeof Top3AnalyticsSessionSelectionStatus[keyof typeof Top3AnalyticsSessionSelectionStatus];
+
+
+export const Top3AnalyticsSessionSelectionStatus = {
+  AVAILABLE: 'AVAILABLE',
+  UNAVAILABLE: 'UNAVAILABLE',
+} as const;
+
+export interface Top3AnalyticsSession {
+  date: string;
+  sessionId: number;
+  /** @nullable */
+  source: string | null;
+  selectionStatus: Top3AnalyticsSessionSelectionStatus;
+  /** @nullable */
+  selectionUnavailableReason: string | null;
+  /** @nullable */
+  selectedAt: string | null;
+  /** @nullable */
+  policyVersion: string | null;
+  picks: Top3AnalyticsPick[];
+  longPicks: Top3AnalyticsPick[];
+  shortPicks: Top3AnalyticsPick[];
+  /** @nullable */
+  edgeWinRate: number | null;
+  /** @nullable */
+  sessionR: number | null;
+  cumulativeR: number;
+}
+
+export type Top3AnalyticsStatsByDirection = {
+  LONG: Top3DirectionStats;
+  SHORT: Top3DirectionStats;
+};
+
+export interface Top3AnalyticsStats {
+  totalSessions: number;
+  availableSessions: number;
+  unavailableSessions: number;
+  completedSessions: number;
+  totalTrades: number;
+  wins: number;
+  losses: number;
+  /** @nullable */
+  winRate: number | null;
+  totalR: number;
+  /** @nullable */
+  avgRPerTrade: number | null;
+  byDirection: Top3AnalyticsStatsByDirection;
+}
+
+export interface Top3Analytics {
+  sessions: Top3AnalyticsSession[];
+  stats: Top3AnalyticsStats;
 }
 
 export type CategoryStatsCategory = typeof CategoryStatsCategory[keyof typeof CategoryStatsCategory];

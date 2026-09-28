@@ -165,6 +165,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /screener/analytics/top3:
+    get:
+      operationId: getTop3Analytics
+      tags: [analytics]
+      summary: Official immutable signal-time Top 3 performance
+      responses:
+        "200":
+          description: Official Top 3 results; legacy sessions without snapshots are unavailable and excluded from performance.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Top3Analytics"
+
   /candidates:
     get:
       operationId: listCandidates
@@ -230,6 +243,49 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /screener/candidates/{id}/top3pick:
+    patch:
+      operationId: setCandidateTop3Annotation
+      tags: [candidates]
+      summary: Toggle a non-official star annotation on a candidate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CandidateTop3AnnotationInput"
+      responses:
+        "200":
+          description: Updated star annotation; does not alter the official selection snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CandidateTop3Annotation"
+        "400":
+          description: Invalid annotation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Candidate not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Star annotation cap reached for this market and direction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /screener/quotes:
     get:
       operationId: getQuotes
@@ -277,6 +333,66 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PortfolioResponse"
+    post:
+      operationId: createPortfolioPosition
+      tags: [portfolio]
+      summary: Add an open portfolio position with optional instrument semantics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PortfolioPositionInput"
+      responses:
+        "201":
+          description: Position created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioPositionRecord"
+        "400":
+          description: Invalid position fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /portfolio/{id}:
+    patch:
+      operationId: updatePortfolioPosition
+      tags: [portfolio]
+      summary: Update an open portfolio position
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PortfolioPositionUpdate"
+      responses:
+        "200":
+          description: Position updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioPositionRecord"
+        "400":
+          description: Invalid position fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Position not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /auth/user:
     get:
@@ -492,12 +608,20 @@ components:
 
     PortfolioPosition:
       type: object
-      required: [id, ticker, instrument, direction, market, notes, entryPrice, lastPrice, stopPrice, targetPrice, shares, positionSizeKr, risk1R, riskToStopKr, riskToStopPct, stopPnlKr, stopPnlPct, createdAt, livePrice, changePct, quoteAsOf, unrealisedPct, unrealisedKr, currentR, marketValueKr, distToStop, distToTarget]
+      required: [id, ticker, instrument, direction, productType, productSide, underlyingDirection, underlyingTicker, indicativeLeverage, financingLevel, barrierLevel, barrierType, market, notes, entryPrice, lastPrice, stopPrice, targetPrice, shares, positionSizeKr, risk1R, riskToStopKr, riskToStopPct, stopPnlKr, stopPnlPct, createdAt, livePrice, changePct, quoteAsOf, unrealisedPct, unrealisedKr, currentR, marketValueKr, distToStop, distToTarget]
       properties:
         id: { type: number }
         ticker: { type: string }
         instrument: { type: ["string", "null"] }
         direction: { type: string, enum: [LONG, SHORT] }
+        productType: { type: ["string", "null"], description: Product classification, e.g. TURBO, MINI, BULL or BEAR. }
+        productSide: { type: ["string", "null"], enum: [LONG, SHORT, null], description: Direction held in the quoted product. LONG means owning the product; P&L follows product price movement and is never multiplied by leverage. }
+        underlyingDirection: { type: ["string", "null"], enum: [LONG, SHORT, null], description: Directional exposure to the underlying; null means unknown, including historic rows without instrument metadata. }
+        underlyingTicker: { type: ["string", "null"] }
+        indicativeLeverage: { type: ["number", "null"], description: Informational leverage only; not applied to product P&L. }
+        financingLevel: { type: ["number", "null"] }
+        barrierLevel: { type: ["number", "null"] }
+        barrierType: { type: ["string", "null"] }
         market: { type: ["string", "null"] }
         notes: { type: ["string", "null"] }
         entryPrice: { type: number }
@@ -524,7 +648,7 @@ components:
 
     PortfolioSummary:
       type: object
-      required: [count, totalInvestedKr, totalMarketValueKr, totalUnrealisedKr, totalUnrealisedPct, maxStopLossKr, longExposureKr, shortExposureKr, grossExposureKr, netExposureKr]
+      required: [count, totalInvestedKr, totalMarketValueKr, totalUnrealisedKr, totalUnrealisedPct, maxStopLossKr, longExposureKr, shortExposureKr, grossExposureKr, netExposureKr, underlyingLongCount, underlyingShortCount, underlyingDirectionUnknownCount]
       properties:
         count: { type: number }
         totalInvestedKr: { type: number }
@@ -534,10 +658,81 @@ components:
         maxStopLossKr:
           type: ["number", "null"]
           description: Sum of negative stop P&L amounts only. Null when any open position lacks a stop, because maximum stop loss is then undefined.
-        longExposureKr: { type: number, description: Current long market exposure. }
-        shortExposureKr: { type: number, description: Current short market exposure, reported as a positive amount. }
+        longExposureKr: { type: number, description: Current position market value grouped by the legacy position direction; for leveraged products this is product value, not underlying notional exposure. }
+        shortExposureKr: { type: number, description: Current position market value grouped by the legacy position direction, reported as a positive amount; for leveraged products this is product value, not underlying notional exposure. }
         grossExposureKr: { type: number, description: Long exposure plus short exposure. }
         netExposureKr: { type: number, description: Long exposure minus short exposure. }
+        underlyingLongCount: { type: number, description: Count of positions with explicitly known LONG underlying direction; not a notional exposure. }
+        underlyingShortCount: { type: number, description: Count of positions with explicitly known SHORT underlying direction; not a notional exposure. }
+        underlyingDirectionUnknownCount: { type: number, description: Count of positions whose underlying direction is unspecified. }
+
+    PortfolioPositionRecord:
+      type: object
+      required: [id, ticker, instrument, direction, productType, productSide, underlyingDirection, underlyingTicker, indicativeLeverage, financingLevel, barrierLevel, barrierType, entryPrice, lastPrice, shares, stopPrice, targetPrice, market, notes, createdAt]
+      properties:
+        id: { type: number }
+        ticker: { type: string }
+        instrument: { type: ["string", "null"] }
+        direction: { type: string, enum: [LONG, SHORT] }
+        productType: { type: ["string", "null"] }
+        productSide: { type: ["string", "null"], enum: [LONG, SHORT, null] }
+        underlyingDirection: { type: ["string", "null"], enum: [LONG, SHORT, null] }
+        underlyingTicker: { type: ["string", "null"] }
+        indicativeLeverage: { type: ["number", "null"] }
+        financingLevel: { type: ["number", "null"] }
+        barrierLevel: { type: ["number", "null"] }
+        barrierType: { type: ["string", "null"] }
+        entryPrice: { type: number }
+        lastPrice: { type: ["number", "null"] }
+        shares: { type: number }
+        stopPrice: { type: ["number", "null"] }
+        targetPrice: { type: ["number", "null"] }
+        market: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+
+    PortfolioPositionInput:
+      type: object
+      required: [ticker, direction, entryPrice, shares]
+      properties:
+        ticker: { type: string, minLength: 1 }
+        instrument: { type: ["string", "null"] }
+        direction: { type: string, enum: [LONG, SHORT] }
+        productType: { type: ["string", "null"] }
+        productSide: { type: ["string", "null"], enum: [LONG, SHORT, null] }
+        underlyingDirection: { type: ["string", "null"], enum: [LONG, SHORT, null] }
+        underlyingTicker: { type: ["string", "null"] }
+        indicativeLeverage: { type: ["number", "null"], exclusiveMinimum: 0 }
+        financingLevel: { type: ["number", "null"], exclusiveMinimum: 0 }
+        barrierLevel: { type: ["number", "null"], exclusiveMinimum: 0 }
+        barrierType: { type: ["string", "null"] }
+        entryPrice: { type: number, exclusiveMinimum: 0 }
+        shares: { type: number, exclusiveMinimum: 0 }
+        stopPrice: { type: ["number", "null"] }
+        targetPrice: { type: ["number", "null"] }
+        market: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+
+    PortfolioPositionUpdate:
+      type: object
+      properties:
+        ticker: { type: string, minLength: 1 }
+        instrument: { type: ["string", "null"] }
+        direction: { type: string, enum: [LONG, SHORT] }
+        productType: { type: ["string", "null"] }
+        productSide: { type: ["string", "null"], enum: [LONG, SHORT, null] }
+        underlyingDirection: { type: ["string", "null"], enum: [LONG, SHORT, null] }
+        underlyingTicker: { type: ["string", "null"] }
+        indicativeLeverage: { type: ["number", "null"], exclusiveMinimum: 0 }
+        financingLevel: { type: ["number", "null"], exclusiveMinimum: 0 }
+        barrierLevel: { type: ["number", "null"], exclusiveMinimum: 0 }
+        barrierType: { type: ["string", "null"] }
+        entryPrice: { type: number, exclusiveMinimum: 0 }
+        shares: { type: number, exclusiveMinimum: 0 }
+        stopPrice: { type: ["number", "null"] }
+        targetPrice: { type: ["number", "null"] }
+        market: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
 
     PortfolioResponse:
       type: object
@@ -648,12 +843,15 @@ components:
 
     Candidate:
       type: object
-      required: [id, sessionId, category, rank, ticker, price, rs3m, perf1m, rsi, pctB, atr, volMultiplier, distFrom20dH, direction, entryPrice, stopPrice, targetPrice, rr, oneR, outcome]
+      required: [id, sessionId, signalDate, category, rank, ticker, price, rs3m, perf1m, rsi, pctB, atr, volMultiplier, distFrom20dH, direction, entryPrice, stopPrice, targetPrice, rr, oneR, outcome]
       properties:
         id:
           type: number
         sessionId:
           type: number
+        signalDate:
+          type: ["string", "null"]
+          description: "YYYY-MM-DD immutable date supplied by the signal source; null for legacy rows where source date is unknown"
         category:
           type: string
           enum: [MOMENTUM, SQUEEZE, STUDS, WEAKEST]
@@ -770,6 +968,26 @@ components:
           $ref: "#/components/schemas/SignalReview"
         decision:
           $ref: "#/components/schemas/CandidateDecision"
+        officialSelection:
+          oneOf:
+            - $ref: "#/components/schemas/OfficialCandidateSelection"
+            - type: "null"
+
+    CandidateTop3AnnotationInput:
+      type: object
+      required: [isTop3Pick]
+      properties:
+        isTop3Pick:
+          type: boolean
+
+    CandidateTop3Annotation:
+      type: object
+      required: [id, isTop3Pick]
+      properties:
+        id:
+          type: number
+        isTop3Pick:
+          type: boolean
 
     SignalReview:
       type: object
@@ -794,6 +1012,49 @@ components:
           type: array
           items:
             type: string
+
+    OfficialCandidateSelection:
+      type: object
+      required: [selected, rank, score, review, decision, policyVersion, selectedAt, type, market, direction, source]
+      properties:
+        selected:
+          type: boolean
+        rank:
+          type: ["number", "null"]
+        score:
+          type: number
+        review:
+          $ref: "#/components/schemas/SignalReview"
+        decision:
+          $ref: "#/components/schemas/CandidateDecision"
+        policyVersion:
+          type: string
+        selectedAt:
+          type: string
+          format: date-time
+        type:
+          type: string
+        market:
+          type: ["string", "null"]
+          enum: [SE, US, null]
+        direction:
+          type: string
+          enum: [LONG, SHORT]
+        source:
+          type: ["string", "null"]
+          enum: [edgeai, telegram, manual, screener, null]
+
+    Top3SelectionSnapshotStatus:
+      type: object
+      required: [available, selectedAt, policyVersion]
+      properties:
+        available:
+          type: boolean
+        selectedAt:
+          type: ["string", "null"]
+          format: date-time
+        policyVersion:
+          type: ["string", "null"]
 
     SessionReview:
       allOf:
@@ -899,7 +1160,7 @@ components:
 
     SessionDetail:
       type: object
-      required: [id, date, marketWeather, candidates, source, createdAt, lastImportAt]
+      required: [id, date, marketWeather, candidates, source, createdAt, lastImportAt, top3SelectionSnapshot]
       properties:
         id:
           type: number
@@ -937,6 +1198,150 @@ components:
         importDiff:
           description: What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads.
           $ref: "#/components/schemas/ImportDiff"
+        top3SelectionSnapshot:
+          $ref: "#/components/schemas/Top3SelectionSnapshotStatus"
+
+    Top3AnalyticsPick:
+      type: object
+      required: [candidateId, ticker, category, market, direction, signalSource, edgeScore, rank, type, policyVersion, selectedAt, review, decision, earningsWarning, outcome, r]
+      properties:
+        candidateId:
+          type: number
+        ticker:
+          type: string
+        category:
+          type: string
+        market:
+          type: ["string", "null"]
+          enum: [SE, US, null]
+        direction:
+          type: string
+          enum: [LONG, SHORT]
+        signalSource:
+          type: ["string", "null"]
+          enum: [edgeai, telegram, manual, screener, null]
+        edgeScore:
+          type: number
+        rank:
+          type: ["number", "null"]
+        type:
+          type: string
+        policyVersion:
+          type: string
+        selectedAt:
+          type: string
+          format: date-time
+        review:
+          $ref: "#/components/schemas/SignalReview"
+        decision:
+          $ref: "#/components/schemas/CandidateDecision"
+        earningsWarning:
+          type: boolean
+        outcome:
+          type: string
+        r:
+          type: ["number", "null"]
+
+    Top3DirectionStats:
+      type: object
+      required: [totalTrades, wins, losses, winRate, totalR, avgRPerTrade]
+      properties:
+        totalTrades:
+          type: number
+        wins:
+          type: number
+        losses:
+          type: number
+        winRate:
+          type: ["number", "null"]
+        totalR:
+          type: number
+        avgRPerTrade:
+          type: ["number", "null"]
+
+    Top3AnalyticsSession:
+      type: object
+      required: [date, sessionId, source, selectionStatus, selectionUnavailableReason, selectedAt, policyVersion, picks, longPicks, shortPicks, edgeWinRate, sessionR, cumulativeR]
+      properties:
+        date:
+          type: string
+          format: date
+        sessionId:
+          type: number
+        source:
+          type: ["string", "null"]
+        selectionStatus:
+          type: string
+          enum: [AVAILABLE, UNAVAILABLE]
+        selectionUnavailableReason:
+          type: ["string", "null"]
+        selectedAt:
+          type: ["string", "null"]
+          format: date-time
+        policyVersion:
+          type: ["string", "null"]
+        picks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Top3AnalyticsPick"
+        longPicks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Top3AnalyticsPick"
+        shortPicks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Top3AnalyticsPick"
+        edgeWinRate:
+          type: ["number", "null"]
+        sessionR:
+          type: ["number", "null"]
+        cumulativeR:
+          type: number
+
+    Top3AnalyticsStats:
+      type: object
+      required: [totalSessions, availableSessions, unavailableSessions, completedSessions, totalTrades, wins, losses, winRate, totalR, avgRPerTrade, byDirection]
+      properties:
+        totalSessions:
+          type: number
+        availableSessions:
+          type: number
+        unavailableSessions:
+          type: number
+        completedSessions:
+          type: number
+        totalTrades:
+          type: number
+        wins:
+          type: number
+        losses:
+          type: number
+        winRate:
+          type: ["number", "null"]
+        totalR:
+          type: number
+        avgRPerTrade:
+          type: ["number", "null"]
+        byDirection:
+          type: object
+          required: [LONG, SHORT]
+          properties:
+            LONG:
+              $ref: "#/components/schemas/Top3DirectionStats"
+            SHORT:
+              $ref: "#/components/schemas/Top3DirectionStats"
+
+    Top3Analytics:
+      type: object
+      required: [sessions, stats]
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Top3AnalyticsSession"
+        stats:
+          $ref: "#/components/schemas/Top3AnalyticsStats"
 
     ImportDiffEntry:
       type: object

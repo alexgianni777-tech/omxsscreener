@@ -24,6 +24,8 @@ import type {
   BeginBrowserLoginParams,
   Candidate,
   CandidateOutcome,
+  CandidateTop3Annotation,
+  CandidateTop3AnnotationInput,
   CandidateWithSession,
   DashboardSummary,
   ErrorEnvelope,
@@ -37,11 +39,15 @@ import type {
   LogoutSuccess,
   MobileTokenExchangeRequest,
   MobileTokenExchangeSuccess,
+  PortfolioPositionInput,
+  PortfolioPositionRecord,
+  PortfolioPositionUpdate,
   PortfolioResponse,
   QuoteResult,
   SessionDetail,
   SessionImport,
-  SessionSummary
+  SessionSummary,
+  Top3Analytics
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -516,6 +522,83 @@ export const useDeleteSession = <TError = ErrorType<ErrorResponse>,
       return useMutation(getDeleteSessionMutationOptions(options));
     }
 
+export const getGetTop3AnalyticsUrl = () => {
+
+
+
+
+  return `/api/screener/analytics/top3`
+}
+
+/**
+ * @summary Official immutable signal-time Top 3 performance
+ */
+export const getTop3Analytics = async ( options?: Parameters<typeof customFetch>[1]): Promise<Top3Analytics> => {
+
+  return customFetch<Top3Analytics>(getGetTop3AnalyticsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTop3AnalyticsQueryKey = () => {
+    return [
+    `/api/screener/analytics/top3`
+    ] as const;
+    }
+
+
+export const getGetTop3AnalyticsQueryOptions = <TData = Awaited<ReturnType<typeof getTop3Analytics>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTop3Analytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTop3AnalyticsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTop3Analytics>>> = ({ signal }) => getTop3Analytics({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTop3Analytics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTop3AnalyticsQueryResult = NonNullable<Awaited<ReturnType<typeof getTop3Analytics>>>
+export type GetTop3AnalyticsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Official immutable signal-time Top 3 performance
+ */
+
+export function useGetTop3Analytics<TData = Awaited<ReturnType<typeof getTop3Analytics>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTop3Analytics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTop3AnalyticsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getListCandidatesUrl = (params?: ListCandidatesParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -670,6 +753,78 @@ export const useUpdateCandidateOutcome = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getUpdateCandidateOutcomeMutationOptions(options));
+    }
+
+export const getSetCandidateTop3AnnotationUrl = (id: number,) => {
+
+
+
+
+  return `/api/screener/candidates/${id}/top3pick`
+}
+
+/**
+ * @summary Toggle a non-official star annotation on a candidate
+ */
+export const setCandidateTop3Annotation = async (id: number,
+    candidateTop3AnnotationInput: CandidateTop3AnnotationInput, options?: Parameters<typeof customFetch>[1]): Promise<CandidateTop3Annotation> => {
+
+  return customFetch<CandidateTop3Annotation>(getSetCandidateTop3AnnotationUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(candidateTop3AnnotationInput)
+  }
+);}
+
+
+
+
+
+export const getSetCandidateTop3AnnotationMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setCandidateTop3Annotation>>, TError,{id: number;data: BodyType<CandidateTop3AnnotationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setCandidateTop3Annotation>>, TError,{id: number;data: BodyType<CandidateTop3AnnotationInput>}, TContext> => {
+
+const mutationKey = ['setCandidateTop3Annotation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setCandidateTop3Annotation>>, {id: number;data: BodyType<CandidateTop3AnnotationInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setCandidateTop3Annotation(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetCandidateTop3AnnotationMutationResult = NonNullable<Awaited<ReturnType<typeof setCandidateTop3Annotation>>>
+    export type SetCandidateTop3AnnotationMutationBody = BodyType<CandidateTop3AnnotationInput>
+    export type SetCandidateTop3AnnotationMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Toggle a non-official star annotation on a candidate
+ */
+export const useSetCandidateTop3Annotation = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setCandidateTop3Annotation>>, TError,{id: number;data: BodyType<CandidateTop3AnnotationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setCandidateTop3Annotation>>,
+        TError,
+        {id: number;data: BodyType<CandidateTop3AnnotationInput>},
+        TContext
+      > => {
+      return useMutation(getSetCandidateTop3AnnotationMutationOptions(options));
     }
 
 export const getGetQuotesUrl = (params: GetQuotesParams,) => {
@@ -909,6 +1064,149 @@ export function useGetPortfolio<TData = Awaited<ReturnType<typeof getPortfolio>>
 
 
 
+
+export const getCreatePortfolioPositionUrl = () => {
+
+
+
+
+  return `/api/portfolio`
+}
+
+/**
+ * @summary Add an open portfolio position with optional instrument semantics
+ */
+export const createPortfolioPosition = async (portfolioPositionInput: PortfolioPositionInput, options?: Parameters<typeof customFetch>[1]): Promise<PortfolioPositionRecord> => {
+
+  return customFetch<PortfolioPositionRecord>(getCreatePortfolioPositionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(portfolioPositionInput)
+  }
+);}
+
+
+
+
+
+export const getCreatePortfolioPositionMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPortfolioPosition>>, TError,{data: BodyType<PortfolioPositionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPortfolioPosition>>, TError,{data: BodyType<PortfolioPositionInput>}, TContext> => {
+
+const mutationKey = ['createPortfolioPosition'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPortfolioPosition>>, {data: BodyType<PortfolioPositionInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPortfolioPosition(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePortfolioPositionMutationResult = NonNullable<Awaited<ReturnType<typeof createPortfolioPosition>>>
+    export type CreatePortfolioPositionMutationBody = BodyType<PortfolioPositionInput>
+    export type CreatePortfolioPositionMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Add an open portfolio position with optional instrument semantics
+ */
+export const useCreatePortfolioPosition = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPortfolioPosition>>, TError,{data: BodyType<PortfolioPositionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPortfolioPosition>>,
+        TError,
+        {data: BodyType<PortfolioPositionInput>},
+        TContext
+      > => {
+      return useMutation(getCreatePortfolioPositionMutationOptions(options));
+    }
+
+export const getUpdatePortfolioPositionUrl = (id: number,) => {
+
+
+
+
+  return `/api/portfolio/${id}`
+}
+
+/**
+ * @summary Update an open portfolio position
+ */
+export const updatePortfolioPosition = async (id: number,
+    portfolioPositionUpdate: PortfolioPositionUpdate, options?: Parameters<typeof customFetch>[1]): Promise<PortfolioPositionRecord> => {
+
+  return customFetch<PortfolioPositionRecord>(getUpdatePortfolioPositionUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(portfolioPositionUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdatePortfolioPositionMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePortfolioPosition>>, TError,{id: number;data: BodyType<PortfolioPositionUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updatePortfolioPosition>>, TError,{id: number;data: BodyType<PortfolioPositionUpdate>}, TContext> => {
+
+const mutationKey = ['updatePortfolioPosition'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePortfolioPosition>>, {id: number;data: BodyType<PortfolioPositionUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updatePortfolioPosition(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdatePortfolioPositionMutationResult = NonNullable<Awaited<ReturnType<typeof updatePortfolioPosition>>>
+    export type UpdatePortfolioPositionMutationBody = BodyType<PortfolioPositionUpdate>
+    export type UpdatePortfolioPositionMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Update an open portfolio position
+ */
+export const useUpdatePortfolioPosition = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePortfolioPosition>>, TError,{id: number;data: BodyType<PortfolioPositionUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updatePortfolioPosition>>,
+        TError,
+        {id: number;data: BodyType<PortfolioPositionUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdatePortfolioPositionMutationOptions(options));
+    }
 
 export const getGetCurrentAuthUserUrl = () => {
 

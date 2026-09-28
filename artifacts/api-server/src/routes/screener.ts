@@ -1,6 +1,12 @@
 import { Router, type IRouter } from "express";
 import { eq, ne, sql, and, inArray } from "drizzle-orm";
-import { db, screenerSessionsTable, candidatesTable, survivalTradesTable } from "@workspace/db";
+import {
+  db,
+  screenerSessionsTable,
+  candidatesTable,
+  survivalTradesTable,
+  top3SelectionSnapshotsTable,
+} from "@workspace/db";
 import {
   ImportSessionBody,
   ImportSessionResponse,
@@ -11,6 +17,9 @@ import {
   ReimportSessionParams,
   ReimportSessionBody,
   ReimportSessionResponse,
+  SetCandidateTop3AnnotationParams,
+  SetCandidateTop3AnnotationBody,
+  SetCandidateTop3AnnotationResponse,
 } from "@workspace/api-zod";
 import { parseScreenerText, ScreenerParseError } from "../lib/screenerParser";
 import YahooFinance from "yahoo-finance2";
@@ -26,8 +35,10 @@ import {
   mergeCandidateInputs,
   pendingCandidatesToRemove,
   synchronizeCandidates,
+  candidateIdentity,
 } from "../lib/candidateSynchronization";
 import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
+import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
 
 const router: IRouter = Router();
 
@@ -65,6 +76,31 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     .where(eq(screenerSessionsTable.date, session.date));
 
   const { force } = parsed.data;
+  // A force import may update a trading/display session, but cannot rewrite a
+  // candidate's source-day provenance.
+  if (existing.length > 0 && force) {
+    const existingRows = await db
+      .select()
+      .from(candidatesTable)
+      .where(eq(candidatesTable.sessionId, existing[0].id));
+    const incomingByIdentity = new Map(
+      session.candidates.map((candidate) => {
+        const row = { ...candidate, market: "SE", signalSource: "manual" };
+        return [candidateIdentity(row), reportDate] as const;
+      }),
+    );
+    const mismatch = existingRows.find((row) =>
+      row.signalDate != null &&
+      incomingByIdentity.has(candidateIdentity(row)) &&
+      incomingByIdentity.get(candidateIdentity(row)) !== row.signalDate,
+    );
+    if (mismatch) {
+      res.status(409).json({
+        error: `Signal date mismatch for ${mismatch.ticker}: stored ${mismatch.signalDate}, incoming ${reportDate}`,
+      });
+      return;
+    }
+  }
   {
     const { skipped } = deduplicateCandidates(
       session.candidates.map((candidate) => ({ ...candidate, market: "SE" })),
@@ -82,6 +118,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     const existingId = existing[0].id;
     const existingRows = await db
       .select({
+        id: candidatesTable.id,
         ticker: candidatesTable.ticker,
         category: candidatesTable.category,
         direction: candidatesTable.direction,
@@ -94,10 +131,18 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
       .where(eq(candidatesTable.sessionId, existingId));
 
     const affectedOutcomes = existingRows.filter((r) => r.outcome !== "PENDING");
+    const selectedSnapshotRows = await db
+      .select({ candidateId: top3SelectionSnapshotsTable.candidateId })
+      .from(top3SelectionSnapshotsTable)
+      .where(and(
+        eq(top3SelectionSnapshotsTable.sessionId, existingId),
+        eq(top3SelectionSnapshotsTable.selected, true),
+      ));
 
     const wouldRemove = pendingCandidatesToRemove(
       existingRows as Array<typeof existingRows[number] & { category: string }>,
       session.candidates.map((c) => ({ ...c, market: "SE" })),
+      new Set(selectedSnapshotRows.map((row) => row.candidateId)),
     );
 
     res.status(409).json({
@@ -127,6 +172,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     },
   ) => ({
     sessionId,
+    signalDate: reportDate,
     market: "SE" as const,   // screener text is always SE stocks
     signalSource: "manual" as const,
     category: c.category,
@@ -168,7 +214,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
 
   const earningsBatch = await fetchEarningsBatch(
     session.candidates.map((c) => c.ticker),
-    session.date,
+    reportDate,
   );
 
   // ---------- force re-import: preserve outcomes, replace everything else ----------
@@ -210,6 +256,11 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
         .update(screenerSessionsTable)
         .set({ lastImportDiff: diff, lastImportAt: new Date(), source: aggregateSource })
         .where(eq(screenerSessionsTable.id, updatedSession.id));
+      await snapshotNewSessionTop3(
+        tx,
+        { id: updatedSession.id, date: updatedSession.date, source: aggregateSource },
+        updatedCandidates,
+      );
       return { updatedSession: { ...updatedSession, source: aggregateSource }, updatedCandidates, diff };
     });
 
@@ -266,7 +317,20 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
         buildCandidateRow(insertedSession.id, c, earningsBatch.get(c.ticker) ?? UNKNOWN_EARNINGS),
       ),
     );
-    return { insertedSession, insertedCandidates };
+    const aggregateSource = aggregateSessionSource(
+      insertedSession.source,
+      insertedCandidates.map((candidate) => candidate.signalSource),
+    );
+    await tx
+      .update(screenerSessionsTable)
+      .set({ source: aggregateSource })
+      .where(eq(screenerSessionsTable.id, insertedSession.id));
+    await snapshotNewSessionTop3(
+      tx,
+      { id: insertedSession.id, date: insertedSession.date, source: aggregateSource },
+      insertedCandidates,
+    );
+    return { insertedSession: { ...insertedSession, source: aggregateSource }, insertedCandidates };
   });
 
   const response = ImportSessionResponse.parse({
@@ -336,6 +400,25 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
     return;
   }
 
+  const existingCandidatesForDateCheck = await db
+    .select()
+    .from(candidatesTable)
+    .where(eq(candidatesTable.sessionId, existingSession.id));
+  const reimportIdentitySet = new Set(parsedSession.candidates.map((candidate) =>
+    candidateIdentity({ ...candidate, market: "SE", signalSource: "manual" }),
+  ));
+  const sourceDateMismatch = existingCandidatesForDateCheck.find((candidate) =>
+    candidate.signalDate != null &&
+    reimportIdentitySet.has(candidateIdentity(candidate)) &&
+    candidate.signalDate !== parsedSession.date,
+  );
+  if (sourceDateMismatch) {
+    res.status(409).json({
+      error: `Signal date mismatch for ${sourceDateMismatch.ticker}: stored ${sourceDateMismatch.signalDate}, incoming ${parsedSession.date}`,
+    });
+    return;
+  }
+
   const reimportVolumes = await enrichVolMultiplier(
     parsedSession.candidates.map((candidate) => candidate.ticker),
     _yf,
@@ -366,6 +449,7 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
         .where(eq(candidatesTable.sessionId, updatedSession.id));
       const rows = parsedSession.candidates.map((candidate) => ({
         sessionId: updatedSession.id,
+        signalDate: parsedSession.date,
         market: "SE" as const,
         signalSource: "manual" as const,
         category: candidate.category,
@@ -407,6 +491,11 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
         .update(screenerSessionsTable)
         .set({ lastImportDiff: diff, lastImportAt: new Date(), source: aggregateSource })
         .where(eq(screenerSessionsTable.id, updatedSession.id));
+      await snapshotNewSessionTop3(
+        tx,
+        { id: updatedSession.id, date: updatedSession.date, source: aggregateSource },
+        resultCandidates,
+      );
       return { updatedSession: { ...updatedSession, source: aggregateSource }, resultCandidates, diff };
     }));
   } catch (error) {
@@ -555,13 +644,33 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     .where(eq(candidatesTable.sessionId, session.id))
     .orderBy(candidatesTable.category, candidatesTable.rank);
 
+  const selectionSnapshots = await db
+    .select()
+    .from(top3SelectionSnapshotsTable)
+    .where(eq(top3SelectionSnapshotsTable.sessionId, session.id));
+  const selectionByCandidate = new Map(selectionSnapshots.map((snapshot) => [snapshot.candidateId, snapshot]));
+
   const linkedIds = await fetchLinkedTradeIds(candidates.map((c) => c.id));
   const candidatesWithReview = candidates.map((candidate) => {
     const review = reviewCandidate(candidate, session.source ?? null);
+    const officialSelection = selectionByCandidate.get(candidate.id);
     return {
       ...mapCandidate(candidate, linkedIds.has(candidate.id)),
       review,
       decision: decideCandidate(candidate, review, session.date),
+      officialSelection: officialSelection ? {
+        selected: officialSelection.selected,
+        rank: officialSelection.rank,
+        score: officialSelection.score,
+        review: officialSelection.review,
+        decision: officialSelection.decision,
+        policyVersion: officialSelection.policyVersion,
+        selectedAt: officialSelection.selectedAt,
+        type: officialSelection.type,
+        market: officialSelection.market,
+        direction: officialSelection.direction,
+        source: officialSelection.source,
+      } : null,
     };
   });
   const sessionReview = reviewSession(
@@ -586,11 +695,17 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     candidates: candidatesWithReview,
     sessionReview,
     importDiff: (session.lastImportDiff as any) ?? undefined,
+    top3SelectionSnapshot: session.top3SnapshotAt ? {
+      available: true,
+      selectedAt: session.top3SnapshotAt,
+      policyVersion: session.top3PolicyVersion,
+    } : { available: false, selectedAt: null, policyVersion: null },
   });
 
   // Append fields not in Zod schema — passed through directly
   res.json({
     ...parsed,
+    candidates: candidatesWithReview,
     createdAt: session.createdAt ?? null,
     source: session.source ?? null,
     edgeRegime: session.edgeRegime ? (() => { try { return JSON.parse(session.edgeRegime!); } catch { return null; } })() : null,
@@ -599,6 +714,11 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     edgePF: session.edgePF ?? null,
     edgeN: session.edgeN ?? null,
     lastImportAt: session.lastImportAt ?? null,
+    top3SelectionSnapshot: session.top3SnapshotAt ? {
+      available: true,
+      selectedAt: session.top3SnapshotAt,
+      policyVersion: session.top3PolicyVersion,
+    } : { available: false, selectedAt: null, policyVersion: null },
   });
 });
 
@@ -662,6 +782,7 @@ async function fetchLinkedTradeIds(candidateIds: number[]): Promise<Set<number>>
 function mapCandidate(c: {
   id: number;
   sessionId: number;
+    signalDate: string | null;
   category: string;
   rank: number;
   ticker: string;
@@ -707,6 +828,7 @@ function mapCandidate(c: {
   return {
     id: c.id,
     sessionId: c.sessionId,
+    signalDate: c.signalDate ?? null,
     category: c.category,
     rank: c.rank,
     ticker: c.ticker,
@@ -754,45 +876,66 @@ function mapCandidate(c: {
   };
 }
 
-// PATCH /screener/candidates/:id/top3pick — toggle manual Top 3 star (max 3 per session)
+// PATCH /screener/candidates/:id/top3pick — toggle an annotation (max 3 per market/direction)
 router.patch("/screener/candidates/:id/top3pick", async (req, res): Promise<void> => {
-  const id = Number(req.params.id);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-
-  const { isTop3Pick } = req.body ?? {};
-  if (typeof isTop3Pick !== "boolean") {
-    res.status(400).json({ error: "isTop3Pick must be boolean" });
+  const params = SetCandidateTop3AnnotationParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
     return;
   }
-
-  // Check existing candidate + session
-  const [candidate] = await db.select().from(candidatesTable).where(eq(candidatesTable.id, id)).limit(1);
-  if (!candidate) { res.status(404).json({ error: "Candidate not found" }); return; }
-
-  if (isTop3Pick) {
-    // Enforce max 3 per direction per session (3 LONG köp-picks + 3 SHORT sälj-picks)
-    const existing = await db
-      .select({ id: candidatesTable.id, direction: candidatesTable.direction })
-      .from(candidatesTable)
-      .where(and(
-        eq(candidatesTable.sessionId, candidate.sessionId),
-        eq(candidatesTable.isTop3Pick as any, true),
-      ));
-    const sameDir = existing.filter((p) => p.direction === candidate.direction);
-    if (sameDir.length >= 3 && !sameDir.some((p) => p.id === id)) {
-      const dirLabel = candidate.direction === "SHORT" ? "sälj-picks" : "köp-picks";
-      res.status(409).json({ error: `Max 3 ${dirLabel} — ta bort en stjärna först` });
-      return;
-    }
+  const parsedBody = SetCandidateTop3AnnotationBody.safeParse(req.body);
+  if (!parsedBody.success) {
+    res.status(400).json({ error: parsedBody.error.message });
+    return;
   }
+  const id = params.data.id;
+  const { isTop3Pick } = parsedBody.data;
 
-  const [updated] = await db
-    .update(candidatesTable)
-    .set({ isTop3Pick } as any)
-    .where(eq(candidatesTable.id, id))
-    .returning();
+  const result = await db.transaction(async (tx) => {
+    const [beforeLock] = await tx.select().from(candidatesTable).where(eq(candidatesTable.id, id)).limit(1);
+    if (!beforeLock) return { status: "missing" as const };
+    const [session] = await tx
+      .select({ date: screenerSessionsTable.date })
+      .from(screenerSessionsTable)
+      .where(eq(screenerSessionsTable.id, beforeLock.sessionId));
+    if (!session) return { status: "missing" as const };
+    await lockScreenerSession(tx, session.date);
 
-  res.json(updated);
+    // Serialize star annotations with import and outcome writers. They remain
+    // annotations only; this endpoint never writes official snapshot rows.
+    const [candidate] = await tx.select().from(candidatesTable).where(eq(candidatesTable.id, id)).limit(1);
+    if (!candidate) return { status: "missing" as const };
+
+    if (isTop3Pick) {
+      const existing = await tx
+        .select()
+        .from(candidatesTable)
+        .where(and(
+          eq(candidatesTable.sessionId, candidate.sessionId),
+          eq(candidatesTable.isTop3Pick, true),
+        ));
+      const sameMarketDirection = existing.filter((pick) =>
+        pick.direction === candidate.direction && pick.market === candidate.market,
+      );
+      if (sameMarketDirection.length >= 3 && !sameMarketDirection.some((pick) => pick.id === id)) {
+        const dirLabel = candidate.direction === "SHORT" ? "sälj-picks" : "köp-picks";
+        return { status: "limit" as const, message: `Max 3 ${dirLabel} per market — ta bort en stjärna först` };
+      }
+    }
+
+    const [updated] = await tx
+      .update(candidatesTable)
+      .set({ isTop3Pick })
+      .where(eq(candidatesTable.id, id))
+      .returning();
+    return { status: "updated" as const, candidate: updated };
+  });
+  if (result.status === "missing") { res.status(404).json({ error: "Candidate not found" }); return; }
+  if (result.status === "limit") { res.status(409).json({ error: result.message }); return; }
+  res.json(SetCandidateTop3AnnotationResponse.parse({
+    id: result.candidate.id,
+    isTop3Pick: result.candidate.isTop3Pick,
+  }));
 });
 
 export default router;
@@ -816,7 +959,7 @@ async function fetchEarningsBatch(
   tickers: string[],
   sessionDate: string,
 ): Promise<Map<string, EarningsObservation>> {
-  if (sessionDate !== new Date().toISOString().slice(0, 10)) {
+  if (sessionDate !== stockholmCalendarDate()) {
     return new Map(tickers.map((ticker) => [ticker, UNKNOWN_EARNINGS]));
   }
   const unique = [...new Set(tickers)];
@@ -824,6 +967,15 @@ async function fetchEarningsBatch(
     unique.map(async (t) => [t, await fetchEarningsAtSignalTime(t, sessionDate)] as const),
   );
   return new Map(results);
+}
+
+function stockholmCalendarDate(): string {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Stockholm",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
 /**

@@ -16,13 +16,14 @@ import {
   calculateWilderRsi,
 } from "./marketIndicators";
 import { completedVolumeKey, fetchCompletedVolumeBatch } from "./completedVolumeBatch";
-import { fetchFreshEdgeAiData } from "./edgeAiSource";
+import { edgeAiSessionDate, fetchFreshEdgeAiData } from "./edgeAiSource";
 import {
   lockScreenerSession,
   mergeCandidateInputs,
   synchronizeCandidates,
 } from "./candidateSynchronization";
 import { aggregateSessionSource } from "./candidateSynchronizationPolicy";
+import { snapshotNewSessionTop3 } from "./top3SelectionPolicy";
 import { calendarDaysUntil } from "./marketCalendar";
 import { mapEdgeAiSetup } from "./edgeAiMapping";
 import { withRetry } from "./retry";
@@ -114,6 +115,7 @@ async function runImport(date: string): Promise<void> {
   logger.info({ date }, "[scheduler] Fetching EdgeAI data.json");
 
   const edgeData = await fetchFreshEdgeAiData(15_000);
+  const signalDate = edgeAiSessionDate(edgeData);
 
   const se = edgeData?.markets?.SE;
   const seSetups: any[] = se?.setups ?? [];
@@ -139,7 +141,7 @@ async function runImport(date: string): Promise<void> {
   const usMapped = usSetups.map((s) => mapEdgeAiSetup(s, "US", rankCounterUS));
   const mapped = [...seMapped, ...usMapped];
   mapped.forEach((candidate) => {
-    Object.assign(candidate, { signalSource: "edgeai" as const });
+    Object.assign(candidate, { signalSource: "edgeai" as const, signalDate });
   });
 
   const volumeRequests = mapped.map((c) => ({
@@ -150,7 +152,7 @@ async function runImport(date: string): Promise<void> {
   const volumeMap = await fetchCompletedVolumeBatch(yf, volumeRequests);
   mapped.forEach((c, index) => {
     const request = volumeRequests[index];
-    const value = request.asOfDate <= date ? volumeMap.get(completedVolumeKey(request)) : null;
+    const value = request.asOfDate <= signalDate ? volumeMap.get(completedVolumeKey(request)) : null;
     if (value) {
       c.volMultiplier = value.multiplier;
       c.volumeAsOf = value.asOf;
@@ -161,7 +163,7 @@ async function runImport(date: string): Promise<void> {
   await Promise.allSettled(
     mapped.map(async (c) => {
       try {
-        const isSignalDay = date === new Date().toISOString().slice(0, 10);
+        const isSignalDay = date === stockholmClock(new Date()).date && signalDate === date;
         if (isSignalDay) {
           const q = (await withRetry(() => yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false }))) as any;
           const earningsInDays = daysUntil(q.earningsTimestamp);
@@ -222,6 +224,11 @@ async function runImport(date: string): Promise<void> {
             lastImportAt: new Date(),
           })
           .where(eq(screenerSessionsTable.id, alreadyStored.id));
+        await snapshotNewSessionTop3(
+          tx,
+          { id: alreadyStored.id, date, source },
+          synchronizedCandidates,
+        );
         logger.info(
           { date, sessionId: alreadyStored.id, seSetups: seSetups.length, usSetups: usSetups.length },
           "[scheduler] EdgeAI merged into existing session",
@@ -250,7 +257,12 @@ async function runImport(date: string): Promise<void> {
         })
         .returning();
 
-      await synchronizeCandidates(tx, inserted.id, mapped);
+      const { candidates: insertedCandidates } = await synchronizeCandidates(tx, inserted.id, mapped);
+      await snapshotNewSessionTop3(
+        tx,
+        { id: inserted.id, date, source: "edgeai" },
+        insertedCandidates,
+      );
       // Fresh insert: nothing existed before, so a diff would be all-"added" noise — skip it.
       logger.info(
         { date, sessionId: inserted.id, seSetups: seSetups.length, usSetups: usSetups.length, omxsValue: mw.omxsValue },

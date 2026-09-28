@@ -43,7 +43,7 @@ description: Methodology rules that keep historical outcomes, earnings context, 
 
 **Why:** a later import or post-outcome star can change which past candidates appear selected without changing the actual decisions available at signal time, overstating or understating strategy performance.
 
-**How to apply:** label legacy recalculated statistics as provisional. For future official performance, save immutable signal-time eligibility, selection, ranking policy and source timestamps first; keep older cohorts explicitly unknown unless contemporaneous evidence exists.
+**How to apply:** official statistics read only immutable signal-time snapshots. Mark earlier sessions without such evidence unavailable rather than recalculating or backfilling their picks. Freeze selected candidate signal and plan inputs against re-imports; a later same-day source may create the first snapshot only if the session was never sealed.
 
 ## Legacy signal-source provenance
 **Rule:** Missing per-candidate source remains an unknown source, not a source inferred from the session or a later import. Treat source as part of candidate identity, including the unknown case.
@@ -51,3 +51,10 @@ description: Methodology rules that keep historical outcomes, earnings context, 
 **Why:** Mixed sessions and past imports can contain indistinguishable ticker/setup pairs from different sources; retroactively assigning a missing source could silently contaminate outcome history.
 
 **How to apply:** preserve legacy null-source rows separately when importing a known source. Explain any duplicate-looking rows instead of rewriting history without contemporaneous evidence.
+
+## Signal date versus trading date
+**Rule:** the date of the original signal belongs to each candidate, not to a mixed-source session. A later trading/display date cannot make an older signal actionable.
+
+**Why:** a manual target-date override once combined old screener and volume data with a newer earnings calendar while making the candidate appear tradeable.
+
+**How to apply:** keep candidate signal-date provenance immutable, evaluate eligibility against that date, and leave unknown legacy dates unknown. A same-day official selection must be based on known same-day signal inputs.

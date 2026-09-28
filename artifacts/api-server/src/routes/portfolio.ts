@@ -13,6 +13,11 @@ import { db, openPositionsTable } from "@workspace/db";
 import { asc, eq } from "drizzle-orm";
 import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "../lib/omxs30TickerMap";
+import {
+  calculateProductPnl,
+  countUnderlyingDirections,
+  inferOwnedLeveragedProductSide,
+} from "../lib/portfolioSemantics";
 
 const router: IRouter = Router();
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
@@ -61,23 +66,30 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
         shortExposureKr: 0,
         grossExposureKr: 0,
         netExposureKr: 0,
+        underlyingLongCount: 0,
+        underlyingShortCount: 0,
+        underlyingDirectionUnknownCount: 0,
       },
       fetchedAt,
     });
     return;
   }
 
-  const quoteMap = await fetchQuotes(positions.filter((p) => !p.instrument).map((p) => p.ticker));
+  const quoteMap = await fetchQuotes(
+    positions.filter((p) => !p.instrument && !p.productType).map((p) => p.ticker),
+  );
 
   const enriched = positions.map((p) => {
     const q = quoteMap.get(p.ticker) ?? { livePrice: null, changePct: null, asOf: null };
-    const live = p.instrument ? (p.lastPrice ?? null) : q.livePrice;
-    const changePct = p.instrument ? null : q.changePct;
+    const isProduct = p.instrument != null || p.productType != null;
+    const live = isProduct ? (p.lastPrice ?? null) : q.livePrice;
+    const changePct = isProduct ? null : q.changePct;
     // Instruments (leveraged products) are priced from the broker's last pasted
     // export, not a live feed — there is no market timestamp for those.
-    const quoteAsOf = p.instrument ? null : q.asOf;
+    const quoteAsOf = isProduct ? null : q.asOf;
 
-    const isShort = p.direction === "SHORT";
+    const effectiveProductSide = p.productSide ?? inferOwnedLeveragedProductSide(p.instrument) ?? p.direction;
+    const isShort = effectiveProductSide === "SHORT";
     const risk1R = p.stopPrice != null ? Math.abs(p.entryPrice - p.stopPrice) : null;
     // Stop P&L is signed and applies to every valid stop, including
     // break-even, profit-locking, and trailing stops.
@@ -103,9 +115,10 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
     let distToTarget: number | null = null;
 
     if (live != null) {
-      const priceDelta = isShort ? p.entryPrice - live : live - p.entryPrice;
-      unrealisedPct = (priceDelta / p.entryPrice) * 100;
-      unrealisedKr = priceDelta * p.shares;
+      const pnl = calculateProductPnl(p.entryPrice, live, p.shares, p.productSide, p.direction, p.instrument);
+      unrealisedPct = pnl.unrealisedPct;
+      unrealisedKr = pnl.unrealisedKr;
+      const priceDelta = (pnl.unrealisedKr ?? 0) / p.shares;
       if (risk1R != null && risk1R > 0) currentR = priceDelta / risk1R;
 
       if (p.stopPrice != null) {
@@ -128,6 +141,14 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
       ticker: p.ticker,
       instrument: p.instrument ?? null,
       direction: p.direction,
+      productType: p.productType ?? null,
+      productSide: p.productSide ?? null,
+      underlyingDirection: p.underlyingDirection ?? null,
+      underlyingTicker: p.underlyingTicker ?? null,
+      indicativeLeverage: p.indicativeLeverage ?? null,
+      financingLevel: p.financingLevel ?? null,
+      barrierLevel: p.barrierLevel ?? null,
+      barrierType: p.barrierType ?? null,
       market: p.market ?? null,
       notes: p.notes ?? null,
       entryPrice: p.entryPrice,
@@ -170,6 +191,7 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
   const shortExposureKr = enriched
     .filter((p) => p.direction === "SHORT")
     .reduce((s, p) => s + (p.marketValueKr ?? p.positionSizeKr), 0);
+  const underlyingDirectionCounts = countUnderlyingDirections(positions.map((p) => p.underlyingDirection));
 
   res.json({
     positions: enriched,
@@ -184,6 +206,7 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
       shortExposureKr: +shortExposureKr.toFixed(0),
       grossExposureKr: +(longExposureKr + shortExposureKr).toFixed(0),
       netExposureKr: +(longExposureKr - shortExposureKr).toFixed(0),
+      ...underlyingDirectionCounts,
     },
     fetchedAt,
   });
@@ -191,7 +214,11 @@ router.get("/portfolio", async (_req, res): Promise<void> => {
 
 // POST /portfolio  — add position
 router.post("/portfolio", async (req, res): Promise<void> => {
-  const { ticker, instrument, direction, entryPrice, shares, stopPrice, targetPrice, market, notes } = req.body ?? {};
+  const {
+    ticker, instrument, direction, productType, productSide, underlyingDirection, underlyingTicker,
+    indicativeLeverage, financingLevel, barrierLevel, barrierType,
+    entryPrice, shares, stopPrice, targetPrice, market, notes,
+  } = req.body ?? {};
   if (
     typeof ticker !== "string" || !ticker.trim() ||
     !["LONG", "SHORT"].includes(direction) ||
@@ -201,12 +228,31 @@ router.post("/portfolio", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Ogiltiga fält: ticker, direction, entryPrice och shares krävs." });
     return;
   }
+  if ((productSide != null && !["LONG", "SHORT"].includes(productSide)) ||
+      (underlyingDirection != null && !["LONG", "SHORT"].includes(underlyingDirection))) {
+    res.status(400).json({ error: "Ogiltig produkt- eller underliggande riktning." });
+    return;
+  }
+  for (const [name, value] of Object.entries({ indicativeLeverage, financingLevel, barrierLevel })) {
+    if (value != null && (typeof value !== "number" || !isFinite(value) || value <= 0)) {
+      res.status(400).json({ error: `Ogiltigt värde för ${name}.` });
+      return;
+    }
+  }
   const [pos] = await db
     .insert(openPositionsTable)
     .values({
       ticker: ticker.trim().toUpperCase(),
       instrument: typeof instrument === "string" && instrument.trim() ? instrument.trim() : null,
       direction,
+      productType: typeof productType === "string" && productType.trim() ? productType.trim() : null,
+      productSide: productSide ?? null,
+      underlyingDirection: underlyingDirection ?? null,
+      underlyingTicker: typeof underlyingTicker === "string" && underlyingTicker.trim() ? underlyingTicker.trim().toUpperCase() : null,
+      indicativeLeverage: indicativeLeverage ?? null,
+      financingLevel: financingLevel ?? null,
+      barrierLevel: barrierLevel ?? null,
+      barrierType: typeof barrierType === "string" && barrierType.trim() ? barrierType.trim() : null,
       entryPrice,
       lastPrice: null,
       shares,
@@ -227,7 +273,11 @@ router.patch("/portfolio/:id", async (req, res): Promise<void> => {
   const [existing] = await db.select().from(openPositionsTable).where(eq(openPositionsTable.id, id));
   if (!existing) { res.status(404).json({ error: "Position hittades inte" }); return; }
 
-  const { ticker, instrument, direction, entryPrice, shares, stopPrice, targetPrice, market, notes } = req.body ?? {};
+  const {
+    ticker, instrument, direction, productType, productSide, underlyingDirection, underlyingTicker,
+    indicativeLeverage, financingLevel, barrierLevel, barrierType,
+    entryPrice, shares, stopPrice, targetPrice, market, notes,
+  } = req.body ?? {};
   const updates: Partial<typeof openPositionsTable.$inferInsert> = {};
 
   if (ticker !== undefined) {
@@ -240,6 +290,35 @@ router.patch("/portfolio/:id", async (req, res): Promise<void> => {
   if (direction !== undefined) {
     if (!["LONG", "SHORT"].includes(direction)) { res.status(400).json({ error: "Ogiltig riktning." }); return; }
     updates.direction = direction;
+  }
+  if (productType !== undefined) {
+    updates.productType = typeof productType === "string" && productType.trim() ? productType.trim() : null;
+  }
+  for (const [field, value] of [["productSide", productSide], ["underlyingDirection", underlyingDirection]] as const) {
+    if (value !== undefined) {
+      if (value !== null && !["LONG", "SHORT"].includes(value)) {
+        res.status(400).json({ error: "Ogiltig produkt- eller underliggande riktning." });
+        return;
+      }
+      updates[field] = value;
+    }
+  }
+  if (underlyingTicker !== undefined) {
+    updates.underlyingTicker = typeof underlyingTicker === "string" && underlyingTicker.trim()
+      ? underlyingTicker.trim().toUpperCase()
+      : null;
+  }
+  for (const [field, value] of [["indicativeLeverage", indicativeLeverage], ["financingLevel", financingLevel], ["barrierLevel", barrierLevel]] as const) {
+    if (value !== undefined) {
+      if (value !== null && (typeof value !== "number" || !isFinite(value) || value <= 0)) {
+        res.status(400).json({ error: `Ogiltigt värde för ${field}.` });
+        return;
+      }
+      updates[field] = value;
+    }
+  }
+  if (barrierType !== undefined) {
+    updates.barrierType = typeof barrierType === "string" && barrierType.trim() ? barrierType.trim() : null;
   }
   if (entryPrice !== undefined) {
     if (typeof entryPrice !== "number" || !isFinite(entryPrice) || entryPrice <= 0) { res.status(400).json({ error: "Ogiltigt entry-pris." }); return; }
@@ -289,6 +368,8 @@ router.post("/portfolio/import", async (req, res): Promise<void> => {
     ticker: string;
     instrument: string;
     direction: "LONG" | "SHORT";
+    productSide: "LONG" | "SHORT" | null;
+    underlyingDirection: "LONG" | "SHORT" | null;
     entryPrice: number;
     lastPrice: number;
     shares: number;
@@ -307,10 +388,18 @@ router.post("/portfolio/import", async (req, res): Promise<void> => {
       res.status(400).json({ error: "Varje importposition måste ha ticker, instrument, riktning, antal, inköpskurs och aktuell kurs." });
       return;
     }
+    for (const [field, value] of [["productSide", entry.productSide], ["underlyingDirection", entry.underlyingDirection]] as const) {
+      if (value !== undefined && value !== null && !["LONG", "SHORT"].includes(value)) {
+        res.status(400).json({ error: `Ogiltig riktning för ${field}.` });
+        return;
+      }
+    }
     validEntries.push({
       ticker: entry.ticker.trim().toUpperCase(),
       instrument: entry.instrument.trim(),
       direction: entry.direction,
+      productSide: entry.productSide ?? inferOwnedLeveragedProductSide(entry.instrument.trim()),
+      underlyingDirection: entry.underlyingDirection ?? null,
       entryPrice: entry.entryPrice,
       lastPrice: entry.lastPrice,
       shares: entry.shares,
@@ -333,6 +422,8 @@ router.post("/portfolio/import", async (req, res): Promise<void> => {
         .update(openPositionsTable)
         .set({
           direction: entry.direction,
+          productSide: entry.productSide ?? match.productSide,
+          underlyingDirection: entry.underlyingDirection ?? match.underlyingDirection,
           entryPrice: entry.entryPrice,
           lastPrice: entry.lastPrice,
           shares: entry.shares,
@@ -347,6 +438,8 @@ router.post("/portfolio/import", async (req, res): Promise<void> => {
           ticker: entry.ticker,
           instrument: entry.instrument,
           direction: entry.direction,
+          productSide: entry.productSide,
+          underlyingDirection: entry.underlyingDirection,
           entryPrice: entry.entryPrice,
           lastPrice: entry.lastPrice,
           shares: entry.shares,

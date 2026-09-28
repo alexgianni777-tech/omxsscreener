@@ -28,8 +28,10 @@ import {
   lockScreenerSession,
   mergeCandidateInputs,
   synchronizeCandidates,
+  candidateIdentity,
 } from "../lib/candidateSynchronization";
 import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
+import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
@@ -114,6 +116,30 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
   }
 
   const { date, marketWeather, candidates } = session;
+  const [existingSessionForDate] = await db
+    .select({ id: screenerSessionsTable.id })
+    .from(screenerSessionsTable)
+    .where(eq(screenerSessionsTable.date, date));
+  if (existingSessionForDate) {
+    const priorCandidates = await db
+      .select()
+      .from(candidatesTable)
+      .where(eq(candidatesTable.sessionId, existingSessionForDate.id));
+    const incomingIdentities = new Set(candidates.map((candidate) =>
+      candidateIdentity({ ...candidate, market: "SE", signalSource: "telegram" }),
+    ));
+    const mismatch = priorCandidates.find((candidate) =>
+      candidate.signalDate != null &&
+      incomingIdentities.has(candidateIdentity(candidate)) &&
+      candidate.signalDate !== date,
+    );
+    if (mismatch) {
+      res.status(409).json({
+        error: `Signal date mismatch for ${mismatch.ticker}: stored ${mismatch.signalDate}, incoming ${date}`,
+      });
+      return;
+    }
+  }
   {
     const { skipped } = deduplicateCandidates(
       candidates.map((candidate) => ({ ...candidate, market: "SE" })),
@@ -137,6 +163,7 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
     },
   ) => ({
     sessionId,
+    signalDate: date,
     market: "SE" as const,   // Telegram screener always imports SE stocks
     signalSource: "telegram" as const,
     category: c.category,
@@ -208,11 +235,21 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
         .update(screenerSessionsTable)
         .set({ lastImportDiff: diff, lastImportAt: new Date(), source: aggregateSource })
         .where(eq(screenerSessionsTable.id, stored.id));
+      await snapshotNewSessionTop3(
+        tx,
+        { id: stored.id, date, source: aggregateSource },
+        storedCandidates,
+      );
     } else {
       await tx
         .update(screenerSessionsTable)
         .set({ source: aggregateSource })
         .where(eq(screenerSessionsTable.id, stored.id));
+      await snapshotNewSessionTop3(
+        tx,
+        { id: stored.id, date, source: aggregateSource },
+        storedCandidates,
+      );
     }
     return { stored, candidateCount: storedCandidates.length, updated: Boolean(existing) };
   });

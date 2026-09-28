@@ -6,7 +6,7 @@ export const survivalConfigTable = pgTable("survival_config", {
   startCapital: real("start_capital").notNull().default(5000),
   goalCapital: real("goal_capital").notNull().default(1000000),
   currentCapital: real("current_capital"),   // manually-entered actual account balance
-  riskPct: real("risk_pct").notNull().default(2),  // % of account risked per trade
+  riskPct: real("risk_pct").notNull().default(2),  // total % of account budgeted per direction; Today splits it between picks
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

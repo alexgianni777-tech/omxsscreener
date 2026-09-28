@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { top3SelectionSnapshotsTable } from "@workspace/db";
 
 import {
   candidateIdentity,
@@ -9,6 +10,10 @@ import {
   aggregateSessionSource,
   legacySignalSourceForSession,
 } from "./candidateSynchronizationPolicy.ts";
+import {
+  pendingCandidatesToRemove,
+  synchronizeCandidates,
+} from "./candidateSynchronization.ts";
 import { reviewCandidate } from "./screeningReview.ts";
 
 type Row = {
@@ -26,6 +31,166 @@ const row = (
   outcome: Row["outcome"] = "PENDING",
   signalSource: Row["signalSource"] = "edgeai",
 ): Row => ({ market, signalSource, category: "MOMENTUM", ticker, direction: "LONG", outcome });
+
+function synchronizationTx(
+  candidates: any[],
+  snapshots: Array<{ candidateId: number; selected: boolean }>,
+  incoming: any[],
+) {
+  const tx: any = {
+    select: () => {
+      let selectedTable: unknown;
+      const query: any = {
+        from(table: unknown) {
+          selectedTable = table;
+          return query;
+        },
+        where() {
+          return query;
+        },
+        orderBy() {
+          return query;
+        },
+        then(resolve: (value: any[]) => unknown, reject: (reason: unknown) => unknown) {
+          return Promise.resolve(
+            selectedTable === top3SelectionSnapshotsTable
+              ? snapshots.filter((snapshot) => snapshot.selected)
+              : candidates,
+          ).then(resolve, reject);
+        },
+      };
+      return query;
+    },
+    update: () => ({
+      set(values: Record<string, unknown>) {
+        return {
+          where() {
+            const current = candidates.find((candidate) => candidate.ticker === values.ticker);
+            if (current) {
+              const { id: _incomingId, ...persistedValues } = values;
+              Object.assign(current, persistedValues);
+            }
+            return Promise.resolve();
+          },
+        };
+      },
+    }),
+    delete: () => ({
+      where() {
+        const incomingIdentities = new Set(incoming.map(candidateIdentity));
+        for (let index = candidates.length - 1; index >= 0; index--) {
+          const candidate = candidates[index];
+          if (
+            candidate.outcome === "PENDING" &&
+            !snapshots.some((snapshot) => snapshot.selected && snapshot.candidateId === candidate.id) &&
+            !incomingIdentities.has(candidateIdentity(candidate))
+          ) {
+            candidates.splice(index, 1);
+          }
+        }
+        return Promise.resolve();
+      },
+    }),
+    insert: () => ({
+      values(values: any) {
+        candidates.push(values);
+        return Promise.resolve();
+      },
+    }),
+  };
+  return tx;
+}
+
+function syncCandidate(id: number, ticker: string, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    sessionId: 77,
+    market: "SE",
+    signalSource: "manual",
+    category: "MOMENTUM",
+    ticker,
+    direction: "LONG",
+    rank: 1,
+    entryPrice: 100,
+    stopPrice: 95,
+    targetPrice: 110,
+    outcome: "PENDING",
+    ...overrides,
+  };
+}
+
+test("selected snapshot candidates keep their row and signal plan through reimport", async () => {
+  const selectedPresent = syncCandidate(101, "LOCKED", { rank: 1, entryPrice: 100, targetPrice: 110 });
+  const selectedAbsent = syncCandidate(102, "SELECTED-ABSENT", { rank: 2, entryPrice: 80 });
+  const staleLegacy = syncCandidate(103, "STALE-LEGACY", { rank: 3 });
+  const existing = [selectedPresent, selectedAbsent, staleLegacy];
+  const incoming = [
+    syncCandidate(900, "LOCKED", { rank: 9, entryPrice: 125, targetPrice: 140 }),
+  ];
+  const preview = pendingCandidatesToRemove(
+    existing,
+    incoming,
+    new Set([101, 102]),
+  );
+
+  const { candidates, diff } = await synchronizeCandidates(
+    synchronizationTx(existing, [
+      { candidateId: 101, selected: true },
+      { candidateId: 102, selected: true },
+    ], incoming),
+    77,
+    incoming,
+  );
+
+  assert.deepEqual(preview.map((entry) => entry.ticker), ["STALE-LEGACY"]);
+  assert.deepEqual(diff.removed.map((entry) => entry.ticker), ["STALE-LEGACY"]);
+  assert.deepEqual(diff.updated, []);
+  assert.deepEqual(
+    candidates.filter((candidate) => candidate.ticker === "LOCKED").map((candidate) => [
+      candidate.id,
+      candidate.rank,
+      candidate.entryPrice,
+      candidate.targetPrice,
+    ]),
+    [[101, 1, 100, 110]],
+  );
+  assert.ok(candidates.some((candidate) => candidate.id === 102));
+});
+
+test("selected snapshot and Today retain the same candidate identity", async () => {
+  const original = syncCandidate(201, "TODAY-PICK");
+  const snapshot = { candidateId: original.id, selected: true };
+  const incoming = [syncCandidate(999, "TODAY-PICK", { entryPrice: 150 })];
+
+  const { candidates } = await synchronizeCandidates(
+    synchronizationTx([original], [snapshot], incoming),
+    77,
+    incoming,
+  );
+
+  const todayCandidate = candidates.find((candidate) => candidate.id === snapshot.candidateId);
+  assert.ok(todayCandidate);
+  assert.equal(todayCandidate.ticker, "TODAY-PICK");
+  assert.equal(todayCandidate.entryPrice, 100);
+});
+
+test("unsnapshotted legacy candidates retain ordinary update and removal behavior", async () => {
+  const existing = [
+    syncCandidate(301, "LEGACY-UPDATE", { entryPrice: 100 }),
+    syncCandidate(302, "LEGACY-REMOVE"),
+  ];
+  const incoming = [syncCandidate(999, "LEGACY-UPDATE", { entryPrice: 125 })];
+
+  const { candidates, diff } = await synchronizeCandidates(
+    synchronizationTx(existing, [], incoming),
+    77,
+    incoming,
+  );
+
+  assert.equal(candidates.find((candidate) => candidate.id === 301)?.entryPrice, 125);
+  assert.deepEqual(diff.updated.map((entry) => entry.ticker), ["LEGACY-UPDATE"]);
+  assert.deepEqual(diff.removed.map((entry) => entry.ticker), ["LEGACY-REMOVE"]);
+});
 
 test("explicit reimport policy preserves US pending and removes absent SE pending", () => {
   const existing = [row("KEEP"), row("REMOVE"), row("RESOLVED", "SE", "WIN"), row("US-KEEP", "US")];

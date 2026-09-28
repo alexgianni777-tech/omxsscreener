@@ -56,3 +56,31 @@ mtime_ms = 1790578039594
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/d8a3060c-6335-4b53-be2e-810564b225b5/f0fea10d-5d77-4236-b212-f1e6f78eee32"
 storage_version_token = "1790578061679082"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "BWgGN7JjD-x9sQ1mkbxvd"
+uri = "file://exports/omxs30-screener-full-code-2026-09-28-correctness.txt"
+type = "text"
+title = "Ny komplett källkod för granskning – text"
+description = "Senaste versionen efter Top 3- och datumrättelserna. 310 textfiler med tydliga filrubriker, redo för ChatGPT."
+logical_id = "2a3c26d8-e466-406f-9700-7c82881631d0"
+content_hash = "sha256:fc8e5542bc779db89de740486509106b4f3c0976b574bd364a16cc91101bb6b1"
+size = 1617694
+mtime_ms = 1790581250994
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/2a3c26d8-e466-406f-9700-7c82881631d0/b7800600-8dbb-4558-9aa3-5ddf2544d9a5"
+storage_version_token = "1790581264128924"
+content_type = "text/plain"
+
+[[outputs]]
+id = "owXVpVSY25KihsqlN8rvV"
+uri = "file://exports/omxs30-screener-source-2026-09-28-correctness.zip"
+type = "unspecified"
+title = "Ny komplett källkod för granskning – ZIP"
+description = "Samma aktuella projekt med 312 filer: tester, migrationsfiler, API-kontrakt och CI, utan hemligheter eller användardata."
+logical_id = "c2af421d-5042-4a8f-ad0b-fa2408ef3310"
+content_hash = "sha256:bbd781d6421ca8509e3cfe99ed6187377d75470242879d00dca878e4f9921e6a"
+size = 464989
+mtime_ms = 1790581251058
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/c2af421d-5042-4a8f-ad0b-fa2408ef3310/bc16350d-0e64-4b35-b5de-ce3fdda4547b"
+storage_version_token = "1790581265047634"
+content_type = "application/octet-stream"

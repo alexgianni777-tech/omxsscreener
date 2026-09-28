@@ -52,7 +52,7 @@ type EdgeAIStatus =
 
 export function Import() {
   const [rawText, setRawText] = useState("");
-  const [useTodayAsTradingDate, setUseTodayAsTradingDate] = useState(true);
+  const [useTodayAsTradingDate, setUseTodayAsTradingDate] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<ConflictInfo | null>(null);
   const [edgeStatus, setEdgeStatus] = useState<EdgeAIStatus>({ kind: "idle" });
@@ -295,10 +295,10 @@ MARKNADSVÄDER  OMXS30 3305.0 | 5d  2.7% | 1m  1.8% | 3m  8.9% | RSI  79
             className="mt-0.5 h-4 w-4 accent-primary"
           />
           <span>
-            <span className="block text-sm font-medium">Använd som dagens förslag</span>
+            <span className="block text-sm font-medium">Visa i dagens session (äldre signal förblir inaktuell)</span>
             <span className="block text-xs text-muted-foreground mt-0.5">
-              Lägger kandidaterna i dagens session ({stockholmToday()}) även om Telegramtexten bygger på gårdagens stängningsdata.
-              Originaltextens datum sparas fortfarande som källdatum.
+              Visar kandidaterna under {stockholmToday()}, men deras ursprungliga signaldatum ändras inte.
+              En äldre signal kan inte bli handelsbar utan en ny, färsk screening.
             </span>
           </span>
         </label>

@@ -6,6 +6,9 @@ export type CandidateReviewInput = {
   rs3m: number;
   perf1m: number;
   rsi: number;
+  edgeExpectancyR?: number | null;
+  edgeSampleN?: number | null;
+  signalAgeBars?: number | null;
   signalRsi: number | null;
   signalGapPct: number | null;
   volMultiplier: number;
@@ -17,6 +20,7 @@ export type CandidateReviewInput = {
   targetPrice: number;
   rr: number;
   signalSource?: string | null;
+  signalDate?: string | null;
 };
 
 export type SignalReview = {
@@ -51,6 +55,11 @@ export function reviewCandidate(
   const blockers: string[] = [];
   const isShort = candidate.direction === "SHORT";
   const isEdgeAi = (candidate.signalSource ?? source) === "edgeai";
+  // Legacy EdgeAI imports stored expectancyR * 100 in `rsi`. Keep that
+  // compatibility only for EdgeAI rows; new imports use edgeExpectancyR.
+  const edgeExpectancyR = candidate.edgeExpectancyR != null
+    ? candidate.edgeExpectancyR
+    : candidate.rsi / 100;
 
   if (!Number.isFinite(candidate.volMultiplier) || candidate.volMultiplier <= 0) {
     blockers.push("Volymdata saknas — ingen kvalificerad trade.");
@@ -77,8 +86,8 @@ export function reviewCandidate(
   }
 
   if (candidate.rr < 1.2) blockers.push(`R:R ${candidate.rr.toFixed(2)} är under miniminivån 1,2.`);
-  if (isEdgeAi && candidate.rsi < 0) {
-    blockers.push(`Negativ historisk förväntan (${(candidate.rsi / 100).toFixed(2)}R).`);
+  if (isEdgeAi && edgeExpectancyR < 0) {
+    blockers.push(`Negativ historisk förväntan (${edgeExpectancyR.toFixed(2)}R).`);
   }
   if (candidate.earningsKnowledge !== "SIGNAL_TIME") {
     warnings.push("Regel 7 ej bedömbar: rapportkalender saknar verifierad signal-tidsobservation.");
@@ -125,17 +134,37 @@ export function decideCandidate(
   sessionDate: string,
   now = new Date(),
 ): CandidateDecision {
+  if (!candidate.signalDate) {
+    return {
+      status: "STALE",
+      reasons: ["Signalen saknar verifierat källdatum — kontrollera en ny snapshot före trade.", ...review.reasons],
+    };
+  }
+  if (sessionDate > candidate.signalDate) {
+    return {
+      status: "STALE",
+      reasons: [`Sessionen ${sessionDate} ligger efter källsignalen ${candidate.signalDate}; ny signal krävs före trade.`, ...review.reasons],
+    };
+  }
+
   const invalid: string[] = [];
   if (!Number.isFinite(candidate.price) || candidate.price <= 0) {
     invalid.push("Screenad kurs saknas eller är ogiltig.");
   }
   if (!Number.isFinite(candidate.volMultiplier) || candidate.volMultiplier <= 0) {
     invalid.push("Volymdata saknas eller är ogiltig.");
-  } else if (!candidate.volumeAsOf || !/^\d{4}-\d{2}-\d{2}$/.test(candidate.volumeAsOf) || candidate.volumeAsOf > sessionDate) {
+  } else if (!candidate.volumeAsOf || !/^\d{4}-\d{2}-\d{2}$/.test(candidate.volumeAsOf) || candidate.volumeAsOf > candidate.signalDate) {
     invalid.push("Volymens avslutade kursdatum saknas eller är ogiltigt.");
   }
   const isEdgeAi = (candidate.signalSource ?? null) === "edgeai";
-  if (!Number.isFinite(candidate.rsi) || (!isEdgeAi && candidate.rsi < 0)) {
+  if (isEdgeAi) {
+    const edgeExpectancyR = candidate.edgeExpectancyR != null
+      ? candidate.edgeExpectancyR
+      : candidate.rsi / 100;
+    if (!Number.isFinite(edgeExpectancyR)) {
+      invalid.push("Historisk EdgeAI-förväntan saknas eller är ogiltig.");
+    }
+  } else if (!Number.isFinite(candidate.rsi) || candidate.rsi < 0) {
     invalid.push("RSI-data saknas eller är ogiltig.");
   }
   if (!Number.isFinite(candidate.rr) || candidate.rr <= 0) {
@@ -151,10 +180,10 @@ export function decideCandidate(
   if (invalid.length > 0) return { status: "INVALID", reasons: [...invalid, ...review.reasons] };
 
   const today = STOCKHOLM_DATE.format(now);
-  if (sessionDate < today) {
+  if (candidate.signalDate < today || sessionDate < today) {
     return {
       status: "STALE",
-      reasons: [`Signalen är från ${sessionDate}; kontrollera en ny snapshot och live-pris före trade.`, ...review.reasons],
+      reasons: [`Signalen är från ${candidate.signalDate}; kontrollera en ny snapshot och live-pris före trade.`, ...review.reasons],
     };
   }
   if (review.status === "BLOCKED") return { status: "BLOCKED", reasons: review.reasons };

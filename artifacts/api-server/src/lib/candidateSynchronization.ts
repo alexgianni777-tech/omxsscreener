@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 
-import { candidatesTable } from "@workspace/db";
+import { candidatesTable, top3SelectionSnapshotsTable } from "@workspace/db";
 import { logger } from "./logger";
 import {
   candidateIdentity as policyCandidateIdentity,
@@ -76,11 +76,17 @@ export function mergeCandidateInputs<T extends CandidateInput>(
 export function pendingCandidatesToRemove(
   existing: CandidateInput[],
   incoming: CandidateInput[],
+  selectedCandidateIds: ReadonlySet<number> = new Set(),
 ): CandidateDiffEntry[] {
   const removedIdentities = new Set(
     pendingRemovalIdentities(existing, incoming),
   );
-  return existing.filter((candidate) => removedIdentities.has(candidateIdentity(candidate))).map(toDiffEntry);
+  return existing
+    .filter((candidate: any) =>
+      !selectedCandidateIds.has(candidate.id) &&
+      removedIdentities.has(candidateIdentity(candidate)),
+    )
+    .map(toDiffEntry);
 }
 
 /** Business fields whose changes are worth surfacing in an import diff. Fields the
@@ -112,6 +118,7 @@ const DIFF_TRACKED_FIELDS = [
   "edgeSampleN",
   "signalAgeBars",
   "maxHoldDays",
+  "signalDate",
 ] as const;
 
 export type CandidateDiffEntry = {
@@ -175,6 +182,17 @@ export async function synchronizeCandidates(
   if (skipped.length > 0) logger.warn({ skipped }, "Candidate synchronization skipped duplicate identities");
   incoming = deduped;
 
+  const selectedSnapshotRows: Array<{ candidateId: number }> = await tx
+    .select({ candidateId: top3SelectionSnapshotsTable.candidateId })
+    .from(top3SelectionSnapshotsTable)
+    .where(
+      and(
+        eq(top3SelectionSnapshotsTable.sessionId, sessionId),
+        eq(top3SelectionSnapshotsTable.selected, true),
+      ),
+    );
+  const selectedCandidateIds = new Set(selectedSnapshotRows.map((row) => row.candidateId));
+
   const existing: any[] = await tx
     .select()
     .from(candidatesTable)
@@ -192,6 +210,20 @@ export async function synchronizeCandidates(
     const values: Record<string, unknown> = { ...candidate, sessionId };
 
     if (current) {
+      // The signal-time selection is immutable evidence. Do not let later
+      // imports rewrite either its signal/plan fields or its identity fields.
+      // Outcome updates remain handled by the dedicated outcome PATCH path.
+      if (selectedCandidateIds.has(current.id)) continue;
+
+      // A known source date is immutable. Legacy NULL means unknown and must
+      // remain unknown rather than being retrospectively backfilled.
+      if (current.signalDate == null) {
+        values.signalDate = null;
+      } else if (values.signalDate !== current.signalDate) {
+        throw new Error(
+          `Signal date mismatch for ${current.ticker}: stored ${current.signalDate}, incoming ${String(values.signalDate ?? "unknown")}`,
+        );
+      }
       // A later historical re-import has no way to recreate a signal-day
       // calendar. Do not replace an already recorded signal-time observation
       // with its deliberately UNKNOWN incoming counterpart.
@@ -235,6 +267,7 @@ export async function synchronizeCandidates(
   const stalePending = existing.filter(
     (candidate: any) =>
       candidate.outcome === "PENDING" &&
+      !selectedCandidateIds.has(candidate.id) &&
       !incomingIdentities.has(candidateIdentity(candidate)),
   );
   const stalePendingIds = stalePending.map((candidate: any) => candidate.id);

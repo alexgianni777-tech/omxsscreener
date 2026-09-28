@@ -47,6 +47,7 @@ export const ImportSessionResponse = zod.object({
   "candidates": zod.array(zod.object({
   "id": zod.number(),
   "sessionId": zod.number(),
+  "signalDate": zod.string().nullable().describe('YYYY-MM-DD immutable date supplied by the signal source; null for legacy rows where source date is unknown'),
   "category": zod.enum(['MOMENTUM', 'SQUEEZE', 'STUDS', 'WEAKEST']),
   "rank": zod.number(),
   "ticker": zod.string(),
@@ -95,7 +96,26 @@ export const ImportSessionResponse = zod.object({
   "decision": zod.object({
   "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
   "reasons": zod.array(zod.string())
-}).optional()
+}).optional(),
+  "officialSelection": zod.union([zod.object({
+  "selected": zod.boolean(),
+  "rank": zod.number().nullable(),
+  "score": zod.number(),
+  "review": zod.object({
+  "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}),
+  "decision": zod.object({
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "reasons": zod.array(zod.string())
+}),
+  "policyVersion": zod.string(),
+  "selectedAt": zod.coerce.date(),
+  "type": zod.string(),
+  "market": zod.union([zod.literal('SE'),zod.literal('US'),zod.literal(null)]).nullable(),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "source": zod.union([zod.literal('edgeai'),zod.literal('telegram'),zod.literal('manual'),zod.literal('screener'),zod.literal(null)]).nullable()
+}),zod.null()]).optional()
 })),
   "sessionReview": zod.object({
   "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
@@ -131,7 +151,12 @@ export const ImportSessionResponse = zod.object({
   "direction": zod.string(),
   "market": zod.string().nullish()
 }))
-}).optional().describe('What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads.')
+}).optional().describe('What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads.'),
+  "top3SelectionSnapshot": zod.object({
+  "available": zod.boolean(),
+  "selectedAt": zod.coerce.date().nullable(),
+  "policyVersion": zod.string().nullable()
+})
 })
 
 
@@ -194,6 +219,7 @@ export const ReimportSessionResponse = zod.object({
   "candidates": zod.array(zod.object({
   "id": zod.number(),
   "sessionId": zod.number(),
+  "signalDate": zod.string().nullable().describe('YYYY-MM-DD immutable date supplied by the signal source; null for legacy rows where source date is unknown'),
   "category": zod.enum(['MOMENTUM', 'SQUEEZE', 'STUDS', 'WEAKEST']),
   "rank": zod.number(),
   "ticker": zod.string(),
@@ -242,7 +268,26 @@ export const ReimportSessionResponse = zod.object({
   "decision": zod.object({
   "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
   "reasons": zod.array(zod.string())
-}).optional()
+}).optional(),
+  "officialSelection": zod.union([zod.object({
+  "selected": zod.boolean(),
+  "rank": zod.number().nullable(),
+  "score": zod.number(),
+  "review": zod.object({
+  "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}),
+  "decision": zod.object({
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "reasons": zod.array(zod.string())
+}),
+  "policyVersion": zod.string(),
+  "selectedAt": zod.coerce.date(),
+  "type": zod.string(),
+  "market": zod.union([zod.literal('SE'),zod.literal('US'),zod.literal(null)]).nullable(),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "source": zod.union([zod.literal('edgeai'),zod.literal('telegram'),zod.literal('manual'),zod.literal('screener'),zod.literal(null)]).nullable()
+}),zod.null()]).optional()
 })),
   "sessionReview": zod.object({
   "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
@@ -278,7 +323,12 @@ export const ReimportSessionResponse = zod.object({
   "direction": zod.string(),
   "market": zod.string().nullish()
 }))
-}).optional().describe('What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads.')
+}).optional().describe('What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads.'),
+  "top3SelectionSnapshot": zod.object({
+  "available": zod.boolean(),
+  "selectedAt": zod.coerce.date().nullable(),
+  "policyVersion": zod.string().nullable()
+})
 })
 
 
@@ -311,6 +361,7 @@ export const GetSessionResponse = zod.object({
   "candidates": zod.array(zod.object({
   "id": zod.number(),
   "sessionId": zod.number(),
+  "signalDate": zod.string().nullable().describe('YYYY-MM-DD immutable date supplied by the signal source; null for legacy rows where source date is unknown'),
   "category": zod.enum(['MOMENTUM', 'SQUEEZE', 'STUDS', 'WEAKEST']),
   "rank": zod.number(),
   "ticker": zod.string(),
@@ -359,7 +410,26 @@ export const GetSessionResponse = zod.object({
   "decision": zod.object({
   "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
   "reasons": zod.array(zod.string())
-}).optional()
+}).optional(),
+  "officialSelection": zod.union([zod.object({
+  "selected": zod.boolean(),
+  "rank": zod.number().nullable(),
+  "score": zod.number(),
+  "review": zod.object({
+  "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}),
+  "decision": zod.object({
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "reasons": zod.array(zod.string())
+}),
+  "policyVersion": zod.string(),
+  "selectedAt": zod.coerce.date(),
+  "type": zod.string(),
+  "market": zod.union([zod.literal('SE'),zod.literal('US'),zod.literal(null)]).nullable(),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "source": zod.union([zod.literal('edgeai'),zod.literal('telegram'),zod.literal('manual'),zod.literal('screener'),zod.literal(null)]).nullable()
+}),zod.null()]).optional()
 })),
   "sessionReview": zod.object({
   "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
@@ -395,7 +465,12 @@ export const GetSessionResponse = zod.object({
   "direction": zod.string(),
   "market": zod.string().nullish()
 }))
-}).optional().describe('What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads.')
+}).optional().describe('What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads.'),
+  "top3SelectionSnapshot": zod.object({
+  "available": zod.boolean(),
+  "selectedAt": zod.coerce.date().nullable(),
+  "policyVersion": zod.string().nullable()
+})
 })
 
 
@@ -410,6 +485,127 @@ export const DeleteSessionResponse = zod.void()
 
 
 /**
+ * @summary Official immutable signal-time Top 3 performance
+ */
+export const GetTop3AnalyticsResponse = zod.object({
+  "sessions": zod.array(zod.object({
+  "date": zod.coerce.date(),
+  "sessionId": zod.number(),
+  "source": zod.string().nullable(),
+  "selectionStatus": zod.enum(['AVAILABLE', 'UNAVAILABLE']),
+  "selectionUnavailableReason": zod.string().nullable(),
+  "selectedAt": zod.coerce.date().nullable(),
+  "policyVersion": zod.string().nullable(),
+  "picks": zod.array(zod.object({
+  "candidateId": zod.number(),
+  "ticker": zod.string(),
+  "category": zod.string(),
+  "market": zod.union([zod.literal('SE'),zod.literal('US'),zod.literal(null)]).nullable(),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "signalSource": zod.union([zod.literal('edgeai'),zod.literal('telegram'),zod.literal('manual'),zod.literal('screener'),zod.literal(null)]).nullable(),
+  "edgeScore": zod.number(),
+  "rank": zod.number().nullable(),
+  "type": zod.string(),
+  "policyVersion": zod.string(),
+  "selectedAt": zod.coerce.date(),
+  "review": zod.object({
+  "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}),
+  "decision": zod.object({
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "reasons": zod.array(zod.string())
+}),
+  "earningsWarning": zod.boolean(),
+  "outcome": zod.string(),
+  "r": zod.number().nullable()
+})),
+  "longPicks": zod.array(zod.object({
+  "candidateId": zod.number(),
+  "ticker": zod.string(),
+  "category": zod.string(),
+  "market": zod.union([zod.literal('SE'),zod.literal('US'),zod.literal(null)]).nullable(),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "signalSource": zod.union([zod.literal('edgeai'),zod.literal('telegram'),zod.literal('manual'),zod.literal('screener'),zod.literal(null)]).nullable(),
+  "edgeScore": zod.number(),
+  "rank": zod.number().nullable(),
+  "type": zod.string(),
+  "policyVersion": zod.string(),
+  "selectedAt": zod.coerce.date(),
+  "review": zod.object({
+  "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}),
+  "decision": zod.object({
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "reasons": zod.array(zod.string())
+}),
+  "earningsWarning": zod.boolean(),
+  "outcome": zod.string(),
+  "r": zod.number().nullable()
+})),
+  "shortPicks": zod.array(zod.object({
+  "candidateId": zod.number(),
+  "ticker": zod.string(),
+  "category": zod.string(),
+  "market": zod.union([zod.literal('SE'),zod.literal('US'),zod.literal(null)]).nullable(),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "signalSource": zod.union([zod.literal('edgeai'),zod.literal('telegram'),zod.literal('manual'),zod.literal('screener'),zod.literal(null)]).nullable(),
+  "edgeScore": zod.number(),
+  "rank": zod.number().nullable(),
+  "type": zod.string(),
+  "policyVersion": zod.string(),
+  "selectedAt": zod.coerce.date(),
+  "review": zod.object({
+  "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}),
+  "decision": zod.object({
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "reasons": zod.array(zod.string())
+}),
+  "earningsWarning": zod.boolean(),
+  "outcome": zod.string(),
+  "r": zod.number().nullable()
+})),
+  "edgeWinRate": zod.number().nullable(),
+  "sessionR": zod.number().nullable(),
+  "cumulativeR": zod.number()
+})),
+  "stats": zod.object({
+  "totalSessions": zod.number(),
+  "availableSessions": zod.number(),
+  "unavailableSessions": zod.number(),
+  "completedSessions": zod.number(),
+  "totalTrades": zod.number(),
+  "wins": zod.number(),
+  "losses": zod.number(),
+  "winRate": zod.number().nullable(),
+  "totalR": zod.number(),
+  "avgRPerTrade": zod.number().nullable(),
+  "byDirection": zod.object({
+  "LONG": zod.object({
+  "totalTrades": zod.number(),
+  "wins": zod.number(),
+  "losses": zod.number(),
+  "winRate": zod.number().nullable(),
+  "totalR": zod.number(),
+  "avgRPerTrade": zod.number().nullable()
+}),
+  "SHORT": zod.object({
+  "totalTrades": zod.number(),
+  "wins": zod.number(),
+  "losses": zod.number(),
+  "winRate": zod.number().nullable(),
+  "totalR": zod.number(),
+  "avgRPerTrade": zod.number().nullable()
+})
+})
+})
+})
+
+
+/**
  * @summary List candidates with optional filters
  */
 export const ListCandidatesQueryParams = zod.object({
@@ -421,6 +617,7 @@ export const ListCandidatesQueryParams = zod.object({
 export const ListCandidatesResponseItem = zod.object({
   "id": zod.number(),
   "sessionId": zod.number(),
+  "signalDate": zod.string().nullable().describe('YYYY-MM-DD immutable date supplied by the signal source; null for legacy rows where source date is unknown'),
   "category": zod.enum(['MOMENTUM', 'SQUEEZE', 'STUDS', 'WEAKEST']),
   "rank": zod.number(),
   "ticker": zod.string(),
@@ -469,7 +666,26 @@ export const ListCandidatesResponseItem = zod.object({
   "decision": zod.object({
   "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
   "reasons": zod.array(zod.string())
-}).optional()
+}).optional(),
+  "officialSelection": zod.union([zod.object({
+  "selected": zod.boolean(),
+  "rank": zod.number().nullable(),
+  "score": zod.number(),
+  "review": zod.object({
+  "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}),
+  "decision": zod.object({
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "reasons": zod.array(zod.string())
+}),
+  "policyVersion": zod.string(),
+  "selectedAt": zod.coerce.date(),
+  "type": zod.string(),
+  "market": zod.union([zod.literal('SE'),zod.literal('US'),zod.literal(null)]).nullable(),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "source": zod.union([zod.literal('edgeai'),zod.literal('telegram'),zod.literal('manual'),zod.literal('screener'),zod.literal(null)]).nullable()
+}),zod.null()]).optional()
 }).and(zod.object({
   "sessionDate": zod.string().describe('YYYY-MM-DD')
 }))
@@ -514,6 +730,7 @@ export const UpdateCandidateOutcomeBody = zod.object({
 export const UpdateCandidateOutcomeResponse = zod.object({
   "id": zod.number(),
   "sessionId": zod.number(),
+  "signalDate": zod.string().nullable().describe('YYYY-MM-DD immutable date supplied by the signal source; null for legacy rows where source date is unknown'),
   "category": zod.enum(['MOMENTUM', 'SQUEEZE', 'STUDS', 'WEAKEST']),
   "rank": zod.number(),
   "ticker": zod.string(),
@@ -562,7 +779,43 @@ export const UpdateCandidateOutcomeResponse = zod.object({
   "decision": zod.object({
   "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
   "reasons": zod.array(zod.string())
-}).optional()
+}).optional(),
+  "officialSelection": zod.union([zod.object({
+  "selected": zod.boolean(),
+  "rank": zod.number().nullable(),
+  "score": zod.number(),
+  "review": zod.object({
+  "status": zod.enum(['APPROVED', 'WARN', 'BLOCKED']),
+  "reasons": zod.array(zod.string())
+}),
+  "decision": zod.object({
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE']),
+  "reasons": zod.array(zod.string())
+}),
+  "policyVersion": zod.string(),
+  "selectedAt": zod.coerce.date(),
+  "type": zod.string(),
+  "market": zod.union([zod.literal('SE'),zod.literal('US'),zod.literal(null)]).nullable(),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "source": zod.union([zod.literal('edgeai'),zod.literal('telegram'),zod.literal('manual'),zod.literal('screener'),zod.literal(null)]).nullable()
+}),zod.null()]).optional()
+})
+
+
+/**
+ * @summary Toggle a non-official star annotation on a candidate
+ */
+export const SetCandidateTop3AnnotationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const SetCandidateTop3AnnotationBody = zod.object({
+  "isTop3Pick": zod.boolean()
+})
+
+export const SetCandidateTop3AnnotationResponse = zod.object({
+  "id": zod.number(),
+  "isTop3Pick": zod.boolean()
 })
 
 
@@ -632,6 +885,14 @@ export const GetPortfolioResponse = zod.object({
   "ticker": zod.string(),
   "instrument": zod.string().nullable(),
   "direction": zod.enum(['LONG', 'SHORT']),
+  "productType": zod.string().nullable().describe('Product classification'),
+  "productSide": zod.union([zod.literal('LONG'),zod.literal('SHORT'),zod.literal(null)]).nullable().describe('Direction held in the quoted product. LONG means owning the product; P&L follows product price movement and is never multiplied by leverage.'),
+  "underlyingDirection": zod.union([zod.literal('LONG'),zod.literal('SHORT'),zod.literal(null)]).nullable().describe('Directional exposure to the underlying; null means unknown'),
+  "underlyingTicker": zod.string().nullable(),
+  "indicativeLeverage": zod.number().nullable().describe('Informational leverage only; not applied to product P&L.'),
+  "financingLevel": zod.number().nullable(),
+  "barrierLevel": zod.number().nullable(),
+  "barrierType": zod.string().nullable(),
   "market": zod.string().nullable(),
   "notes": zod.string().nullable(),
   "entryPrice": zod.number(),
@@ -663,12 +924,139 @@ export const GetPortfolioResponse = zod.object({
   "totalUnrealisedKr": zod.number(),
   "totalUnrealisedPct": zod.number(),
   "maxStopLossKr": zod.number().nullable().describe('Sum of negative stop P&L amounts only. Null when any open position lacks a stop, because maximum stop loss is then undefined.'),
-  "longExposureKr": zod.number().describe('Current long market exposure.'),
-  "shortExposureKr": zod.number().describe('Current short market exposure'),
+  "longExposureKr": zod.number().describe('Current position market value grouped by the legacy position direction; for leveraged products this is product value'),
+  "shortExposureKr": zod.number().describe('Current position market value grouped by the legacy position direction'),
   "grossExposureKr": zod.number().describe('Long exposure plus short exposure.'),
-  "netExposureKr": zod.number().describe('Long exposure minus short exposure.')
+  "netExposureKr": zod.number().describe('Long exposure minus short exposure.'),
+  "underlyingLongCount": zod.number().describe('Count of positions with explicitly known LONG underlying direction; not a notional exposure.'),
+  "underlyingShortCount": zod.number().describe('Count of positions with explicitly known SHORT underlying direction; not a notional exposure.'),
+  "underlyingDirectionUnknownCount": zod.number().describe('Count of positions whose underlying direction is unspecified.')
 }),
   "fetchedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Add an open portfolio position with optional instrument semantics
+ */
+
+export const createPortfolioPositionBodyIndicativeLeverageExclusiveMin = 0;
+
+export const createPortfolioPositionBodyFinancingLevelExclusiveMin = 0;
+
+export const createPortfolioPositionBodyBarrierLevelExclusiveMin = 0;
+
+export const createPortfolioPositionBodyEntryPriceExclusiveMin = 0;
+
+export const createPortfolioPositionBodySharesExclusiveMin = 0;
+
+
+
+export const CreatePortfolioPositionBody = zod.object({
+  "ticker": zod.string().min(1),
+  "instrument": zod.string().nullish(),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "productType": zod.string().nullish(),
+  "productSide": zod.union([zod.literal('LONG'),zod.literal('SHORT'),zod.literal(null)]).nullish(),
+  "underlyingDirection": zod.union([zod.literal('LONG'),zod.literal('SHORT'),zod.literal(null)]).nullish(),
+  "underlyingTicker": zod.string().nullish(),
+  "indicativeLeverage": zod.number().gt(createPortfolioPositionBodyIndicativeLeverageExclusiveMin).nullish(),
+  "financingLevel": zod.number().gt(createPortfolioPositionBodyFinancingLevelExclusiveMin).nullish(),
+  "barrierLevel": zod.number().gt(createPortfolioPositionBodyBarrierLevelExclusiveMin).nullish(),
+  "barrierType": zod.string().nullish(),
+  "entryPrice": zod.number().gt(createPortfolioPositionBodyEntryPriceExclusiveMin),
+  "shares": zod.number().gt(createPortfolioPositionBodySharesExclusiveMin),
+  "stopPrice": zod.number().nullish(),
+  "targetPrice": zod.number().nullish(),
+  "market": zod.string().nullish(),
+  "notes": zod.string().nullish()
+})
+
+export const CreatePortfolioPositionResponse = zod.object({
+  "id": zod.number(),
+  "ticker": zod.string(),
+  "instrument": zod.string().nullable(),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "productType": zod.string().nullable(),
+  "productSide": zod.union([zod.literal('LONG'),zod.literal('SHORT'),zod.literal(null)]).nullable(),
+  "underlyingDirection": zod.union([zod.literal('LONG'),zod.literal('SHORT'),zod.literal(null)]).nullable(),
+  "underlyingTicker": zod.string().nullable(),
+  "indicativeLeverage": zod.number().nullable(),
+  "financingLevel": zod.number().nullable(),
+  "barrierLevel": zod.number().nullable(),
+  "barrierType": zod.string().nullable(),
+  "entryPrice": zod.number(),
+  "lastPrice": zod.number().nullable(),
+  "shares": zod.number(),
+  "stopPrice": zod.number().nullable(),
+  "targetPrice": zod.number().nullable(),
+  "market": zod.string().nullable(),
+  "notes": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update an open portfolio position
+ */
+export const UpdatePortfolioPositionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+export const updatePortfolioPositionBodyIndicativeLeverageExclusiveMin = 0;
+
+export const updatePortfolioPositionBodyFinancingLevelExclusiveMin = 0;
+
+export const updatePortfolioPositionBodyBarrierLevelExclusiveMin = 0;
+
+export const updatePortfolioPositionBodyEntryPriceExclusiveMin = 0;
+
+export const updatePortfolioPositionBodySharesExclusiveMin = 0;
+
+
+
+export const UpdatePortfolioPositionBody = zod.object({
+  "ticker": zod.string().min(1).optional(),
+  "instrument": zod.string().nullish(),
+  "direction": zod.enum(['LONG', 'SHORT']).optional(),
+  "productType": zod.string().nullish(),
+  "productSide": zod.union([zod.literal('LONG'),zod.literal('SHORT'),zod.literal(null)]).nullish(),
+  "underlyingDirection": zod.union([zod.literal('LONG'),zod.literal('SHORT'),zod.literal(null)]).nullish(),
+  "underlyingTicker": zod.string().nullish(),
+  "indicativeLeverage": zod.number().gt(updatePortfolioPositionBodyIndicativeLeverageExclusiveMin).nullish(),
+  "financingLevel": zod.number().gt(updatePortfolioPositionBodyFinancingLevelExclusiveMin).nullish(),
+  "barrierLevel": zod.number().gt(updatePortfolioPositionBodyBarrierLevelExclusiveMin).nullish(),
+  "barrierType": zod.string().nullish(),
+  "entryPrice": zod.number().gt(updatePortfolioPositionBodyEntryPriceExclusiveMin).optional(),
+  "shares": zod.number().gt(updatePortfolioPositionBodySharesExclusiveMin).optional(),
+  "stopPrice": zod.number().nullish(),
+  "targetPrice": zod.number().nullish(),
+  "market": zod.string().nullish(),
+  "notes": zod.string().nullish()
+})
+
+export const UpdatePortfolioPositionResponse = zod.object({
+  "id": zod.number(),
+  "ticker": zod.string(),
+  "instrument": zod.string().nullable(),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "productType": zod.string().nullable(),
+  "productSide": zod.union([zod.literal('LONG'),zod.literal('SHORT'),zod.literal(null)]).nullable(),
+  "underlyingDirection": zod.union([zod.literal('LONG'),zod.literal('SHORT'),zod.literal(null)]).nullable(),
+  "underlyingTicker": zod.string().nullable(),
+  "indicativeLeverage": zod.number().nullable(),
+  "financingLevel": zod.number().nullable(),
+  "barrierLevel": zod.number().nullable(),
+  "barrierType": zod.string().nullable(),
+  "entryPrice": zod.number(),
+  "lastPrice": zod.number().nullable(),
+  "shares": zod.number(),
+  "stopPrice": zod.number().nullable(),
+  "targetPrice": zod.number().nullable(),
+  "market": zod.string().nullable(),
+  "notes": zod.string().nullable(),
+  "createdAt": zod.coerce.date()
 })
 
 

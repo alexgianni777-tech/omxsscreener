@@ -8,6 +8,7 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm --filter @workspace/db exec tsx --test $(find \"$PWD/src\" -type f -name '*.test.ts' -print)",
     "test:concurrency": "node --test src/lib/sessionWriteSerialization.test.ts",
     "test:synchronization": "node --test src/lib/candidateSynchronization.test.ts"
   },

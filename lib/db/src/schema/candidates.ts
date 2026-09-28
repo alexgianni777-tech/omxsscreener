@@ -8,6 +8,9 @@ export const candidatesTable = pgTable("candidates", {
   sessionId: integer("session_id")
     .notNull()
     .references(() => screenerSessionsTable.id, { onDelete: "cascade" }),
+  // Immutable calendar day on which this source emitted the signal. Unlike
+  // session.date, this is provenance, not a display/trading-session choice.
+  signalDate: date("signal_date", { mode: "string" }),
   category: text("category", { enum: ["MOMENTUM", "SQUEEZE", "STUDS", "WEAKEST"] }).notNull(),
   rank: integer("rank").notNull(),
   ticker: text("ticker").notNull(),

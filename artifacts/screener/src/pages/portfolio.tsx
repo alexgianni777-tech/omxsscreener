@@ -8,6 +8,7 @@ import {
   Briefcase, TrendingUp, TrendingDown, RefreshCw, Plus, Trash2,
   AlertTriangle, Target, ShieldAlert, ChevronUp, ChevronDown, ClipboardPaste, CheckCircle2, Pencil, X,
 } from "lucide-react";
+import { parseBrokerExport, type BrokerImportRow } from "../lib/portfolioBrokerParser";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const api = (path: string) => `${BASE}/api${path}`;
@@ -15,19 +16,6 @@ const api = (path: string) => `${BASE}/api${path}`;
 // ── types ──────────────────────────────────────────────────────────────────────
 type Position = PortfolioPosition;
 type PortfolioData = PortfolioResponse;
-
-interface BrokerImportRow {
-  id: string;
-  instrument: string;
-  direction: "LONG" | "SHORT";
-  shares: number;
-  livePrice: number;
-  entryPrice: number;
-  pnlKr: number;
-  pnlPct: number;
-  marketValueKr: number;
-  ticker: string;
-}
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 function fmt(n: number, dec = 0) {
@@ -80,63 +68,6 @@ const FRESHNESS_STYLE: Record<ReturnType<typeof freshnessTier>, string> = {
   unknown: "text-muted-foreground bg-muted border-border",
 };
 
-function parseBrokerNumber(value: string) {
-  return Number(value.replace(/\s/g, "").replace(",", "."));
-}
-
-function parseBrokerExport(text: string): { rows: BrokerImportRow[]; errors: string[] } {
-  const lines = text
-    .split(/\r?\n/)
-    .map(line => line.replace(/\u00a0/g, " ").trim())
-    .filter(Boolean);
-  const rows: BrokerImportRow[] = [];
-  const errors: string[] = [];
-  const instrumentPattern = /^(?:MINI|TURBO|BULL|BEAR)\b/i;
-  const rowPattern = /^(\d+(?:[.,]\d+)?)\s+.*?\b\d{1,2}:\d{2}\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)\s+SEK\s+([+\-−]?\d[\d\s]*(?:[.,]\d+)?)\s+kr\s+([+\-−]?\d+(?:[.,]\d+)?)%\s+([\d\s.,]+)\s+kr$/i;
-
-  for (let index = 0; index < lines.length; index++) {
-    const instrument = lines[index];
-    if (!instrumentPattern.test(instrument)) continue;
-
-    const dataLine = lines[index + 1];
-    const match = dataLine?.replace(/−/g, "-").match(rowPattern);
-    if (!match) {
-      errors.push(`Kunde inte läsa värdena efter “${instrument}”.`);
-      continue;
-    }
-
-    const shares = parseBrokerNumber(match[1]);
-    const livePrice = parseBrokerNumber(match[2]);
-    const entryPrice = parseBrokerNumber(match[3]);
-    const pnlKr = parseBrokerNumber(match[4]);
-    const pnlPct = parseBrokerNumber(match[5]);
-    const marketValueKr = parseBrokerNumber(match[6]);
-    if ([shares, livePrice, entryPrice, pnlKr, pnlPct, marketValueKr].some(value => !Number.isFinite(value))) {
-      errors.push(`Ogiltiga siffror efter “${instrument}”.`);
-      continue;
-    }
-
-    rows.push({
-      id: `${instrument}-${index}`,
-      instrument,
-      direction: /^(?:MINI|TURBO|BULL|BEAR)\s+S\b/i.test(instrument) ? "SHORT" : "LONG",
-      shares,
-      livePrice,
-      entryPrice,
-      pnlKr,
-      pnlPct,
-      marketValueKr,
-      ticker: "",
-    });
-    index++;
-  }
-
-  if (rows.length === 0 && errors.length === 0) {
-    errors.push("Hittade inga instrumentrader. Klistra in instrumentnamn och raden med antal, kurser och värde.");
-  }
-  return { rows, errors };
-}
-
 // ── summary card ───────────────────────────────────────────────────────────────
 function FreshnessBadge({ iso, label }: { iso: string | null; label: string }) {
   const tier = freshnessTier(iso);
@@ -182,6 +113,11 @@ function SummaryBar({ summary, fetchedAt }: { summary: PortfolioData["summary"];
         />
         <Tile label="Long-exponering" value={`${fmt(summary.longExposureKr)} kr`} valueClass="text-success" />
         <Tile label="Short-exponering" value={`${fmt(summary.shortExposureKr)} kr`} valueClass="text-destructive" />
+        <Tile
+          label="Underliggande riktning"
+          value={`L ${fmt(summary.underlyingLongCount, 0)} · S ${fmt(summary.underlyingShortCount, 0)}`}
+          sub={`${fmt(summary.underlyingDirectionUnknownCount, 0)} okända · nominell exponering ej beräknad`}
+        />
         <Tile label="Bruttoexponering" value={`${fmt(summary.grossExposureKr)} kr`} />
         <Tile
           label="Nettoexponering"
@@ -207,7 +143,7 @@ function Tile({ label, value, sub, valueClass = "" }: { label: string; value: st
 // ── price bar: entry → stop/target ────────────────────────────────────────────
 function PriceBar({ pos }: { pos: Position }) {
   if (!pos.stopPrice && !pos.targetPrice) return null;
-  const isShort = pos.direction === "SHORT";
+  const isShort = (pos.productSide ?? pos.direction) === "SHORT";
   const lo = isShort
     ? Math.min(pos.targetPrice ?? pos.entryPrice, pos.stopPrice ? pos.stopPrice - (pos.entryPrice - (pos.targetPrice ?? pos.entryPrice)) : pos.entryPrice) * 0.995
     : Math.min(pos.stopPrice ?? pos.entryPrice * 0.95, pos.entryPrice) * 0.99;
@@ -262,6 +198,14 @@ function EditPositionForm({ pos, onCancel, onSuccess }: { pos: Position; onCance
     ticker: pos.ticker,
     instrument: pos.instrument ?? "",
     direction: pos.direction,
+    productType: pos.productType ?? "",
+    productSide: pos.productSide ?? "",
+    underlyingDirection: pos.underlyingDirection ?? "",
+    underlyingTicker: pos.underlyingTicker ?? "",
+    indicativeLeverage: pos.indicativeLeverage != null ? String(pos.indicativeLeverage) : "",
+    financingLevel: pos.financingLevel != null ? String(pos.financingLevel) : "",
+    barrierLevel: pos.barrierLevel != null ? String(pos.barrierLevel) : "",
+    barrierType: pos.barrierType ?? "",
     entryPrice: String(pos.entryPrice),
     shares: String(pos.shares),
     stopPrice: pos.stopPrice != null ? String(pos.stopPrice) : "",
@@ -289,6 +233,14 @@ function EditPositionForm({ pos, onCancel, onSuccess }: { pos: Position; onCance
           ticker: form.ticker.trim().toUpperCase(),
           instrument: form.instrument.trim() || null,
           direction: form.direction,
+          productType: form.productType.trim() || null,
+          productSide: form.productSide || null,
+          underlyingDirection: form.underlyingDirection || null,
+          underlyingTicker: form.underlyingTicker.trim() || null,
+          indicativeLeverage: form.indicativeLeverage ? parseFloat(form.indicativeLeverage) : null,
+          financingLevel: form.financingLevel ? parseFloat(form.financingLevel) : null,
+          barrierLevel: form.barrierLevel ? parseFloat(form.barrierLevel) : null,
+          barrierType: form.barrierType.trim() || null,
           entryPrice: parseFloat(form.entryPrice),
           shares: parseFloat(form.shares),
           stopPrice: form.stopPrice ? parseFloat(form.stopPrice) : null,
@@ -338,6 +290,46 @@ function EditPositionForm({ pos, onCancel, onSuccess }: { pos: Position; onCance
             <option value="LONG">▲ LONG</option>
             <option value="SHORT">▼ SHORT</option>
           </select>
+        </div>
+        <div>
+          <label className={label}>Produkttyp</label>
+          <input className={inp} placeholder="TURBO" value={form.productType} onChange={e => set("productType", e.target.value)} />
+        </div>
+        <div>
+          <label className={label}>Ägd produkt</label>
+          <select className={inp} value={form.productSide} onChange={e => set("productSide", e.target.value)}>
+            <option value="">Okänd / legacy</option>
+            <option value="LONG">LONG (äger produkten)</option>
+            <option value="SHORT">SHORT</option>
+          </select>
+        </div>
+        <div>
+          <label className={label}>Underliggande riktning</label>
+          <select className={inp} value={form.underlyingDirection} onChange={e => set("underlyingDirection", e.target.value)}>
+            <option value="">Okänd</option>
+            <option value="LONG">LONG</option>
+            <option value="SHORT">SHORT</option>
+          </select>
+        </div>
+        <div>
+          <label className={label}>Underliggande ticker</label>
+          <input className={inp} value={form.underlyingTicker} onChange={e => set("underlyingTicker", e.target.value)} />
+        </div>
+        <div>
+          <label className={label}>Indikativ hävstång</label>
+          <input className={inp} type="number" step="0.1" min="0" value={form.indicativeLeverage} onChange={e => set("indicativeLeverage", e.target.value)} />
+        </div>
+        <div>
+          <label className={label}>Finansieringsnivå</label>
+          <input className={inp} type="number" step="0.01" min="0" value={form.financingLevel} onChange={e => set("financingLevel", e.target.value)} />
+        </div>
+        <div>
+          <label className={label}>Barriärnivå</label>
+          <input className={inp} type="number" step="0.01" min="0" value={form.barrierLevel} onChange={e => set("barrierLevel", e.target.value)} />
+        </div>
+        <div>
+          <label className={label}>Barriärtyp</label>
+          <input className={inp} placeholder="Knock-out" value={form.barrierType} onChange={e => set("barrierType", e.target.value)} />
         </div>
         <div>
           <label className={label}>Marknad</label>
@@ -417,6 +409,26 @@ function PositionCard({ pos, onDelete, onEdited }: { pos: Position; onDelete: (i
               {pos.instrument}
             </span>
           )}
+          {pos.productType && (
+            <span className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+              {pos.productType}
+            </span>
+          )}
+          {pos.productSide && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+              Ägd produkt {pos.productSide}
+            </span>
+          )}
+          {pos.underlyingDirection && (
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+              pos.underlyingDirection === "LONG" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
+            }`}>
+              Underliggande {pos.underlyingDirection}{pos.underlyingTicker ? ` · ${pos.underlyingTicker}` : ""}
+            </span>
+          )}
+          {pos.instrument && (!pos.productSide || !pos.underlyingDirection) && (
+            <span className="text-[10px] text-amber-500">Instrumentdata okänd</span>
+          )}
           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
             isShort ? "bg-destructive/15 text-destructive" : "bg-success/15 text-success"
           }`}>
@@ -435,7 +447,7 @@ function PositionCard({ pos, onDelete, onEdited }: { pos: Position; onDelete: (i
           {pos.livePrice != null && (
             <div className="text-right">
               <div className="font-mono font-bold text-base">{fmt(pos.livePrice, 2)}</div>
-              {pos.instrument ? (
+              {pos.instrument || pos.productType ? (
                 <div className="text-[10px] text-muted-foreground">Senast importerat</div>
               ) : pos.changePct != null && (
                 <div className={`text-xs font-mono flex items-center justify-end gap-0.5 ${
@@ -445,7 +457,7 @@ function PositionCard({ pos, onDelete, onEdited }: { pos: Position; onDelete: (i
                   {Math.abs(pos.changePct).toFixed(2)}%
                 </div>
               )}
-              {!pos.instrument && (
+              {!pos.instrument && !pos.productType && (
                 <div className="mt-1">
                   <FreshnessBadge iso={pos.quoteAsOf} label="Kurs" />
                 </div>
@@ -504,6 +516,14 @@ function PositionCard({ pos, onDelete, onEdited }: { pos: Position; onDelete: (i
         />
         <MetricCell label="Antal" value={fmt(pos.shares, 0)} />
         <MetricCell label="Investerat" value={`${fmt(pos.positionSizeKr, 0)} kr`} />
+        {pos.indicativeLeverage != null && (
+          <MetricCell label="Indikativ hävstång" value={`${fmt(pos.indicativeLeverage, 1)}×`} sub="Påverkar inte P&L-beräkningen" />
+        )}
+        {pos.financingLevel != null && <MetricCell label="Finansieringsnivå" value={fmt(pos.financingLevel, 2)} />}
+        {pos.barrierLevel != null && <MetricCell label={pos.barrierType || "Barriär"} value={fmt(pos.barrierLevel, 2)} />}
+        {!pos.underlyingDirection && pos.instrument && (
+          <MetricCell label="Underliggande exponering" value="Okänd" sub="Notional kräver ratio och underliggande kurs" />
+        )}
         <MetricCell
           label="P&L vid stop"
           value={pos.stopPnlKr != null ? `${sgn(pos.stopPnlKr, 0)} kr` : "Ingen stop"}
@@ -580,6 +600,8 @@ function BrokerImport({ onSuccess }: { onSuccess: () => void }) {
             ticker: row.ticker.trim().toUpperCase(),
             instrument: row.instrument,
             direction: row.direction,
+            productSide: row.productSide,
+            underlyingDirection: row.underlyingDirection,
             entryPrice: row.entryPrice,
             lastPrice: row.livePrice,
             shares: row.shares,
@@ -689,6 +711,8 @@ function BrokerImport({ onSuccess }: { onSuccess: () => void }) {
 // ── add-position form ──────────────────────────────────────────────────────────
 const EMPTY_FORM = {
   ticker: "", instrument: "", direction: "LONG" as "LONG" | "SHORT",
+  productType: "", productSide: "", underlyingDirection: "", underlyingTicker: "",
+  indicativeLeverage: "", financingLevel: "", barrierLevel: "", barrierType: "",
   entryPrice: "", shares: "", stopPrice: "", targetPrice: "",
   market: "SE" as "SE" | "US", notes: "",
 };
@@ -715,6 +739,14 @@ function AddPositionForm({ onSuccess }: { onSuccess: () => void }) {
           ticker: form.ticker.trim().toUpperCase(),
           instrument: form.instrument.trim() || undefined,
           direction: form.direction,
+          productType: form.productType.trim() || null,
+          productSide: form.productSide || null,
+          underlyingDirection: form.underlyingDirection || null,
+          underlyingTicker: form.underlyingTicker.trim() || null,
+          indicativeLeverage: form.indicativeLeverage ? parseFloat(form.indicativeLeverage) : null,
+          financingLevel: form.financingLevel ? parseFloat(form.financingLevel) : null,
+          barrierLevel: form.barrierLevel ? parseFloat(form.barrierLevel) : null,
+          barrierType: form.barrierType.trim() || null,
           entryPrice: parseFloat(form.entryPrice),
           shares: parseFloat(form.shares),
           stopPrice: form.stopPrice ? parseFloat(form.stopPrice) : undefined,
@@ -765,6 +797,46 @@ function AddPositionForm({ onSuccess }: { onSuccess: () => void }) {
             <option value="LONG">▲ LONG</option>
             <option value="SHORT">▼ SHORT</option>
           </select>
+        </div>
+        <div>
+          <label className={label}>Produkttyp</label>
+          <input className={inp} placeholder="TURBO" value={form.productType} onChange={e => set("productType", e.target.value)} />
+        </div>
+        <div>
+          <label className={label}>Ägd produkt</label>
+          <select className={inp} value={form.productSide} onChange={e => set("productSide", e.target.value)}>
+            <option value="">Okänd / legacy</option>
+            <option value="LONG">LONG (äger produkten)</option>
+            <option value="SHORT">SHORT</option>
+          </select>
+        </div>
+        <div>
+          <label className={label}>Underliggande riktning</label>
+          <select className={inp} value={form.underlyingDirection} onChange={e => set("underlyingDirection", e.target.value)}>
+            <option value="">Okänd</option>
+            <option value="LONG">LONG</option>
+            <option value="SHORT">SHORT</option>
+          </select>
+        </div>
+        <div>
+          <label className={label}>Underliggande ticker</label>
+          <input className={inp} value={form.underlyingTicker} onChange={e => set("underlyingTicker", e.target.value)} />
+        </div>
+        <div>
+          <label className={label}>Indikativ hävstång</label>
+          <input className={inp} type="number" step="0.1" min="0" value={form.indicativeLeverage} onChange={e => set("indicativeLeverage", e.target.value)} />
+        </div>
+        <div>
+          <label className={label}>Finansieringsnivå</label>
+          <input className={inp} type="number" step="0.01" min="0" value={form.financingLevel} onChange={e => set("financingLevel", e.target.value)} />
+        </div>
+        <div>
+          <label className={label}>Barriärnivå</label>
+          <input className={inp} type="number" step="0.01" min="0" value={form.barrierLevel} onChange={e => set("barrierLevel", e.target.value)} />
+        </div>
+        <div>
+          <label className={label}>Barriärtyp</label>
+          <input className={inp} placeholder="Knock-out" value={form.barrierType} onChange={e => set("barrierType", e.target.value)} />
         </div>
         <div>
           <label className={label}>Marknad</label>

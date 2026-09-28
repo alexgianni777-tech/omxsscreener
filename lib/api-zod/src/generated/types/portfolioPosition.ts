@@ -6,6 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { PortfolioPositionDirection } from './portfolioPositionDirection';
+import type { PortfolioPositionProductSide } from './portfolioPositionProductSide';
+import type { PortfolioPositionUnderlyingDirection } from './portfolioPositionUnderlyingDirection';
 
 export interface PortfolioPosition {
   id: number;
@@ -13,6 +15,34 @@ export interface PortfolioPosition {
   /** @nullable */
   instrument: string | null;
   direction: PortfolioPositionDirection;
+  /**
+     * Product classification
+     * @nullable
+     */
+  productType: string | null;
+  /**
+     * Direction held in the quoted product. LONG means owning the product; P&L follows product price movement and is never multiplied by leverage.
+     * @nullable
+     */
+  productSide: PortfolioPositionProductSide;
+  /**
+     * Directional exposure to the underlying; null means unknown
+     * @nullable
+     */
+  underlyingDirection: PortfolioPositionUnderlyingDirection;
+  /** @nullable */
+  underlyingTicker: string | null;
+  /**
+     * Informational leverage only; not applied to product P&L.
+     * @nullable
+     */
+  indicativeLeverage: number | null;
+  /** @nullable */
+  financingLevel: number | null;
+  /** @nullable */
+  barrierLevel: number | null;
+  /** @nullable */
+  barrierType: string | null;
   /** @nullable */
   market: string | null;
   /** @nullable */

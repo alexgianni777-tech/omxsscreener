@@ -1,28 +1,30 @@
 /**
- * GET /api/screener/analytics/top3
- *
- * Hypothetical "top 3 per session" strategy performance.
- * For every session, picks the 3 candidates with the highest edge score
- * (winRate × expectancyR), then tracks their logged outcomes as R-multiples.
- * PENDING outcomes are excluded from running totals.
- *
- * Manual top-3 overrides (isTop3Pick === true) take precedence over auto-rank.
- * Each pick includes `earningsWarning: true` when the stock had an earnings
- * report within 0–5 calendar days of the session date (Rule 7 exclusion zone).
- * It is flagged only for a verified SIGNAL_TIME observation; legacy values
- * have unknown provenance and must not be treated as Rule 7 evidence.
+ * Official Top 3 performance from immutable signal-time selection snapshots.
+ * Legacy sessions without snapshots are returned as unavailable and are never
+ * selected, ranked, or backfilled from their current candidate fields.
  */
 import { Router, type IRouter } from "express";
 import { asc } from "drizzle-orm";
-import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
-import { candidateSelectionScore, selectSourceBalancedCandidates } from "../lib/candidateRanking.ts";
+import {
+  db,
+  screenerSessionsTable,
+  candidatesTable,
+  top3SelectionSnapshotsTable,
+} from "@workspace/db";
 import { resolveTradePerformance } from "../lib/tradePerformance.ts";
 
 const router: IRouter = Router();
 
 router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
   const sessions = await db
-    .select({ id: screenerSessionsTable.id, date: screenerSessionsTable.date, source: screenerSessionsTable.source, edgeWinRate: screenerSessionsTable.edgeWinRate })
+    .select({
+      id: screenerSessionsTable.id,
+      date: screenerSessionsTable.date,
+      source: screenerSessionsTable.source,
+      edgeWinRate: screenerSessionsTable.edgeWinRate,
+      snapshotAt: screenerSessionsTable.top3SnapshotAt,
+      policyVersion: screenerSessionsTable.top3PolicyVersion,
+    })
     .from(screenerSessionsTable)
     .orderBy(asc(screenerSessionsTable.date));
 
@@ -31,113 +33,93 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
     return;
   }
 
-  const allCandidates = await db.select().from(candidatesTable);
-
-  // Group by session
-  const bySession = new Map<number, typeof allCandidates>();
-  for (const c of allCandidates) {
-    if (!bySession.has(c.sessionId)) bySession.set(c.sessionId, []);
-    bySession.get(c.sessionId)!.push(c);
+  const [allCandidates, allSnapshots] = await Promise.all([
+    db.select().from(candidatesTable),
+    db.select().from(top3SelectionSnapshotsTable)
+      .orderBy(
+        asc(top3SelectionSnapshotsTable.sessionId),
+        asc(top3SelectionSnapshotsTable.market),
+        asc(top3SelectionSnapshotsTable.direction),
+        asc(top3SelectionSnapshotsTable.rank),
+      ),
+  ]);
+  const candidateById = new Map(allCandidates.map((candidate) => [candidate.id, candidate]));
+  const snapshotsBySession = new Map<number, typeof allSnapshots>();
+  for (const snapshot of allSnapshots) {
+    const group = snapshotsBySession.get(snapshot.sessionId) ?? [];
+    group.push(snapshot);
+    snapshotsBySession.set(snapshot.sessionId, group);
   }
 
   let cumulativeR = 0;
   let totalTrades = 0;
   let wins = 0;
   let losses = 0;
-
-  // Per-direction (buy vs. sell picks) breakdown — same accounting as the
-  // aggregate totals above, split by whether the pick was a LONG or SHORT.
   const byDirection = {
     LONG: { totalTrades: 0, wins: 0, losses: 0, totalR: 0 },
     SHORT: { totalTrades: 0, wins: 0, losses: 0, totalR: 0 },
   };
 
   const sessionResults = sessions.map((session) => {
-    const candidates = bySession.get(session.id) ?? [];
-
-    // Top 3 is deliberately per direction: up to three LONG and three SHORT
-    // candidates. Manual choices override source-balanced auto-rank within
-    // their own direction.
-    const manualPicks = candidates.filter((c) => c.isTop3Pick === true);
-    const selectDirection = (direction: "LONG" | "SHORT") => {
-      const pool = candidates.filter((candidate) =>
-        direction === "SHORT"
-          ? candidate.direction === "SHORT"
-          : candidate.direction !== "SHORT",
-      );
-      const manual = manualPicks.filter((candidate) =>
-        direction === "SHORT"
-          ? candidate.direction === "SHORT"
-          : candidate.direction !== "SHORT",
-      );
-      return manual.length > 0
-        ? [...manual].sort((a, b) => a.rank - b.rank || a.ticker.localeCompare(b.ticker)).slice(0, 3)
-        : selectSourceBalancedCandidates(pool, 3);
-    };
-    const topLong = selectDirection("LONG");
-    const topShort = selectDirection("SHORT");
-    const top3 = [...topLong, ...topShort];
-
-    let sessionR = 0;
-    let sessionHasResolved = false;
-
-    const picks = top3.map((c) => {
-      const dirBucket = c.direction === "SHORT" ? byDirection.SHORT : byDirection.LONG;
-      const performance = resolveTradePerformance(c);
-      const r = performance?.r ?? null;
+    const snapshots = session.snapshotAt
+      ? (snapshotsBySession.get(session.id) ?? []).filter((snapshot) => snapshot.selected)
+      : [];
+    const mapPick = (snapshot: (typeof allSnapshots)[number]) => {
+      const candidate = candidateById.get(snapshot.candidateId);
+      const performance = candidate ? resolveTradePerformance(candidate) : null;
+      const direction = snapshot.direction === "SHORT" ? "SHORT" : "LONG";
       if (performance) {
-        const resolvedR = performance.r;
         totalTrades++;
-        sessionHasResolved = true;
-        sessionR += resolvedR;
-        cumulativeR += resolvedR;
-        dirBucket.totalTrades++;
-        dirBucket.totalR += resolvedR;
+        cumulativeR += performance.r;
+        const bucket = byDirection[direction];
+        bucket.totalTrades++;
+        bucket.totalR += performance.r;
         if (performance.result === "WIN") {
           wins++;
-          dirBucket.wins++;
+          bucket.wins++;
         } else if (performance.result === "LOSS") {
           losses++;
-          dirBucket.losses++;
+          bucket.losses++;
         }
       }
-
-      const eid = c.earningsInDays;
-      const earningsWarning = c.earningsKnowledge === "SIGNAL_TIME" && eid != null && eid >= 0 && eid <= 5;
-
       return {
-        ticker: c.ticker,
-        direction: c.direction,
-        signalSource: c.signalSource ?? null,
-        edgeScore: Number(candidateSelectionScore(c).toFixed(4)),
-        outcome: c.outcome,
-        r,
-        earningsWarning,
-      };
-    });
-
-    // Direction split — informational picks per direction, not counted in cumulative R
-    const mapInfoPick = (c: (typeof allCandidates)[0]) => {
-      const eid = c.earningsInDays;
-      const performance = resolveTradePerformance(c);
-      return {
-        ticker: c.ticker,
-        direction: c.direction,
-        signalSource: c.signalSource ?? null,
-        edgeScore: Number(candidateSelectionScore(c).toFixed(4)),
-        outcome: c.outcome,
+        candidateId: snapshot.candidateId,
+        ticker: snapshot.ticker,
+        category: snapshot.category,
+        market: snapshot.market,
+        direction: snapshot.direction,
+        signalSource: snapshot.source ?? null,
+        edgeScore: snapshot.score,
+        rank: snapshot.rank,
+        type: snapshot.type,
+        policyVersion: snapshot.policyVersion,
+        selectedAt: snapshot.selectedAt,
+        review: snapshot.review,
+        decision: snapshot.decision,
+        earningsWarning: snapshot.earningsWarning,
+        outcome: candidate?.outcome ?? "PENDING",
         r: performance?.r ?? null,
-        earningsWarning: c.earningsKnowledge === "SIGNAL_TIME" && eid != null && eid >= 0 && eid <= 5,
       };
     };
 
+    let sessionR = 0;
+    const picks = snapshots.map((snapshot) => {
+      const pick = mapPick(snapshot);
+      if (pick.r != null) sessionR += pick.r;
+      return pick;
+    });
+    const sessionHasResolved = picks.some((pick) => pick.r != null);
     return {
       date: session.date,
       sessionId: session.id,
       source: session.source ?? null,
+      selectionStatus: session.snapshotAt ? "AVAILABLE" : "UNAVAILABLE",
+      selectionUnavailableReason: session.snapshotAt ? null : "No signal-time Top 3 snapshot was recorded for this legacy session.",
+      selectedAt: session.snapshotAt,
+      policyVersion: session.policyVersion,
       picks,
-      longPicks: topLong.map(mapInfoPick),
-      shortPicks: topShort.map(mapInfoPick),
+      longPicks: picks.filter((pick) => pick.direction === "LONG"),
+      shortPicks: picks.filter((pick) => pick.direction === "SHORT"),
       edgeWinRate: session.edgeWinRate ?? null,
       sessionR: sessionHasResolved ? sessionR : null,
       cumulativeR,
@@ -146,21 +128,22 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
 
   const winRate = totalTrades > 0 ? wins / totalTrades : null;
   const avgRPerTrade = totalTrades > 0 ? cumulativeR / totalTrades : null;
-
-  const summarizeDirection = (b: { totalTrades: number; wins: number; losses: number; totalR: number }) => ({
-    totalTrades: b.totalTrades,
-    wins: b.wins,
-    losses: b.losses,
-    winRate: b.totalTrades > 0 ? b.wins / b.totalTrades : null,
-    totalR: b.totalR,
-    avgRPerTrade: b.totalTrades > 0 ? b.totalR / b.totalTrades : null,
+  const summarizeDirection = (bucket: { totalTrades: number; wins: number; losses: number; totalR: number }) => ({
+    totalTrades: bucket.totalTrades,
+    wins: bucket.wins,
+    losses: bucket.losses,
+    winRate: bucket.totalTrades > 0 ? bucket.wins / bucket.totalTrades : null,
+    totalR: bucket.totalR,
+    avgRPerTrade: bucket.totalTrades > 0 ? bucket.totalR / bucket.totalTrades : null,
   });
 
   res.json({
     sessions: sessionResults,
     stats: {
       totalSessions: sessions.length,
-      completedSessions: sessionResults.filter((s) => s.sessionR !== null).length,
+      availableSessions: sessions.filter((session) => session.snapshotAt != null).length,
+      unavailableSessions: sessions.filter((session) => session.snapshotAt == null).length,
+      completedSessions: sessionResults.filter((session) => session.sessionR !== null).length,
       totalTrades,
       wins,
       losses,
@@ -178,6 +161,8 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
 function emptyStats() {
   return {
     totalSessions: 0,
+    availableSessions: 0,
+    unavailableSessions: 0,
     completedSessions: 0,
     totalTrades: 0,
     wins: 0,

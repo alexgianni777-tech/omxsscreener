@@ -437,7 +437,7 @@ function TodaySessionPanel() {
 
         {/* Right: top3 picks preview + open button */}
         <div className="flex items-center gap-3 sm:flex-col sm:items-end">
-          {/* Ticker chips when picks exist; fall back to stars otherwise */}
+          {/* Ticker chips come only from the official snapshot. */}
           {top3Session?.picks && top3Session.picks.length > 0 ? (
             <div className="flex flex-wrap gap-1">
               {top3Session.picks.map((p) => (
@@ -469,7 +469,9 @@ function TodaySessionPanel() {
                 />
               ))}
               <span className="ml-1 text-muted-foreground font-medium">
-                {top3Count}/3 picks satta
+                {top3Session?.selectionStatus === "UNAVAILABLE"
+                  ? "Officiellt urval saknas"
+                  : `${top3Count} officiella picks`}
               </span>
             </div>
           )}
@@ -909,17 +911,17 @@ function SessionTooltip({ active, payload }: TooltipProps<number, string>) {
 function Top3Section() {
   const { data, isLoading } = useTop3Analytics();
 
-  const seSessions = data?.sessions.filter((s) => (s as any).source !== "edgeai") ?? [];
-  const usSessions = data?.sessions.filter((s) => (s as any).source === "edgeai") ?? [];
+  const seSessions = data?.sessions.filter((s) => s.source !== "edgeai") ?? [];
+  const usSessions = data?.sessions.filter((s) => s.source === "edgeai") ?? [];
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 border-b border-border pb-2">
         <Trophy className="h-5 w-5 text-muted-foreground" />
-        <h3 className="text-lg font-semibold">Top 3 — retrospektiv simulering</h3>
+        <h3 className="text-lg font-semibold">Top 3 — officiellt signal-time-urval</h3>
       </div>
       <p className="text-xs text-muted-foreground -mt-4">
-        Separat population från all-kandidatstatistiken ovan. Urvalet räknas om från aktuella kandidatfält och stjärnmarkeringar; det är inte frysta signal-time-picks, verifierad strategi-edge eller ett tradebart urval och motsvarar inte nödvändigtvis Dagens session.
+        Frysta urval från första signal-time-importen, endast TRADEABLE och högst tre per market/riktning. Äldre sessioner utan sparad snapshot markeras som otillgängliga och ingår inte i resultatet.
       </p>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Top3MarketCard label="📋 Manuella sessioner" sessions={seSessions} isLoading={isLoading} accentColor="hsl(var(--primary))" />
@@ -973,8 +975,9 @@ function computeMarketStats(sessions: Top3Session[]) {
     winRate: total > 0 ? wins / total : null,
     totalR,
     avgR: total > 0 ? totalR / total : null,
-    completedSessions: sessions.filter((s) => s.sessionR !== null).length,
-    totalSessions: sessions.length,
+    completedSessions: sessions.filter((s) => s.selectionStatus === "AVAILABLE" && s.sessionR !== null).length,
+    totalSessions: sessions.filter((s) => s.selectionStatus === "AVAILABLE").length,
+    unavailableSessions: sessions.filter((s) => s.selectionStatus === "UNAVAILABLE").length,
   };
 }
 
@@ -1061,6 +1064,9 @@ function Top3MarketCard({
             color={stats.avgR != null ? (stats.avgR > 0 ? "success" : "destructive") : ""}
           />
           <Pill label="Sessioner" value={`${stats.completedSessions}/${stats.totalSessions}`} />
+          {stats.unavailableSessions > 0 && (
+            <Pill label="Historik utan snapshot" value={String(stats.unavailableSessions)} />
+          )}
         </div>
       )}
 
@@ -1132,7 +1138,8 @@ function Top3MarketCard({
 
       {/* #47 EdgeAI kalibrering — lovad WR vs faktisk WR */}
       {sessions.some((s) => s.edgeWinRate != null) && (() => {
-        const withRate = sessions.filter((s) => s.edgeWinRate != null);
+        const withRate = sessions.filter((s) => s.selectionStatus === "AVAILABLE" && s.edgeWinRate != null);
+        if (withRate.length === 0) return null;
         const avgPromised = withRate.reduce((a, s) => a + (s.edgeWinRate ?? 0), 0) / withRate.length;
         const allResolved = sessions.flatMap((s) => s.picks).filter(isCountedTop3Pick);
         const actualWR = allResolved.length > 0 ? allResolved.filter(isWinningTop3Pick).length / allResolved.length : null;
@@ -1182,12 +1189,14 @@ function Top3MarketCard({
       )}
 
       {/* Per-session picks table — always shows raw sessions with warning badges */}
-      {sessions.length > 0 && (
+        {sessions.length > 0 && (
         <div className="border-t border-border pt-3 space-y-2">
           {sessions.map((s) => (
             <div key={s.date} className="flex items-start gap-2 text-xs">
               <span className="text-muted-foreground w-12 shrink-0 pt-0.5">{s.date.slice(5)}</span>
-              <div className="flex gap-1 flex-1 flex-wrap">
+                {s.selectionStatus === "UNAVAILABLE" ? (
+                  <span className="flex-1 text-amber-600">Officiellt resultat saknas · historisk snapshot ej tillgänglig</span>
+                ) : <div className="flex gap-1 flex-1 flex-wrap">
                 {s.picks.map((p) => (
                   <span
                      key={`${p.direction}:${p.ticker}:${p.signalSource ?? "unknown"}`}
@@ -1210,7 +1219,7 @@ function Top3MarketCard({
                     {p.r != null ? ` ${p.r >= 0 ? "+" : ""}${formatNumber(p.r, 1)}R` : ""}
                   </span>
                 ))}
-              </div>
+                </div>}
               {s.sessionR !== null && (
                 <span className={`font-mono font-bold shrink-0 ${s.sessionR >= 0 ? "text-success" : "text-destructive"}`}>
                   {s.sessionR >= 0 ? "+" : ""}{formatNumber(s.sessionR, 1)}R

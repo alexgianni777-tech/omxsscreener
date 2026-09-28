@@ -13,4 +13,4 @@
 - [GitHub Connector Git Data API Limits](github-connector-git-data-api-limits.md) — the Replit GitHub connector's proxyFetch unreliably 404s POST /git/trees above ~1.4KB body size; batch small and expect flakiness.
 - [Trading Outcome Integrity](trading-outcome-integrity.md) — actual fills, immutable R inputs, Rule 7 provenance, Challenge sync, and import/outcome locking rules.
 - [Source-balanced ranking](source-balanced-ranking.md) — rank within each signal source, then interleave; never compare overloaded EdgeAI and Telegram fields directly.
-- [Equity-only risk model](equity-only-risk-model.md) — model signals and portfolio risk as unleveraged shares; leverage remains outside the app.
+- [Equity signal risk and owned products](equity-only-risk-model.md) — screen unleveraged shares; held product P&L follows product price, not underlying direction or leverage.

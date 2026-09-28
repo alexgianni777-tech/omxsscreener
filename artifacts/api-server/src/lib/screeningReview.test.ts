@@ -4,11 +4,17 @@ import test from "node:test";
 import { decideCandidate, reviewCandidate } from "./screeningReview.ts";
 
 const edgeCandidate = {
+  signalDate: new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Stockholm", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date()),
   category: "MOMENTUM",
   direction: "LONG",
   rs3m: 1,
   perf1m: 0.55,
-  rsi: -20,
+  rsi: 50,
+  edgeExpectancyR: -0.2,
+  edgeSampleN: 100,
+  signalAgeBars: 0,
   signalRsi: 50,
   signalGapPct: 0,
   volMultiplier: 1,
@@ -23,14 +29,35 @@ const edgeCandidate = {
   price: 100,
 };
 
-test("negative EdgeAI expectancy is a trade blocker, not invalid RSI data", () => {
+test("negative EdgeAI expectancy blocks independently of conventional RSI", () => {
   const review = reviewCandidate(edgeCandidate, "edgeai");
   assert.equal(review.status, "BLOCKED");
   assert.match(review.reasons.join(" "), /Negativ historisk förväntan/);
 
-  const decision = decideCandidate(edgeCandidate, review, new Date().toISOString().slice(0, 10));
+  const decision = decideCandidate(edgeCandidate, review, edgeCandidate.signalDate);
   assert.equal(decision.status, "BLOCKED");
   assert.doesNotMatch(decision.reasons.join(" "), /RSI-data saknas/);
+});
+
+test("EdgeAI review prefers dedicated expectancy over legacy RSI compatibility", () => {
+  const candidate = { ...edgeCandidate, edgeExpectancyR: 0.1, rsi: -50 };
+  const review = reviewCandidate(candidate, "edgeai");
+  assert.equal(review.status, "APPROVED");
+  const decision = decideCandidate(
+    candidate,
+    review,
+    candidate.signalDate,
+  );
+  assert.equal(decision.status, "TRADEABLE");
+  assert.doesNotMatch(decision.reasons.join(" "), /RSI-data saknas/);
+});
+
+test("legacy EdgeAI expectancy in RSI remains supported when explicit field is absent", () => {
+  const { edgeExpectancyR: _expectancy, ...legacyCandidate } = edgeCandidate;
+  const legacy = { ...legacyCandidate, rsi: -20 };
+  const review = reviewCandidate(legacy, "edgeai");
+  assert.equal(review.status, "BLOCKED");
+  assert.match(review.reasons.join(" "), /Negativ historisk förväntan \(-0.20R\)/);
 });
 
 test("undated legacy volume cannot qualify a trade", () => {
@@ -57,10 +84,43 @@ test("stale comparison uses the Stockholm calendar date", () => {
   const approved = { status: "APPROVED" as const, reasons: [] };
   const justAfterMidnightStockholm = new Date("2026-07-10T22:30:00.000Z");
   const decision = decideCandidate(
-    { ...edgeCandidate, rsi: 20 },
+    { ...edgeCandidate, signalDate: "2026-07-11", rsi: 20 },
     approved,
     "2026-07-11",
     justAfterMidnightStockholm,
   );
   assert.equal(decision.status, "TRADEABLE");
+});
+
+test("a later trading target date is stale relative to the immutable source date", () => {
+  const approved = { status: "APPROVED" as const, reasons: [] };
+  const nextDay = new Date(`${edgeCandidate.signalDate}T00:00:00.000Z`);
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+  const targetDate = nextDay.toISOString().slice(0, 10);
+  const decision = decideCandidate(edgeCandidate, approved, targetDate, new Date(`${edgeCandidate.signalDate}T10:00:00.000Z`));
+  assert.equal(decision.status, "STALE");
+  assert.match(decision.reasons.join(" "), /ligger efter källsignalen/);
+});
+
+test("missing source date is stale and cannot be tradeable", () => {
+  const approved = { status: "APPROVED" as const, reasons: [] };
+  const decision = decideCandidate(
+    { ...edgeCandidate, signalDate: null },
+    approved,
+    edgeCandidate.signalDate,
+  );
+  assert.equal(decision.status, "STALE");
+  assert.match(decision.reasons.join(" "), /saknar verifierat källdatum/);
+});
+
+test("volume newer than the original signal cannot qualify under a later trading date", () => {
+  const approved = { status: "APPROVED" as const, reasons: [] };
+  const decision = decideCandidate(
+    { ...edgeCandidate, signalDate: "2026-07-10", volumeAsOf: "2026-07-11" },
+    approved,
+    "2026-07-10",
+    new Date("2026-07-10T10:00:00.000Z"),
+  );
+  assert.equal(decision.status, "INVALID");
+  assert.match(decision.reasons.join(" "), /Volymens avslutade kursdatum/);
 });

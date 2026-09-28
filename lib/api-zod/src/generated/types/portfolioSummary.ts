@@ -17,12 +17,18 @@ export interface PortfolioSummary {
      * @nullable
      */
   maxStopLossKr: number | null;
-  /** Current long market exposure. */
+  /** Current position market value grouped by the legacy position direction; for leveraged products this is product value */
   longExposureKr: number;
-  /** Current short market exposure */
+  /** Current position market value grouped by the legacy position direction */
   shortExposureKr: number;
   /** Long exposure plus short exposure. */
   grossExposureKr: number;
   /** Long exposure minus short exposure. */
   netExposureKr: number;
+  /** Count of positions with explicitly known LONG underlying direction; not a notional exposure. */
+  underlyingLongCount: number;
+  /** Count of positions with explicitly known SHORT underlying direction; not a notional exposure. */
+  underlyingShortCount: number;
+  /** Count of positions whose underlying direction is unspecified. */
+  underlyingDirectionUnknownCount: number;
 }

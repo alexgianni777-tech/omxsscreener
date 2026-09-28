@@ -162,36 +162,51 @@ export function SessionDetail() {
   const quoteMap: Record<string, QuoteResult> = {};
   quotes?.forEach((q) => { quoteMap[q.ticker] = q; });
 
-  // ── Top 3 picks — separate pools per direction (3 köp + 3 sälj) ─────────────
-  const [pickedLongIds, setPickedLongIds] = useState<Set<number>>(new Set<number>());
-  const [pickedShortIds, setPickedShortIds] = useState<Set<number>>(new Set<number>());
+  // Star selections are annotations, capped per market/direction. They are
+  // never used to rewrite the immutable official signal-time snapshot.
+  const [pickedIdsByGroup, setPickedIdsByGroup] = useState<Record<string, Set<number>>>({});
+  const pickGroupKey = (market: string | null | undefined, direction: string) =>
+    `${market ?? "unknown"}:${direction === "SHORT" ? "SHORT" : "LONG"}`;
   useEffect(() => {
     if (!session) return;
-    const longs = new Set<number>();
-    const shorts = new Set<number>();
+    const grouped: Record<string, Set<number>> = {};
     session.candidates.forEach((c: any) => {
       if (c.isTop3Pick) {
-        if (c.direction === "SHORT") shorts.add(c.id);
-        else longs.add(c.id);
+        const key = pickGroupKey(c.market, c.direction);
+        grouped[key] ??= new Set<number>();
+        grouped[key].add(c.id);
       }
     });
-    setPickedLongIds(longs);
-    setPickedShortIds(shorts);
+    setPickedIdsByGroup(grouped);
   }, [session?.id]);
 
-  const togglePick = async (candidateId: number, current: boolean, direction: string) => {
+  const togglePick = async (candidateId: number, current: boolean, direction: string, market?: string | null) => {
     const next = !current;
-    const isShort = direction === "SHORT";
-    const currentCount = isShort ? pickedShortIds.size : pickedLongIds.size;
-    const setter = isShort ? setPickedShortIds : setPickedLongIds;
+    const groupKey = pickGroupKey(market, direction);
+    const currentCount = pickedIdsByGroup[groupKey]?.size ?? 0;
     if (next && currentCount >= 3) return;
-    setter((prev) => { const s = new Set(prev); next ? s.add(candidateId) : s.delete(candidateId); return s; });
+    setPickedIdsByGroup((previous) => {
+      const nextGroups = { ...previous };
+      const nextIds = new Set(nextGroups[groupKey] ?? []);
+      next ? nextIds.add(candidateId) : nextIds.delete(candidateId);
+      nextGroups[groupKey] = nextIds;
+      return nextGroups;
+    });
     const base = (import.meta.env.BASE_URL ?? "/").replace(/\/+$/, "");
-    await fetch(`${base}/api/screener/candidates/${candidateId}/top3pick`, {
+    const response = await fetch(`${base}/api/screener/candidates/${candidateId}/top3pick`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isTop3Pick: next }),
     });
+    if (!response.ok) {
+      setPickedIdsByGroup((previous) => {
+        const nextGroups = { ...previous };
+        const nextIds = new Set(nextGroups[groupKey] ?? []);
+        current ? nextIds.add(candidateId) : nextIds.delete(candidateId);
+        nextGroups[groupKey] = nextIds;
+        return nextGroups;
+      });
+    }
   };
 
   // ── Early returns (after all hooks) ──────────────────────────────────────────
@@ -216,6 +231,9 @@ export function SessionDetail() {
   const { marketWeather, candidates } = session;
   const isEdgeAI = session.source === "edgeai";
   const categories = ["MOMENTUM", "SQUEEZE", "STUDS", "WEAKEST"] as const;
+  const top3Snapshot = (session as any).top3SelectionSnapshot;
+  const totalLongStars = Object.entries(pickedIdsByGroup).filter(([key]) => key.endsWith(":LONG")).reduce((count, [, ids]) => count + ids.size, 0);
+  const totalShortStars = Object.entries(pickedIdsByGroup).filter(([key]) => key.endsWith(":SHORT")).reduce((count, [, ids]) => count + ids.size, 0);
 
   // ── Market state (from first available quote) ─────────────────────────────
   const anyQuote = quotes?.[0];
@@ -263,6 +281,15 @@ export function SessionDetail() {
       {session.importDiff && (
         <ImportDiffBanner diff={session.importDiff} importedAt={session.lastImportAt} />
       )}
+      <div className={`rounded-lg border px-4 py-3 text-xs ${
+        top3Snapshot?.available
+          ? "border-primary/20 bg-primary/5 text-muted-foreground"
+          : "border-amber-500/30 bg-amber-500/5 text-amber-700"
+      }`}>
+        {top3Snapshot?.available
+          ? `Officiellt Top 3 fryst ${new Date(top3Snapshot.selectedAt).toLocaleString("sv-SE")} · ${top3Snapshot.policyVersion}. Stjärnor är separata anteckningar.`
+          : "Officiellt Top 3-urval saknas för denna session. Historiken räknas inte om; stjärnor nedan är endast anteckningar."}
+      </div>
 
       {/* Market Weather Banner */}
       <div className="bg-card border-l-4 border-l-primary border-y border-r border-border rounded-r-lg p-6 shadow-sm">
@@ -356,17 +383,17 @@ export function SessionDetail() {
         )}
         <div className="ml-auto flex items-center gap-3 font-medium text-xs">
           <div className="flex items-center gap-1">
-            <TrendingUp className={`w-3 h-3 ${pickedLongIds.size > 0 ? "text-success" : "text-muted-foreground"}`} />
-            <Star className={`w-3 h-3 ${pickedLongIds.size > 0 ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`} />
-            <span className={pickedLongIds.size > 0 ? "text-amber-400" : "text-muted-foreground"}>Köp {pickedLongIds.size}/3</span>
+            <TrendingUp className={`w-3 h-3 ${totalLongStars > 0 ? "text-success" : "text-muted-foreground"}`} />
+            <Star className={`w-3 h-3 ${totalLongStars > 0 ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`} />
+            <span className={totalLongStars > 0 ? "text-amber-400" : "text-muted-foreground"}>Köp {totalLongStars} stjärnor</span>
           </div>
           <div className="flex items-center gap-1">
-            <TrendingDown className={`w-3 h-3 ${pickedShortIds.size > 0 ? "text-destructive" : "text-muted-foreground"}`} />
-            <Star className={`w-3 h-3 ${pickedShortIds.size > 0 ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`} />
-            <span className={pickedShortIds.size > 0 ? "text-amber-400" : "text-muted-foreground"}>Sälj {pickedShortIds.size}/3</span>
+            <TrendingDown className={`w-3 h-3 ${totalShortStars > 0 ? "text-destructive" : "text-muted-foreground"}`} />
+            <Star className={`w-3 h-3 ${totalShortStars > 0 ? "fill-amber-400 text-amber-400" : "text-muted-foreground"}`} />
+            <span className={totalShortStars > 0 ? "text-amber-400" : "text-muted-foreground"}>Sälj {totalShortStars} stjärnor</span>
           </div>
-          {pickedLongIds.size === 0 && pickedShortIds.size === 0 && (
-            <span className="text-muted-foreground/60">— klicka ⭐ på kandidater</span>
+          {totalLongStars === 0 && totalShortStars === 0 && (
+            <span className="text-muted-foreground/60">— stjärnor är anteckningar, max 3 per market/riktning</span>
           )}
         </div>
       </div>
@@ -419,9 +446,9 @@ export function SessionDetail() {
                     daysOld={daysOld}
                     isEdgeAI={(candidate.signalSource ?? session.source) === "edgeai"}
                     rank={idx + 1}
-                    isPicked={candidate.direction === "SHORT" ? pickedShortIds.has(candidate.id) : pickedLongIds.has(candidate.id)}
-                    pickedCount={candidate.direction === "SHORT" ? pickedShortIds.size : pickedLongIds.size}
-                    onTogglePick={togglePick}
+                    isPicked={pickedIdsByGroup[pickGroupKey(candidate.market, candidate.direction)]?.has(candidate.id) ?? false}
+                    pickedCount={pickedIdsByGroup[pickGroupKey(candidate.market, candidate.direction)]?.size ?? 0}
+                    onTogglePick={(candidateId, current, direction) => togglePick(candidateId, current, direction, candidate.market)}
                   />
                 ))}
               </div>
@@ -693,6 +720,11 @@ function CandidateRow({
           <div className="flex items-center gap-2">
             <span className="font-mono text-muted-foreground text-xs">#{rank}</span>
             <span className="font-bold text-lg">{candidate.ticker.replace(/\.ST$/i, "")}</span>
+            {(candidate as any).officialSelection?.selected && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded border border-primary/30 bg-primary/10 text-primary">
+                Signal-time Top 3 #{(candidate as any).officialSelection.rank}
+              </span>
+            )}
             <button
               onClick={() => setShowChart((v) => !v)}
               title="Visa/dölj kursdiagram med Bollinger Bands"
@@ -703,7 +735,7 @@ function CandidateRow({
             <button
               onClick={() => onTogglePick(candidate.id, isPicked, candidate.direction)}
               disabled={!isPicked && pickedCount >= 3}
-              title={isPicked ? "Ta bort från Top 3" : pickedCount >= 3 ? "Max 3 picks — ta bort en först" : "Lägg till i Top 3"}
+              title={isPicked ? "Ta bort stjärnanteckning" : pickedCount >= 3 ? "Max 3 stjärnanteckningar per market/riktning" : "Lägg till stjärnanteckning (ändrar inte officiellt urval)"}
               className={`p-1 rounded transition-colors ${
                 isPicked
                   ? "text-amber-400 hover:text-amber-300"

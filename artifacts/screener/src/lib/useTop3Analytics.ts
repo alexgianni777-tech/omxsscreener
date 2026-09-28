@@ -3,10 +3,19 @@ import { useQuery } from "@tanstack/react-query";
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export interface Top3Pick {
+  candidateId: number;
   ticker: string;
+  category: string;
+  market: "SE" | "US" | null;
   direction: string;
   signalSource: string | null;
   edgeScore: number;
+  rank: number | null;
+  type: string;
+  policyVersion: string;
+  selectedAt: string;
+  review: { status: string; reasons: string[] };
+  decision: { status: string; reasons: string[] };
   outcome: string;
   r: number | null;
   earningsWarning: boolean;
@@ -16,6 +25,10 @@ export interface Top3Session {
   date: string;
   sessionId: number;
   source: string | null;
+  selectionStatus: "AVAILABLE" | "UNAVAILABLE";
+  selectionUnavailableReason: string | null;
+  selectedAt: string | null;
+  policyVersion: string | null;
   picks: Top3Pick[];
   longPicks: Top3Pick[];
   shortPicks: Top3Pick[];
@@ -35,6 +48,8 @@ export interface Top3DirectionStats {
 
 export interface Top3Stats {
   totalSessions: number;
+  availableSessions: number;
+  unavailableSessions: number;
   completedSessions: number;
   totalTrades: number;
   wins: number;

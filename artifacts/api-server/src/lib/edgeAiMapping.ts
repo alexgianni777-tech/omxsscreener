@@ -77,19 +77,18 @@ export function mapEdgeAiSetup(
     ticker,
     price: entry,
     rs3m: Number(s.rs ?? 0),
-    // Normalize to decimal 0–1 (EdgeAI may send integer % like 51).
-    perf1m: edgeWinRate,
-    // `rsi` is a legacy integer display field mapped from EdgeAI's expectancy —
-    // the column is a Postgres integer, so this MUST be rounded before insert.
-    rsi: Math.round(edgeExpectancyR * 100),
-    pctB: edgeSampleN, // legacy compatibility during field migration
-    atr: oneR,
+    // These conventional screener columns do not describe EdgeAI statistics.
+    // Keep schema-required fields neutral; use the dedicated fields below.
+    perf1m: 0,
+    rsi: 0,
+    pctB: 0,
+    atr: 0,
     volMultiplier: 0, // filled only from a verified completed Yahoo daily bar
     volumeAsOf: null as string | null,
     earningsInDays: null as number | null,
     earningsKnowledge: "UNKNOWN" as "SIGNAL_TIME" | "UNKNOWN",
     earningsObservedAt: null as Date | null,
-    distFrom20dH: barsAgo, // store signal age in trading days
+    distFrom20dH: 0,
     signalRsi,
     signalGapPct,
     edgeWinRate,

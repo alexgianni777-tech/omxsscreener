@@ -24,6 +24,10 @@ export const screenerSessionsTable = pgTable("screener_sessions", {
   // diffing session history manually. Null until the first re-import happens.
   lastImportDiff: jsonb("last_import_diff"),
   lastImportAt: timestamp("last_import_at", { withTimezone: true }),
+  // Null means this session predates immutable official Top 3 capture (or has
+  // not yet reached its first signal-time enrichment).
+  top3SnapshotAt: timestamp("top3_snapshot_at", { withTimezone: true }),
+  top3PolicyVersion: text("top3_policy_version"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

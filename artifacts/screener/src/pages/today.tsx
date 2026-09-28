@@ -76,49 +76,18 @@ type Candidate = {
   signalGapPct?: number | null;
   review?: { status: "APPROVED" | "WARN" | "BLOCKED"; reasons: string[] };
   decision?: { status: "TRADEABLE" | "WAIT" | "BLOCKED" | "INVALID" | "STALE"; reasons: string[] };
+  officialSelection?: {
+    selected: boolean;
+    rank: number | null;
+    score: number;
+    policyVersion: string;
+    selectedAt: string;
+    type: string;
+    market: "SE" | "US" | null;
+    direction: "LONG" | "SHORT";
+    source: string | null;
+  } | null;
 };
-
-const SOURCE_ORDER = ["edgeai", "telegram", "manual", "screener", "unknown"];
-const MAX_HOLD_DAYS: Record<string, number> = { MOMENTUM: 10, SQUEEZE: 15, STUDS: 5, WEAKEST: 10 };
-
-function selectionScore(candidate: Candidate): number {
-  if (candidate.signalSource === "edgeai") {
-    const reliability = candidate.pctB / (Math.max(0, candidate.pctB) + 20);
-    const ageDecay = Math.max(0, 1 - Math.max(0, candidate.distFrom20dH) / (MAX_HOLD_DAYS[candidate.category] ?? 10));
-    return (candidate.rsi / 100) * reliability * ageDecay;
-  }
-  const directionSign = candidate.direction === "SHORT" ? -1 : 1;
-  return directionSign * (candidate.perf1m + candidate.rs3m) / 100;
-}
-
-function sourceBalanced(candidates: Candidate[], limit: number): Candidate[] {
-  const groups = new Map<string, Candidate[]>();
-  for (const candidate of candidates) {
-    const source = candidate.signalSource ?? "unknown";
-    groups.set(source, [...(groups.get(source) ?? []), candidate]);
-  }
-  for (const group of groups.values()) {
-    group.sort((a, b) => selectionScore(b) - selectionScore(a) || a.rank - b.rank || a.ticker.localeCompare(b.ticker));
-  }
-  const sources = [...groups.keys()].sort((a, b) => {
-    const ai = SOURCE_ORDER.indexOf(a);
-    const bi = SOURCE_ORDER.indexOf(b);
-    return (ai < 0 ? SOURCE_ORDER.length : ai) - (bi < 0 ? SOURCE_ORDER.length : bi);
-  });
-  const result: Candidate[] = [];
-  for (let index = 0; result.length < limit; index++) {
-    let added = false;
-    for (const source of sources) {
-      const candidate = groups.get(source)?.[index];
-      if (!candidate) continue;
-      result.push(candidate);
-      added = true;
-      if (result.length === limit) break;
-    }
-    if (!added) break;
-  }
-  return result;
-}
 
 type Session = {
   id: number;
@@ -134,6 +103,11 @@ type Session = {
     trendLabel: string;
   } | null;
   candidates: Candidate[];
+  top3SelectionSnapshot?: {
+    available: boolean;
+    selectedAt: string | null;
+    policyVersion: string | null;
+  };
   sessionReview?: { status: "APPROVED" | "WARN" | "BLOCKED"; reasons: string[]; tradableCount: number };
 };
 
@@ -250,27 +224,13 @@ export function Today() {
     : 0;
   const isToday = session?.date === todayISO();
 
-  // top picks: prefer starred, fallback to edge-score rank — split by market if data exists
-  // Deduplicates by ticker: if a stock appears in multiple setups, keep only the best-ranked.
+  // The server's immutable signal-time snapshot is the only official Top 3
+  // source. Stars remain annotations and never recalculate this list.
   function selectPicks(cands: Candidate[], n = 3): Candidate[] {
-    // A legacy session may not have a decision yet. Keep its previous review
-    // behavior. Older, otherwise valid signals may be shown as history, but
-    // must never become today's actionable picks.
-    const eligible = cands.filter((candidate) =>
-      candidate.decision
-        ? candidate.decision.status === "TRADEABLE" ||
-          (!isToday && candidate.decision.status === "STALE" && candidate.review?.status !== "BLOCKED")
-        : candidate.review?.status !== "BLOCKED",
-    );
-    const starred = eligible.filter(c => c.isTop3Pick);
-    const pool = starred.length > 0 ? starred : sourceBalanced(eligible, eligible.length);
-    const seen = new Set<string>();
-    const unique: Candidate[] = [];
-    for (const c of pool) {
-      if (!seen.has(c.ticker)) { seen.add(c.ticker); unique.push(c); }
-      if (unique.length >= n) break;
-    }
-    return unique;
+    return cands
+      .filter((candidate) => candidate.officialSelection?.selected === true)
+      .sort((a, b) => (a.officialSelection?.rank ?? Infinity) - (b.officialSelection?.rank ?? Infinity))
+      .slice(0, n);
   }
 
   const allCandidates = session?.candidates ?? [];
@@ -286,10 +246,6 @@ export function Today() {
   const picks: Candidate[] = hasMarket
     ? [...sePicks, ...usPicks, ...seShortPicks, ...usShortPicks]
     : [...selectPicks(longCands), ...selectPicks(shortCands)];
-  const historicalOverview = session && !isToday && picks.length === 0
-    ? sourceBalanced(allCandidates, 6)
-    : [];
-
   // ── Market regime flags (hoisted so picks.map can reference them) ─────────────
   const mw = session?.marketWeather;
   const isRiskOff = /risk.?off|motvind|kontrak/i.test(mw?.trendLabel ?? "");
@@ -302,7 +258,7 @@ export function Today() {
     if (riskKr == null) return null;
     const sameDirection = picks.filter((pick) => pick.direction === candidate.direction).length;
     // Two similar directional trades already carry correlated index exposure.
-    // Keep the group's total risk within the configured per-trade budget.
+    // Keep the group's total risk within the configured per-direction budget.
     return riskKr / Math.max(1, sameDirection);
   };
 
@@ -469,11 +425,11 @@ export function Today() {
         )}
       </div>
 
-      {/* ── Risk per trade ────────────────────────────────────────────────── */}
+      {/* ── Total risk budget per direction ─────────────────────────────── */}
       {account != null && (
         <div className="flex items-center gap-3 px-1 text-xs text-muted-foreground">
           <Target className="w-3.5 h-3.5 shrink-0" />
-          <span>Risk per trade:</span>
+          <span>Total riskbudget per riktning:</span>
           {editingRisk ? (
             <div className="flex items-center gap-1">
               <input
@@ -518,7 +474,11 @@ export function Today() {
             </div>
             {session && (
               <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2">
-                <span>{picks.some(p => p.isTop3Pick) ? "Dina ⭐ val" : "Auto-rank (topp 3 edge-score)"}</span>
+                <span>
+                  {session.top3SelectionSnapshot?.available
+                    ? `Fryst officiellt urval · ${session.top3SelectionSnapshot.policyVersion}`
+                    : "Officiellt Top 3-urval saknas"}
+                </span>
                 {session.createdAt && (
                   <span className="opacity-60">
                     · importerad {new Date(session.createdAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
@@ -566,31 +526,14 @@ export function Today() {
               : "text-muted-foreground border-border"
           }`}>
             {session && !isToday
-              ? `Senaste sessionen är från ${new Date(`${session.date}T12:00:00`).toLocaleDateString("sv-SE", { weekday: "long", day: "numeric", month: "short" })}. ${historicalOverview.length > 0 ? "Inga förslag klarar kontrollerna; lagrade signaler visas nedan som historik." : "Den innehåller inga förslag."} En ny signal kontrolleras automatiskt var 5:e minut.`
+              ? !session.top3SelectionSnapshot?.available
+                ? `Officiellt Top 3-urval saknas för äldre session ${session.date}; historiska picks räknas inte om eller återskapas.`
+                : `Senaste sessionen är från ${new Date(`${session.date}T12:00:00`).toLocaleDateString("sv-SE", { weekday: "long", day: "numeric", month: "short" })}. Inga signaler valdes som officiella picks i snapshoten. En ny signal kontrolleras automatiskt var 5:e minut.`
+              : session && !session.top3SelectionSnapshot?.available
+                ? "Officiellt Top 3-urval saknas för den här sessionen. Nya importers signal-time-beslut sparas framöver."
               : session?.sessionReview?.status === "BLOCKED"
                 ? "Ingen kvalificerad trade idag — signalerna stoppades av risk- och datakvalitetsregler."
                 : "Inga picks idag ännu — kontrolleras automatiskt var 5:e minut från börsöppningen kl 09:00."}
-          </div>
-        )}
-        {historicalOverview.length > 0 && (
-          <div data-testid="list-historical-signals" className="space-y-2 mb-3">
-            {historicalOverview.map(candidate => (
-              <div key={candidate.id} className="border border-amber-500/20 bg-card rounded-xl px-4 py-3">
-                <div className="flex items-center gap-2 text-sm">
-                  <strong>{candidate.ticker.replace(/\.ST$/i, "")}</strong>
-                  <span className="text-xs text-muted-foreground">{candidate.direction === "SHORT" ? "Sälj" : "Köp"}</span>
-                  <span className="ml-auto text-xs text-amber-700">Ej handelsbar nu</span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {candidate.review?.reasons[0] ?? candidate.decision?.reasons[0] ?? "Tidigare signal — kontrollera aktuell data före trade."}
-                </p>
-              </div>
-            ))}
-            {session && (
-              <Link href={`/sessions/${session.id}`} data-testid="link-all-historical-signals" className="block text-xs text-primary hover:underline px-1">
-                Visa hela den tidigare sessionen →
-              </Link>
-            )}
           </div>
         )}
         {session?.sessionReview && isToday && session.sessionReview.reasons.length > 0 && (
@@ -665,9 +608,7 @@ export function Today() {
                   <div className="flex items-center gap-2 px-1 pt-1 pb-2">
                     <TrendingUp className="w-3.5 h-3.5 text-success" />
                     <span className="text-sm font-semibold text-success">Topp 3 Köp</span>
-                    {!picks.some((pick) => pick.isTop3Pick) && (
-                      <span className="text-[10px] text-muted-foreground">automatiskt rankade</span>
-                    )}
+                    <span className="text-[10px] text-muted-foreground">fryst vid signalen</span>
                   </div>
                 )}
                 {showHeader && (
@@ -718,7 +659,7 @@ export function Today() {
                       </span>
                       <span className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-amber-400/10 text-amber-500 border border-amber-400/20">
                         <Star className="w-3 h-3 fill-amber-400" />
-                        {candidate.isTop3Pick ? "Ditt Top 3-val" : "Auto Top 3"}
+                        {candidate.isTop3Pick ? "Stjärna · anteckning" : "Officiellt Top 3"}
                       </span>
                       {isDone && (
                         <span className={`text-xs font-bold px-2 py-0.5 rounded ${

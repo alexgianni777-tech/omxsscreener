@@ -171,6 +171,7 @@ router.get("/candidates", async (req, res): Promise<void> => {
     .select({
       id: candidatesTable.id,
       sessionId: candidatesTable.sessionId,
+      signalDate: candidatesTable.signalDate,
       category: candidatesTable.category,
       rank: candidatesTable.rank,
       ticker: candidatesTable.ticker,

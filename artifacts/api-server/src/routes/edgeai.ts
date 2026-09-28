@@ -5,8 +5,13 @@
  * and creates a screener session — no copy-paste needed.
  */
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
-import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
+import {
+  db,
+  screenerSessionsTable,
+  candidatesTable,
+  top3SelectionSnapshotsTable,
+} from "@workspace/db";
 import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "../lib/omxs30TickerMap";
 import { calculateWilderRsi } from "../lib/marketIndicators";
@@ -26,9 +31,11 @@ import {
   mergeCandidateInputs,
   pendingCandidatesToRemove,
   synchronizeCandidates,
+  candidateIdentity,
 } from "../lib/candidateSynchronization";
 import { mapEdgeAiSetup } from "../lib/edgeAiMapping";
 import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
+import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
@@ -121,7 +128,7 @@ router.post(
     ];
     const { candidates: uniqueMappedSetups, skipped } = deduplicateCandidates(mappedSetups);
     uniqueMappedSetups.forEach((candidate) => {
-      Object.assign(candidate, { signalSource: "edgeai" as const });
+      Object.assign(candidate, { signalSource: "edgeai" as const, signalDate: sessionDate });
     });
     if (skipped.length > 0) {
       logger.warn({ skipped }, "EdgeAI import skipped duplicate candidate identities");
@@ -139,6 +146,7 @@ router.post(
       const existingId = existing[0].id;
       const existingRows = await db
         .select({
+          id: candidatesTable.id,
           ticker: candidatesTable.ticker,
           category: candidatesTable.category,
           direction: candidatesTable.direction,
@@ -154,7 +162,18 @@ router.post(
 
       // Preview the exact effective input used by the force path. In
       // particular, candidates from a separate market or source are retained.
-      const wouldRemove = pendingCandidatesToRemove(existingRows, uniqueMappedSetups);
+      const selectedSnapshotRows = await db
+        .select({ candidateId: top3SelectionSnapshotsTable.candidateId })
+        .from(top3SelectionSnapshotsTable)
+        .where(and(
+          eq(top3SelectionSnapshotsTable.sessionId, existingId),
+          eq(top3SelectionSnapshotsTable.selected, true),
+        ));
+      const wouldRemove = pendingCandidatesToRemove(
+        existingRows,
+        uniqueMappedSetups,
+        new Set(selectedSnapshotRows.map((row) => row.candidateId)),
+      );
 
       res.status(409).json({
         error: `A session for ${sessionDate} already exists`,
@@ -164,6 +183,27 @@ router.post(
         wouldRemove,
       });
       return;
+    }
+
+    if (existing.length > 0 && force) {
+      const existingRows = await db
+        .select()
+        .from(candidatesTable)
+        .where(eq(candidatesTable.sessionId, existing[0].id));
+      const incomingByIdentity = new Map(
+        uniqueMappedSetups.map((candidate) => [candidateIdentity(candidate), sessionDate] as const),
+      );
+      const mismatch = existingRows.find((candidate) =>
+        candidate.signalDate != null &&
+        incomingByIdentity.has(candidateIdentity(candidate)) &&
+        incomingByIdentity.get(candidateIdentity(candidate)) !== candidate.signalDate,
+      );
+      if (mismatch) {
+        res.status(409).json({
+          error: `Signal date mismatch for ${mismatch.ticker}: stored ${mismatch.signalDate}, incoming ${sessionDate}`,
+        });
+        return;
+      }
     }
 
     // Use the completed market-data day that produced the signal, not today's
@@ -187,7 +227,7 @@ router.post(
     await Promise.allSettled(
       uniqueMappedSetups.map(async (c) => {
         try {
-          const isSignalDay = sessionDate === new Date().toISOString().slice(0, 10);
+          const isSignalDay = sessionDate === stockholmCalendarDate();
           if (isSignalDay) {
             const q = (await withRetry(() => yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false }))) as any;
             const earningsInDays = daysUntil(q.earningsTimestamp);
@@ -243,6 +283,11 @@ router.post(
           .update(screenerSessionsTable)
           .set({ lastImportDiff: diff, lastImportAt: new Date(), source: aggregateSource })
           .where(eq(screenerSessionsTable.id, updated.id));
+        await snapshotNewSessionTop3(
+          tx,
+          { id: updated.id, date: sessionDate, source: aggregateSource },
+          synchronizedCandidates,
+        );
         return updated.id;
       });
     } else {
@@ -277,7 +322,12 @@ router.post(
             edgeN: se.edge?.n ?? null,
           })
           .returning();
-        await synchronizeCandidates(tx, inserted.id, uniqueMappedSetups);
+        const { candidates: insertedCandidates } = await synchronizeCandidates(tx, inserted.id, uniqueMappedSetups);
+        await snapshotNewSessionTop3(
+          tx,
+          { id: inserted.id, date: sessionDate, source: "edgeai" },
+          insertedCandidates,
+        );
         // Fresh insert: nothing existed before, so a diff would be all-"added" noise — skip it.
         return inserted.id;
       });
@@ -296,3 +346,12 @@ router.post(
 );
 
 export default router;
+
+function stockholmCalendarDate(): string {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Stockholm",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}

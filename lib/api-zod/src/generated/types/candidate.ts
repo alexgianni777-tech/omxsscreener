@@ -15,11 +15,17 @@ import type { CandidateResolutionDirection } from './candidateResolutionDirectio
 import type { CandidateResolutionMethod } from './candidateResolutionMethod';
 import type { CandidateResolutionQuality } from './candidateResolutionQuality';
 import type { CandidateSignalSource } from './candidateSignalSource';
+import type { OfficialCandidateSelection } from './officialCandidateSelection';
 import type { SignalReview } from './signalReview';
 
 export interface Candidate {
   id: number;
   sessionId: number;
+  /**
+     * YYYY-MM-DD immutable date supplied by the signal source; null for legacy rows where source date is unknown
+     * @nullable
+     */
+  signalDate: string | null;
   category: CandidateCategory;
   rank: number;
   ticker: string;
@@ -137,4 +143,5 @@ export interface Candidate {
   hasLinkedTrade?: boolean;
   review?: SignalReview;
   decision?: CandidateDecision;
+  officialSelection?: OfficialCandidateSelection | null;
 }
