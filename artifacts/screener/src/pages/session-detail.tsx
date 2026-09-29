@@ -49,14 +49,22 @@ function edgeScore(c: Candidate): number {
   return normalizeWinRate(c.perf1m) * expectancyR;
 }
 
-function evidenceLabel(candidate: Candidate): "VALIDATED" | "PROMISING" | "WATCH" {
+type EvidenceLabel = "VALIDATED" | "PROMISING" | "WATCH" | "LEGACY";
+
+function isEdgeAICandidate(candidate: Candidate): boolean {
+  return candidate.origin !== "legacy" && candidate.origin !== "manual";
+}
+
+function evidenceLabel(candidate: Candidate): EvidenceLabel {
+  if (candidate.origin === "legacy") return "LEGACY";
   if (candidate.gapWarning == null) return "VALIDATED";
   return candidate.gapWarning > -0.75 ? "PROMISING" : "WATCH";
 }
 
-function evidenceColor(label: "VALIDATED" | "PROMISING" | "WATCH"): string {
+function evidenceColor(label: EvidenceLabel): string {
   if (label === "VALIDATED") return "text-success border-success/30 bg-success/10";
   if (label === "PROMISING") return "text-amber-400 border-amber-500/30 bg-amber-500/10";
+  if (label === "LEGACY") return "text-blue-400 border-blue-500/30 bg-blue-500/10";
   return "text-muted-foreground border-border bg-muted/50";
 }
 
@@ -209,9 +217,15 @@ export function SessionDetail() {
       <div className="space-y-12">
         {categories.map(cat => {
           let catCandidates = candidates.filter(c => c.category === cat);
-          // For EdgeAI sessions: sort by composite edge score (winRate × expectancyR) descending
+          // In EdgeAI sessions keep EdgeAI candidates first (ranked by evidence score),
+          // then legacy/manual proposals by their own screener rank.
           if (isEdgeAI) {
-            catCandidates = [...catCandidates].sort((a, b) => edgeScore(b) - edgeScore(a));
+            catCandidates = [...catCandidates].sort((a, b) => {
+              const aEdge = isEdgeAICandidate(a);
+              const bEdge = isEdgeAICandidate(b);
+              if (aEdge !== bEdge) return aEdge ? -1 : 1;
+              return aEdge ? edgeScore(b) - edgeScore(a) : a.rank - b.rank;
+            });
           } else {
             catCandidates = catCandidates.sort((a, b) => a.rank - b.rank);
           }
@@ -499,6 +513,9 @@ function CandidateRow({
   const entryDriftPct = distFromEntry != null ? Math.abs(distFromEntry) : 0;
   const entryStale = daysOld >= 1 && entryDriftPct > 2 && candidate.outcome === "PENDING";
 
+  // Candidate-specific source: mixed daily sessions can contain EdgeAI + legacy.
+  const edgeCandidate = isEdgeAI && isEdgeAICandidate(candidate);
+
   // EdgeAI per-candidate edge score
   const score = edgeScore(candidate);
   const evidence = evidenceLabel(candidate);
@@ -544,8 +561,8 @@ function CandidateRow({
                 {evidence}
               </div>
             )}
-            {/* Edge probability score badge — only for EdgeAI sessions */}
-            {isEdgeAI && (
+            {/* Edge probability score badge — only for EdgeAI-origin candidates */}
+            {edgeCandidate && (
               <div className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold font-mono ${edgeScoreColor(score)}`}
                    title={`Sannolikhet = WR × E[R] = ${winRatePct}% × ${expectancyR.toFixed(2)}R`}>
                 E[R] {expectancyR >= 0 ? "+" : ""}{expectancyR.toFixed(2)}
@@ -567,7 +584,7 @@ function CandidateRow({
             <span className="text-muted-foreground block text-[10px]">RS3M</span>
             <span className="font-mono">{formatNumber(candidate.rs3m, 1)}</span>
           </div>
-          {isEdgeAI ? (
+          {edgeCandidate ? (
             <div>
               <span className="text-muted-foreground block text-[10px]">WIN%</span>
               <span className="font-mono">{winRatePct}%</span>
@@ -578,7 +595,7 @@ function CandidateRow({
               <span className="font-mono">{formatPct(candidate.perf1m)}</span>
             </div>
           )}
-          {isEdgeAI ? (
+          {edgeCandidate ? (
             <div>
               <span className="text-muted-foreground block text-[10px]">E[R]</span>
               <span className={`font-mono font-semibold ${expectancyR > 0 ? "text-success" : "text-destructive"}`}>
@@ -592,10 +609,10 @@ function CandidateRow({
             </div>
           )}
           <div>
-            <span className="text-muted-foreground block text-[10px]">{isEdgeAI ? "1R" : "ATR"}</span>
+            <span className="text-muted-foreground block text-[10px]">{edgeCandidate ? "1R" : "ATR"}</span>
             <span className="font-mono">{formatNumber(candidate.atr)}</span>
           </div>
-          {isEdgeAI ? (
+          {edgeCandidate ? (
             <div>
               <span className="text-muted-foreground block text-[10px]">N / {barsAgo}b</span>
               <span className="font-mono">{sampleN > 0 ? Math.round(sampleN) : "—"}</span>
