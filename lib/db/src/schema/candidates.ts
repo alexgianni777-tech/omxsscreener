@@ -29,6 +29,9 @@ export const candidatesTable = pgTable("candidates", {
   outcome: text("outcome", { enum: ["WIN", "LOSS", "SKIP", "PENDING"] }).notNull().default("PENDING"),
   exitPrice: real("exit_price"),
   outcomeNotes: text("outcome_notes"),
+  // Candidate source. Nullable so existing rows remain valid after additive migration.
+  // New imports explicitly use: "edgeai" | "legacy" | "manual".
+  origin: text("origin"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
