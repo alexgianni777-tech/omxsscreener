@@ -15,6 +15,12 @@ const router: IRouter = Router();
 
 const EDGEAI_URL = "https://alexgianni777-tech.github.io/edgeai/public/data.json";
 
+function normalizeRate(value: unknown): number {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n)) return 0;
+  return Math.abs(n) > 1 ? n / 100 : n;
+}
+
 function mapSetupToCategory(
   dir: string,
   setupName: string,
@@ -141,7 +147,7 @@ router.post(
         ticker,
         price: entry,
         rs3m: Number(s.rs ?? 0),
-        perf1m: Number(s.edge?.winRate ?? 0), // store winRate here for per-candidate display
+        perf1m: normalizeRate(s.edge?.winRate), // decimal 0-1 for frontend + analytics
         rsi: Number(s.edge?.expectancyR ?? 0) * 100, // store expectancyR × 100 for display
         pctB: Number(s.edge?.sample ?? 0),           // store N (sample size)
         atr: oneR,
@@ -158,62 +164,74 @@ router.post(
       };
     });
 
-    // 5. Handle force re-import: preserve existing outcomes
-    let sessionId: number;
+    // 5. Handle force re-import atomically so a failed insert can never
+    // leave a half-empty session.
+    const sessionId = await db.transaction(async (tx) => {
+      if (existing.length > 0 && force) {
+        const existingId = existing[0].id;
+        const existingCands = await tx
+          .select({
+            ticker: candidatesTable.ticker,
+            category: candidatesTable.category,
+            direction: candidatesTable.direction,
+            outcome: candidatesTable.outcome,
+            exitPrice: candidatesTable.exitPrice,
+            outcomeNotes: candidatesTable.outcomeNotes,
+          })
+          .from(candidatesTable)
+          .where(eq(candidatesTable.sessionId, existingId));
 
-    if (existing.length > 0 && force) {
-      const existingId = existing[0].id;
-      const existingCands = await db
-        .select({
-          ticker: candidatesTable.ticker,
-          outcome: candidatesTable.outcome,
-          exitPrice: candidatesTable.exitPrice,
-          outcomeNotes: candidatesTable.outcomeNotes,
-        })
-        .from(candidatesTable)
-        .where(eq(candidatesTable.sessionId, existingId));
+        // Preserve independently by ticker + direction + category.
+        const outcomeMap = new Map(
+          existingCands
+            .filter((cand) => cand.outcome !== "PENDING")
+            .map((cand) => [
+              `${cand.ticker}|${cand.direction}|${cand.category}`,
+              cand,
+            ]),
+        );
 
-      // Composite key ticker|direction so LONG and SHORT of the same stock
-      // are preserved independently during a force re-import.
-      const outcomeMap = new Map(
-        existingCands
-          .filter((c) => c.outcome !== "PENDING")
-          .map((c) => [`${c.ticker}|${c.direction}`, c]),
-      );
+        await tx.delete(candidatesTable).where(eq(candidatesTable.sessionId, existingId));
 
-      await db.delete(candidatesTable).where(eq(candidatesTable.sessionId, existingId));
+        const [updated] = await tx
+          .update(screenerSessionsTable)
+          .set({
+            trendLabel: se.regime?.label ?? "n/a",
+            rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt} · SE dataAsOf ${se.dataAsOf ?? "n/a"} · US dataAsOf ${edgeData?.markets?.US?.dataAsOf ?? "n/a"}`,
+            omxsValue,
+            perf5d,
+            perf1m,
+            perf3m,
+            marketRsi,
+            source: "edgeai",
+            edgeRegime: JSON.stringify(se.regime ?? {}),
+            edgeExpectancy: se.edge?.expectancyR ?? null,
+            edgeWinRate: normalizeRate(se.edge?.winRate),
+            edgePF: se.edge?.profitFactor ?? null,
+            edgeN: se.edge?.n ?? null,
+          })
+          .where(eq(screenerSessionsTable.id, existingId))
+          .returning();
 
-      const [updated] = await db
-        .update(screenerSessionsTable)
-        .set({
-          trendLabel: se.regime?.label ?? "n/a",
-          rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt}`,
-          omxsValue,
-          perf5d,
-          perf1m,
-          perf3m,
-          marketRsi,
-        })
-        .where(eq(screenerSessionsTable.id, existingId))
-        .returning();
+        await tx.insert(candidatesTable).values(
+          mappedSetups.map((cand) => {
+            const prev = outcomeMap.get(
+              `${cand.ticker}|${cand.direction}|${cand.category}`,
+            );
+            return {
+              ...cand,
+              sessionId: updated.id,
+              outcome: prev?.outcome ?? "PENDING",
+              exitPrice: prev?.exitPrice ?? null,
+              outcomeNotes: prev?.outcomeNotes ?? null,
+            } as any;
+          }),
+        );
 
-      await db.insert(candidatesTable).values(
-        mappedSetups.map((c) => {
-          const prev = outcomeMap.get(`${c.ticker}|${c.direction}`);
-          return {
-            ...c,
-            sessionId: updated.id,
-            outcome: prev?.outcome ?? "PENDING",
-            exitPrice: prev?.exitPrice ?? null,
-            outcomeNotes: prev?.outcomeNotes ?? null,
-          } as any;
-        }),
-      );
+        return updated.id;
+      }
 
-      sessionId = updated.id;
-    } else {
-      // Fresh insert
-      const [inserted] = await db
+      const [inserted] = await tx
         .insert(screenerSessionsTable)
         .values({
           date: sessionDate,
@@ -223,22 +241,22 @@ router.post(
           perf3m,
           marketRsi,
           trendLabel: se.regime?.label ?? "n/a",
-          rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt}`,
+          rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt} · SE dataAsOf ${se.dataAsOf ?? "n/a"} · US dataAsOf ${edgeData?.markets?.US?.dataAsOf ?? "n/a"}`,
           source: "edgeai",
           edgeRegime: JSON.stringify(se.regime ?? {}),
           edgeExpectancy: se.edge?.expectancyR ?? null,
-          edgeWinRate: se.edge?.winRate ?? null,
+          edgeWinRate: normalizeRate(se.edge?.winRate),
           edgePF: se.edge?.profitFactor ?? null,
           edgeN: se.edge?.n ?? null,
         })
         .returning();
 
-      await db.insert(candidatesTable).values(
-        mappedSetups.map((c) => ({ ...c, sessionId: inserted.id } as any)),
+      await tx.insert(candidatesTable).values(
+        mappedSetups.map((cand) => ({ ...cand, sessionId: inserted.id } as any)),
       );
 
-      sessionId = inserted.id;
-    }
+      return inserted.id;
+    });
 
     res.status(existing.length > 0 && force ? 200 : 201).json({
       id: sessionId,
