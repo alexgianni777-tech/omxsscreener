@@ -83,3 +83,30 @@ export async function authMiddleware(
   req.user = refreshed.user;
   next();
 }
+
+
+export function requireAuth(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+
+  // Optional owner allowlist. Leave unset to allow any authenticated account.
+  // Set APP_ALLOWED_USER_IDS to comma-separated OIDC subject IDs to make the
+  // deployed screener owner-only without changing code.
+  const allowed = (process.env.APP_ALLOWED_USER_IDS ?? '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+
+  if (allowed.length > 0 && !allowed.includes(req.user.id)) {
+    res.status(403).json({ error: 'Access denied' });
+    return;
+  }
+
+  next();
+}
