@@ -34,11 +34,21 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
 
   // Check for duplicate date
   const existing = await db
-    .select({ id: screenerSessionsTable.id })
+    .select({ id: screenerSessionsTable.id, source: screenerSessionsTable.source })
     .from(screenerSessionsTable)
     .where(eq(screenerSessionsTable.date, session.date));
 
   const { force } = parsed.data;
+
+  if (existing.length > 0 && force && existing[0].source && existing[0].source !== "manual") {
+    res.status(409).json({
+      error: `Session ${session.date} is managed by ${existing[0].source}; use that source's re-import path instead`,
+      sessionId: existing[0].id,
+      date: session.date,
+      affectedOutcomes: [],
+    });
+    return;
+  }
 
   if (existing.length > 0 && !force) {
     // Return 409 with details about any logged outcomes so the UI can show
@@ -94,6 +104,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     outcome: (preserved?.outcome ?? "PENDING") as "WIN" | "LOSS" | "SKIP" | "PENDING",
     exitPrice: preserved?.exitPrice ?? null,
     outcomeNotes: preserved?.outcomeNotes ?? null,
+    origin: "manual",
   });
 
   // ---------- import / force re-import, atomically ----------
@@ -138,7 +149,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
           marketRsi: session.marketWeather.rsi,
           trendLabel: session.marketWeather.trendLabel,
           rawText: parsed.data.rawText,
-          source: null,
+          source: "manual",
           edgeRegime: null,
           edgeExpectancy: null,
           edgeWinRate: null,
@@ -178,6 +189,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
         marketRsi: session.marketWeather.rsi,
         trendLabel: session.marketWeather.trendLabel,
         rawText: parsed.data.rawText,
+        source: "manual",
       })
       .returning();
 
@@ -366,6 +378,7 @@ function mapCandidate(c: {
   outcome: string;
   exitPrice: number | null;
   outcomeNotes: string | null;
+  origin: string | null;
 }) {
   return {
     id: c.id,
@@ -391,6 +404,7 @@ function mapCandidate(c: {
     outcome: c.outcome,
     exitPrice: c.exitPrice ?? null,
     outcomeNotes: c.outcomeNotes ?? null,
+    origin: c.origin ?? null,
   };
 }
 
