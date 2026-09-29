@@ -61,16 +61,15 @@ router.post(
     }
 
     const setups: any[] = se.setups ?? [];
-    if (setups.length === 0) {
-      res.status(422).json({
-        error: "EdgeAI has no SE setups today — screener may not have run yet.",
-        generatedAt: edgeData.generatedAt,
-      });
+
+    // 2. Derive proposal-session date from generatedAt. The proposals are
+    // intentionally based on the latest completed close and used today.
+    const generatedAt = String(edgeData.generatedAt ?? "");
+    if (!generatedAt || Number.isNaN(new Date(generatedAt).getTime())) {
+      res.status(502).json({ error: "EdgeAI response has invalid generatedAt" });
       return;
     }
-
-    // 2. Derive session date from generatedAt
-    const sessionDate = (edgeData.generatedAt as string).slice(0, 10);
+    const sessionDate = generatedAt.slice(0, 10);
 
     // 2b. Fetch real OMXS30 market weather from Yahoo Finance
     let omxsValue = 0, perf5d = 0, perf1m = 0, perf3m = 0, marketRsi = 0;
@@ -125,6 +124,13 @@ router.post(
     // 4. Map setups → candidates (SE + US combined), group by category for ranking
     const usSetups: any[] = edgeData?.markets?.US?.setups ?? [];
     const allSetups = [...setups, ...usSetups];
+    if (allSetups.length === 0) {
+      res.status(422).json({
+        error: "EdgeAI has no SE or US proposals in the current generated file.",
+        generatedAt: edgeData.generatedAt,
+      });
+      return;
+    }
     const rankCounter: Record<string, number> = {};
 
     const mappedSetups = allSetups.map((s: any) => {
@@ -153,7 +159,14 @@ router.post(
         atr: oneR,
         volMultiplier: Number(s.rr ?? 0),  // store actual R/R from EdgeAI
         distFrom20dH: barsAgo,             // store signal age in trading days
-        gapWarning: s.grade === "A" ? null : -1, // non-A grade as soft gap warning
+        // Reuse the legacy soft-warning field for EdgeAI evidence tier:
+        // null = VALIDATED/A, -0.5 = PROMISING/B, -1 = WATCH.
+        gapWarning:
+          String(s.grade ?? "").toUpperCase() === "A"
+            ? null
+            : String(s.grade ?? "").toUpperCase() === "B"
+              ? -0.5
+              : -1,
         direction,
         entryPrice: entry,
         stopPrice: stop,
