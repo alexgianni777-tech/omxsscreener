@@ -219,7 +219,7 @@ export function parseScreenerText(rawText: string): ParsedSession {
     // Only treat ranked, ticker-shaped entries as candidates. This avoids
     // interpreting numbered prose or headings as candidates, while catching
     // malformed data lines when they still look like a ticker row.
-    const candidateLineMatch = line.match(/^\s*(\d+)\.\s+([A-ZÅÄÖ][A-ZÅÄÖ0-9.-]*)(?=\s|$)(.*)$/);
+    const candidateLineMatch = line.match(/^\s*(\d+)\.\s+([A-ZÅÄÖ][A-Za-zÅÄÖåäö0-9.-]*)(?=\s|$)(.*)$/);
     if (candidateLineMatch) {
       const rank = parseInt(candidateLineMatch[1], 10);
       const ticker = candidateLineMatch[2];
@@ -227,7 +227,7 @@ export function parseScreenerText(rawText: string): ParsedSession {
       const planLine = lines[i + 1] ?? "";
       const looksLikeCandidate = planLine.includes("plan(")
         || candidateLineMatch[3].includes("|")
-        || /\s[\d.]/.test(candidateLineMatch[3]);
+        || /^\s+\d+(?:\.\d+)?(?:\s|$)/.test(candidateLineMatch[3]);
       if (!looksLikeCandidate) continue; // e.g. a numbered heading or prose
       if (!planLine.includes("plan(")) {
         throw new ScreenerParseError(
