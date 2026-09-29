@@ -28,6 +28,16 @@ export interface QuoteResult {
      * @nullable
      */
   marketState?: string | null;
+  /**
+   * Upcoming earnings date (YYYY-MM-DD), when available
+   * @nullable
+   */
+  earningsDate?: string | null;
+  /**
+   * Calendar days until earnings; negative means already reported
+   * @nullable
+   */
+  earningsInDays?: number | null;
   /** @nullable */
   error?: string | null;
 }
