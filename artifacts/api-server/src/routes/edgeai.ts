@@ -5,7 +5,7 @@
  * and creates a screener session — no copy-paste needed.
  */
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import YahooFinance from "yahoo-finance2";
 
@@ -174,6 +174,7 @@ router.post(
         rr: Number(s.rr ?? 0),
         oneR,
         outcome: "PENDING" as const,
+        origin: "edgeai",
       };
     });
 
@@ -190,6 +191,7 @@ router.post(
             outcome: candidatesTable.outcome,
             exitPrice: candidatesTable.exitPrice,
             outcomeNotes: candidatesTable.outcomeNotes,
+            origin: candidatesTable.origin,
           })
           .from(candidatesTable)
           .where(eq(candidatesTable.sessionId, existingId));
@@ -197,14 +199,21 @@ router.post(
         // Preserve independently by ticker + direction + category.
         const outcomeMap = new Map(
           existingCands
-            .filter((cand) => cand.outcome !== "PENDING")
+            .filter((cand) => cand.outcome !== "PENDING" && (cand.origin === "edgeai" || cand.origin == null))
             .map((cand) => [
               `${cand.ticker}|${cand.direction}|${cand.category}`,
               cand,
             ]),
         );
 
-        await tx.delete(candidatesTable).where(eq(candidatesTable.sessionId, existingId));
+        await tx
+          .delete(candidatesTable)
+          .where(
+            and(
+              eq(candidatesTable.sessionId, existingId),
+              or(eq(candidatesTable.origin, "edgeai"), isNull(candidatesTable.origin)),
+            ),
+          );
 
         const [updated] = await tx
           .update(screenerSessionsTable)
