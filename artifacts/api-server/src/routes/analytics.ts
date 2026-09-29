@@ -18,6 +18,12 @@ function normalizeStoredRate(value: number | null | undefined): number {
   return Math.abs(n) > 1 ? n / 100 : n;
 }
 
+function evidencePriority(gapWarning: number | null | undefined): number {
+  if (gapWarning == null) return 2;      // VALIDATED / A
+  if (gapWarning > -0.75) return 1;      // PROMISING / B
+  return 0;                              // WATCH
+}
+
 router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
   const sessions = await db
     .select({ id: screenerSessionsTable.id, date: screenerSessionsTable.date })
@@ -48,11 +54,15 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
     const candidates = bySession.get(session.id) ?? [];
 
     // Rank by E[R] proxy, then keep only one position per ticker.
-    const sorted = [...candidates].sort(
-      (a, b) =>
+    const sorted = [...candidates].sort((a, b) => {
+      const evidenceDiff =
+        evidencePriority(b.gapWarning) - evidencePriority(a.gapWarning);
+      if (evidenceDiff !== 0) return evidenceDiff;
+      return (
         normalizeStoredRate(b.perf1m) * ((b.rsi ?? 0) / 100) -
-        normalizeStoredRate(a.perf1m) * ((a.rsi ?? 0) / 100),
-    );
+        normalizeStoredRate(a.perf1m) * ((a.rsi ?? 0) / 100)
+      );
+    });
 
     const top3 = [];
     const seenTickers = new Set<string>();
