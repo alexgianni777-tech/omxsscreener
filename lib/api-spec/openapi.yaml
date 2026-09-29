@@ -548,6 +548,9 @@ components:
           type: ["number", "null"]
         outcomeNotes:
           type: ["string", "null"]
+        origin:
+          type: ["string", "null"]
+          description: Candidate source (edgeai, legacy, manual); null for historical rows
 
     CandidateWithSession:
       allOf:

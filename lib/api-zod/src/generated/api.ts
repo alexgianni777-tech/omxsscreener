@@ -58,7 +58,8 @@ export const ImportSessionResponse = zod.object({
   "oneR": zod.number(),
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
-  "outcomeNotes": zod.string().nullish()
+  "outcomeNotes": zod.string().nullish(),
+  "origin": zod.string().nullish().describe('Candidate source (edgeai, legacy, manual); null for historical rows')
 }))
 })
 
@@ -128,7 +129,8 @@ export const GetSessionResponse = zod.object({
   "oneR": zod.number(),
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
-  "outcomeNotes": zod.string().nullish()
+  "outcomeNotes": zod.string().nullish(),
+  "origin": zod.string().nullish().describe('Candidate source (edgeai, legacy, manual); null for historical rows')
 }))
 })
 
@@ -175,7 +177,8 @@ export const ListCandidatesResponseItem = zod.object({
   "oneR": zod.number(),
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
-  "outcomeNotes": zod.string().nullish()
+  "outcomeNotes": zod.string().nullish(),
+  "origin": zod.string().nullish().describe('Candidate source (edgeai, legacy, manual); null for historical rows')
 }).and(zod.object({
   "sessionDate": zod.string().describe('YYYY-MM-DD')
 }))
@@ -218,7 +221,8 @@ export const UpdateCandidateOutcomeResponse = zod.object({
   "oneR": zod.number(),
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
-  "outcomeNotes": zod.string().nullish()
+  "outcomeNotes": zod.string().nullish(),
+  "origin": zod.string().nullish().describe('Candidate source (edgeai, legacy, manual); null for historical rows')
 })
 
 

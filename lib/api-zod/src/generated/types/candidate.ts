@@ -36,4 +36,9 @@ export interface Candidate {
   exitPrice?: number | null;
   /** @nullable */
   outcomeNotes?: string | null;
+  /**
+   * Candidate source (edgeai, legacy, manual); null for historical rows
+   * @nullable
+   */
+  origin?: string | null;
 }

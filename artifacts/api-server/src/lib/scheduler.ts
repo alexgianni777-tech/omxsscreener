@@ -123,6 +123,7 @@ function mapSetup(s: any, rankCounter: Record<string, number>) {
     rr: Number(s.rr ?? 0),
     oneR,
     outcome: "PENDING" as const,
+    origin: "edgeai",
   };
 }
 
@@ -176,11 +177,55 @@ async function runImport(expectedDate: string): Promise<"imported" | "waiting" |
   try {
     const sessionId = await db.transaction(async (tx) => {
       const already = await tx
-        .select({ id: screenerSessionsTable.id })
+        .select({
+          id: screenerSessionsTable.id,
+          source: screenerSessionsTable.source,
+        })
         .from(screenerSessionsTable)
         .where(eq(screenerSessionsTable.date, generatedDate));
 
-      if (already.length > 0) return already[0].id;
+      if (already.length > 0) {
+        const existingRows = await tx
+          .select({
+            origin: candidatesTable.origin,
+          })
+          .from(candidatesTable)
+          .where(eq(candidatesTable.sessionId, already[0].id));
+
+        const alreadyHasEdgeAI = existingRows.some(
+          (row) => row.origin === "edgeai" || (row.origin == null && already[0].source === "edgeai"),
+        );
+
+        if (!alreadyHasEdgeAI) {
+          await tx
+            .update(screenerSessionsTable)
+            .set({
+              omxsValue: mw.omxsValue,
+              perf5d: mw.perf5d,
+              perf1m: mw.perf1m,
+              perf3m: mw.perf3m,
+              marketRsi: mw.marketRsi,
+              trendLabel: se.regime?.label ?? "n/a",
+              rawText: `EdgeAI auto-import — generatedAt ${generatedAt} · SE dataAsOf ${se?.dataAsOf ?? "n/a"} · US dataAsOf ${edgeData?.markets?.US?.dataAsOf ?? "n/a"}`,
+              source: "edgeai",
+              edgeRegime: JSON.stringify(se.regime ?? {}),
+              edgeExpectancy: se.edge?.expectancyR ?? null,
+              edgeWinRate: normalizeRate(se.edge?.winRate),
+              edgePF: se.edge?.profitFactor ?? null,
+              edgeN: se.edge?.n ?? null,
+            })
+            .where(eq(screenerSessionsTable.id, already[0].id));
+
+          await tx.insert(candidatesTable).values(
+            mapped.map((candidate) => ({
+              ...candidate,
+              sessionId: already[0].id,
+            } as any)),
+          );
+        }
+
+        return already[0].id;
+      }
 
       const [inserted] = await tx
         .insert(screenerSessionsTable)

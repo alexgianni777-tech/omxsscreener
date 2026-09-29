@@ -51,6 +51,7 @@ router.get("/candidates", async (req, res): Promise<void> => {
       outcome: candidatesTable.outcome,
       exitPrice: candidatesTable.exitPrice,
       outcomeNotes: candidatesTable.outcomeNotes,
+      origin: candidatesTable.origin,
       sessionDate: screenerSessionsTable.date,
     })
     .from(candidatesTable)
@@ -65,6 +66,7 @@ router.get("/candidates", async (req, res): Promise<void> => {
         gapWarning: r.gapWarning ?? null,
         exitPrice: r.exitPrice ?? null,
         outcomeNotes: r.outcomeNotes ?? null,
+        origin: r.origin ?? null,
       }))
     )
   );
@@ -131,6 +133,7 @@ router.patch("/candidates/:id/outcome", async (req, res): Promise<void> => {
       outcome: updated.outcome,
       exitPrice: updated.exitPrice ?? null,
       outcomeNotes: updated.outcomeNotes ?? null,
+      origin: updated.origin ?? null,
     })
   );
 });
