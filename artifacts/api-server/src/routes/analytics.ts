@@ -51,7 +51,9 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
   let losses = 0;
 
   const sessionResults = sessions.map((session) => {
-    const candidates = bySession.get(session.id) ?? [];
+    const candidates = (bySession.get(session.id) ?? []).filter(
+      (candidate) => candidate.origin === "edgeai" || candidate.origin == null,
+    );
 
     // Rank by E[R] proxy, then keep only one position per ticker.
     const sorted = [...candidates].sort((a, b) => {
