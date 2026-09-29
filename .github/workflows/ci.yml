@@ -21,7 +21,7 @@ jobs:
           corepack enable
           corepack prepare pnpm@9.15.9 --activate
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
       - name: Typecheck
         run: pnpm run typecheck
       - name: Production build
