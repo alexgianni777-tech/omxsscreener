@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useListCandidates, useGetQuotes } from "@workspace/api-client-react";
+import { useListCandidates, useGetQuotes, getGetQuotesQueryKey } from "@workspace/api-client-react";
 import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
 import { Link } from "wouter";
 import { Filter, ChevronRight } from "lucide-react";
@@ -20,7 +20,7 @@ export function Candidates() {
   const tickers = [...new Set(candidates?.map((c) => c.ticker) ?? [])];
   const { data: quotes } = useGetQuotes(
     { tickers: tickers.join(",") },
-    { query: { enabled: tickers.length > 0, refetchInterval: 60_000 } }
+    { query: { queryKey: getGetQuotesQueryKey({ tickers: tickers.join(",") }), enabled: tickers.length > 0, refetchInterval: 60_000 } }
   );
   const quoteMap: Record<string, number | null> = {};
   quotes?.forEach((q) => { quoteMap[q.ticker] = q.livePrice ?? null; });
