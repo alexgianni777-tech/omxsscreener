@@ -101,6 +101,7 @@ type Session = {
   date: string;
   source: string | null;
   createdAt: string | null;
+  lastImportAt?: string | null;
   marketWeather: {
     omxsValue: number;
     perf5d: number;
@@ -247,6 +248,7 @@ export function Today() {
   }
 
   const allCandidates = session?.candidates ?? [];
+  const edgeAiCandidates = allCandidates.filter(c => c.signalSource === "edgeai");
   const hasMarket = allCandidates.some(c => c.market != null);
   // LONG (köp) and SHORT (sälj) are separate pick pools
   const longCands = allCandidates.filter(c => c.direction !== "SHORT");
@@ -496,9 +498,9 @@ export function Today() {
                         ? "Officiellt Top 3 otillgängligt · källa saknades vid 16:30"
                         : "Officiellt Top 3-urval saknas"}
                 </span>
-                {session.createdAt && (
+                {(session.lastImportAt || session.createdAt) && (
                   <span className="opacity-60">
-                    · importerad {new Date(session.createdAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
+                    · {session.lastImportAt ? "importerad" : "skapad"} {new Date(session.lastImportAt || session.createdAt!).toLocaleString("sv-SE", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                   </span>
                 )}
               </div>
@@ -544,13 +546,42 @@ export function Today() {
           }`}>
             {session && !isToday
               ? !session.top3SelectionSnapshot?.available
-                ? `Officiellt Top 3-urval saknas för äldre session ${session.date}; historiska picks räknas inte om eller återskapas.`
+                ? `Officiellt Top 3-urval saknas för äldre session ${session.date}; historiska picks räknas inte om eller återskapas.${edgeAiCandidates.length ? " Importerade EdgeAI-signaler visas separat nedan." : ""}`
                 : `Senaste sessionen är från ${new Date(`${session.date}T12:00:00`).toLocaleDateString("sv-SE", { weekday: "long", day: "numeric", month: "short" })}. Inga signaler valdes som officiella picks i snapshoten. En ny signal kontrolleras automatiskt var 5:e minut.`
               : session && !session.top3SelectionSnapshot?.available
                 ? session.top3SelectionSnapshot?.unavailableReason ?? "Officiellt Top 3-urval saknas för den här sessionen."
               : session?.sessionReview?.status === "BLOCKED"
                 ? "Ingen kvalificerad trade idag — signalerna stoppades av risk- och datakvalitetsregler."
                 : "Inga picks idag ännu — kontrolleras automatiskt var 5:e minut från börsöppningen kl 09:00."}
+          </div>
+        )}
+        {session && edgeAiCandidates.length > 0 && (
+          <div data-testid="edgeai-import-preview" className="mt-3 rounded-xl border border-border bg-card p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold">Importerade EdgeAI-signaler · {edgeAiCandidates.length} st</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Signalernas datum: {session.date}. Inte officiellt Top 3.
+                  {!isToday && " Äldre signaler – inte nya förslag för i dag."}
+                </p>
+              </div>
+              <Link href={`/sessions/${session.id}`} className="shrink-0 text-xs text-primary hover:underline">
+                Visa alla <ChevronRight className="inline h-3 w-3" />
+              </Link>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {edgeAiCandidates.slice(0, 6).map(candidate => (
+                <span key={candidate.id} className="rounded-md border border-border bg-muted/50 px-2 py-1 text-xs">
+                  <span className="font-mono font-semibold">{candidate.ticker}</span>
+                  <span className="ml-1.5 text-muted-foreground">
+                    {candidate.market ?? "—"} · {candidate.direction === "SHORT" ? "Sälj" : "Köp"}
+                  </span>
+                </span>
+              ))}
+              {edgeAiCandidates.length > 6 && (
+                <span className="self-center text-xs text-muted-foreground">+{edgeAiCandidates.length - 6} till</span>
+              )}
+            </div>
           </div>
         )}
         {session?.sessionReview && isToday && session.sessionReview.reasons.length > 0 && (
