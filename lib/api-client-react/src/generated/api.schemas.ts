@@ -569,6 +569,19 @@ export const CandidateSignalSource = {
   screener: 'screener',
 } as const;
 
+/**
+ * Compatibility origin; nullable for historical candidates with unknown provenance. Legacy maps to Telegram screener imports.
+ * @nullable
+ */
+export type CandidateOrigin = typeof CandidateOrigin[keyof typeof CandidateOrigin] | null;
+
+
+export const CandidateOrigin = {
+  edgeai: 'edgeai',
+  legacy: 'legacy',
+  manual: 'manual',
+} as const;
+
 export type CandidateDirection = typeof CandidateDirection[keyof typeof CandidateDirection];
 
 
@@ -787,6 +800,11 @@ export interface Candidate {
      * @nullable
      */
   signalSource?: CandidateSignalSource;
+  /**
+     * Compatibility origin; nullable for historical candidates with unknown provenance. Legacy maps to Telegram screener imports.
+     * @nullable
+     */
+  origin?: CandidateOrigin;
   direction: CandidateDirection;
   entryPrice: number;
   stopPrice: number;

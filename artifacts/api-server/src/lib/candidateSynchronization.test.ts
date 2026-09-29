@@ -12,8 +12,17 @@ import {
 } from "./candidateSynchronizationPolicy.ts";
 import {
   pendingCandidatesToRemove,
+  preserveCandidateInputs,
   synchronizeCandidates,
 } from "./candidateSynchronization.ts";
+
+test("partial legacy machine report never drops existing same-source proposals", () => {
+  const old = row("OLDER", "SE", "PENDING", "telegram");
+  const refreshed = row("NEWER", "SE", "PENDING", "telegram");
+  const retained = preserveCandidateInputs([refreshed], [old]);
+  assert.deepEqual(retained.map((candidate) => candidate.ticker), ["NEWER", "OLDER"]);
+  assert.deepEqual(pendingRemovalIdentities([old], retained), []);
+});
 import { reviewCandidate } from "./screeningReview.ts";
 import { top3CutoffForDate } from "./top3SelectionPolicyCore.ts";
 

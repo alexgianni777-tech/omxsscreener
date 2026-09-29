@@ -920,6 +920,10 @@ components:
           type: ["string", "null"]
           enum: [edgeai, telegram, manual, screener, null]
           description: "Provenance of this individual signal; session source is only a legacy fallback."
+        origin:
+          type: ["string", "null"]
+          enum: [edgeai, legacy, manual, null]
+          description: "Compatibility origin; nullable for historical candidates with unknown provenance. Legacy maps to Telegram screener imports."
         direction:
           type: string
           enum: [LONG, SHORT]

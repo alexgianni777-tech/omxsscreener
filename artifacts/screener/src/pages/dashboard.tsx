@@ -12,6 +12,7 @@ import {
   ComposedChart, Bar, Cell,
 } from "recharts";
 import { useTop3Analytics, type Top3Session } from "../lib/useTop3Analytics";
+import { top3SessionsForSource } from "../lib/top3SourceViews";
 import { useMarketIntel, type MarketIntelData } from "../lib/useMarketIntel";
 import { useState, useMemo } from "react";
 
@@ -911,8 +912,8 @@ function SessionTooltip({ active, payload }: TooltipProps<number, string>) {
 function Top3Section() {
   const { data, isLoading } = useTop3Analytics();
 
-  const seSessions = data?.sessions.filter((s) => s.source !== "edgeai") ?? [];
-  const usSessions = data?.sessions.filter((s) => s.source === "edgeai") ?? [];
+  const legacySessions = top3SessionsForSource(data?.sessions ?? [], "telegram");
+  const edgeAiSessions = top3SessionsForSource(data?.sessions ?? [], "edgeai");
 
   return (
     <div className="space-y-6">
@@ -923,9 +924,14 @@ function Top3Section() {
       <p className="text-xs text-muted-foreground -mt-4">
         Frysta urval från första signal-time-importen, endast TRADEABLE och högst tre per market/riktning. Äldre sessioner utan sparad snapshot markeras som otillgängliga och ingår inte i resultatet.
       </p>
+      {(data?.sessions.filter((s) => s.selectionStatus === "UNAVAILABLE").length ?? 0) > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Historik utan officiellt urval: {data?.sessions.filter((s) => s.selectionStatus === "UNAVAILABLE").length} sessioner. De räknas inte till någon källas resultat.
+        </p>
+      )}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Top3MarketCard label="📋 Manuella sessioner" sessions={seSessions} isLoading={isLoading} accentColor="hsl(var(--primary))" />
-        <Top3MarketCard label="⚡ EdgeAI (SE + US)" sessions={usSessions} isLoading={isLoading} accentColor="hsl(var(--success, 142 71% 45%))" />
+        <Top3MarketCard label="Legacy / Telegram — officiella picks" sessions={legacySessions} isLoading={isLoading} accentColor="hsl(var(--primary))" />
+        <Top3MarketCard label="EdgeAI (SE + US) — officiella picks" sessions={edgeAiSessions} isLoading={isLoading} accentColor="hsl(var(--success, 142 71% 45%))" />
       </div>
     </div>
   );

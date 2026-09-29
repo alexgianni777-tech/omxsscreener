@@ -28,7 +28,7 @@ import { timingSafeEqual } from "node:crypto";
 import {
   deduplicateCandidates,
   lockScreenerSession,
-  mergeCandidateInputs,
+  preserveCandidateInputs,
   synchronizeCandidates,
   candidateIdentity,
 } from "../lib/candidateSynchronization";
@@ -202,7 +202,7 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
       candidates.map((candidate) => ({ ...candidate, market: "SE" })),
     );
     if (skipped.length > 0) {
-      console.warn(`[telegram import] Skipped duplicate candidates: ${skipped.join(", ")}`);
+      logger.warn({ skipped }, "[telegram-import] Skipped duplicate candidates");
     }
   }
 
@@ -225,6 +225,7 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
     signalDate: date,
     market: "SE" as const,   // Telegram screener always imports SE stocks
     signalSource: "telegram" as const,
+    origin: "legacy" as const,
     category: c.category,
     rank: c.rank,
     ticker: c.ticker,
@@ -285,7 +286,7 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
     const { candidates: storedCandidates, diff } = await synchronizeCandidates(
       tx,
       stored.id,
-      mergeCandidateInputs(
+       preserveCandidateInputs(
         candidates.map((candidate) =>
           buildRow(stored.id, candidate, earningsBatch.get(candidate.ticker) ?? UNKNOWN_EARNINGS),
         ),

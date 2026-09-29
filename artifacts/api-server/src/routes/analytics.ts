@@ -127,6 +127,16 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
     selectionStatus: session.selectionStatus as "AVAILABLE" | "UNAVAILABLE",
     picks: session.picks,
   })));
+  const sourceCohorts = {
+    edgeai: summarizeTop3Cohorts(sessionResults.map((session) => ({
+      selectionStatus: session.selectionStatus,
+      picks: session.picks.filter((pick) => pick.signalSource === "edgeai"),
+    }))),
+    legacy: summarizeTop3Cohorts(sessionResults.map((session) => ({
+      selectionStatus: session.selectionStatus,
+      picks: session.picks.filter((pick) => pick.signalSource === "telegram"),
+    }))),
+  };
   const { totalTrades, wins, losses, winRate, totalR, expectedValue } = cohorts.matureCohort;
   const resolvedOnly = cohorts.resolvedOnly;
 
@@ -161,6 +171,9 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
         LONG: cohorts.byDirection.LONG,
         SHORT: cohorts.byDirection.SHORT,
       },
+      // Existing aggregate remains the combined official selection. These
+      // summaries never count another source's picks as EdgeAI or legacy.
+      bySource: sourceCohorts,
     },
   });
 });
@@ -194,6 +207,10 @@ function emptyStats() {
     byDirection: {
       LONG: { totalTrades: 0, wins: 0, losses: 0, winRate: null, totalR: 0, avgRPerTrade: null },
       SHORT: { totalTrades: 0, wins: 0, losses: 0, winRate: null, totalR: 0, avgRPerTrade: null },
+    },
+    bySource: {
+      edgeai: summarizeTop3Cohorts([]),
+      legacy: summarizeTop3Cohorts([]),
     },
   };
 }

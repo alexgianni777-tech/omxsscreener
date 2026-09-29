@@ -28,6 +28,7 @@ import { fetchCompletedVolumeBatch } from "../lib/completedVolumeBatch";
 import { calendarDaysBetween } from "../lib/marketCalendar";
 import { decideCandidate, reviewCandidate, reviewSession } from "../lib/screeningReview";
 import { logger } from "../lib/logger";
+import { candidateOrigin } from "../lib/candidateOrigin";
 import { withRetry } from "../lib/retry";
 import {
   deduplicateCandidates,
@@ -176,6 +177,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     signalDate: reportDate,
     market: "SE" as const,   // screener text is always SE stocks
     signalSource: "manual" as const,
+    origin: "manual" as const,
     category: c.category,
     rank: c.rank,
     ticker: c.ticker,
@@ -453,6 +455,7 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
         signalDate: parsedSession.date,
         market: "SE" as const,
         signalSource: "manual" as const,
+        origin: "manual" as const,
         category: candidate.category,
         rank: candidate.rank,
         ticker: candidate.ticker,
@@ -802,6 +805,7 @@ function mapCandidate(c: {
   earningsObservedAt: Date | null;
   market: string | null;
   signalSource: "edgeai" | "telegram" | "manual" | "screener" | null;
+  origin: "edgeai" | "legacy" | "manual" | null;
   direction: string;
   entryPrice: number;
   stopPrice: number;
@@ -850,6 +854,7 @@ function mapCandidate(c: {
     earningsObservedAt: c.earningsObservedAt ?? null,
     market: c.market ?? "SE",
     signalSource: c.signalSource ?? null,
+    origin: candidateOrigin(c.origin, c.signalSource),
     direction: c.direction,
     entryPrice: c.entryPrice,
     stopPrice: c.stopPrice,

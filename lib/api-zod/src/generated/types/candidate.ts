@@ -10,6 +10,7 @@ import type { CandidateDecision } from './candidateDecision';
 import type { CandidateDirection } from './candidateDirection';
 import type { CandidateEarningsKnowledge } from './candidateEarningsKnowledge';
 import type { CandidateMarket } from './candidateMarket';
+import type { CandidateOrigin } from './candidateOrigin';
 import type { CandidateOutcomeProperty } from './candidateOutcomeProperty';
 import type { CandidateResolutionDirection } from './candidateResolutionDirection';
 import type { CandidateResolutionMethod } from './candidateResolutionMethod';
@@ -98,6 +99,11 @@ export interface Candidate {
      * @nullable
      */
   signalSource?: CandidateSignalSource;
+  /**
+     * Compatibility origin; nullable for historical candidates with unknown provenance. Legacy maps to Telegram screener imports.
+     * @nullable
+     */
+  origin?: CandidateOrigin;
   direction: CandidateDirection;
   entryPrice: number;
   stopPrice: number;

@@ -10,6 +10,7 @@ import {
 } from "@workspace/api-zod";
 import { lockScreenerSession } from "../lib/candidateSynchronization";
 import { afterSessionWriteLock } from "../lib/sessionWriteSerialization";
+import { candidateOrigin } from "../lib/candidateOrigin";
 
 const router: IRouter = Router();
 type ChallengeTradeInput = {
@@ -190,6 +191,8 @@ router.get("/candidates", async (req, res): Promise<void> => {
       maxHoldDays: candidatesTable.maxHoldDays,
       distFrom20dH: candidatesTable.distFrom20dH,
       gapWarning: candidatesTable.gapWarning,
+      origin: candidatesTable.origin,
+      signalSource: candidatesTable.signalSource,
       direction: candidatesTable.direction,
       entryPrice: candidatesTable.entryPrice,
       stopPrice: candidatesTable.stopPrice,
@@ -218,6 +221,7 @@ router.get("/candidates", async (req, res): Promise<void> => {
     ListCandidatesResponse.parse(
       rows.map((r) => ({
         ...r,
+        origin: candidateOrigin(r.origin, r.signalSource),
         gapWarning: r.gapWarning ?? null,
         exitPrice: r.exitPrice ?? null,
         outcomeNotes: r.outcomeNotes ?? null,
@@ -496,6 +500,7 @@ router.patch("/candidates/:id/outcome", async (req, res): Promise<void> => {
       outcome: result_.outcome,
       exitPrice: result_.exitPrice ?? null,
       outcomeNotes: result_.outcomeNotes ?? null,
+      origin: candidateOrigin(result_.origin, result_.signalSource),
       resolutionMethod: result_.resolutionMethod ?? null,
       resolutionQuality: result_.resolutionQuality ?? null,
       realizedR: result_.realizedR ?? null,

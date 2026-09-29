@@ -23,6 +23,7 @@ export * from './candidateDecisionStatus';
 export * from './candidateDirection';
 export * from './candidateEarningsKnowledge';
 export * from './candidateMarket';
+export * from './candidateOrigin';
 export * from './candidateOutcome';
 export * from './candidateOutcomeOutcome';
 export * from './candidateOutcomeProperty';

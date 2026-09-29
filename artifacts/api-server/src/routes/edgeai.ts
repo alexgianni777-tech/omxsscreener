@@ -113,7 +113,7 @@ router.post(
     ];
     const { candidates: uniqueMappedSetups, skipped } = deduplicateCandidates(mappedSetups);
     uniqueMappedSetups.forEach((candidate) => {
-      Object.assign(candidate, { signalSource: "edgeai" as const, signalDate: sessionDate });
+      Object.assign(candidate, { signalSource: "edgeai" as const, origin: "edgeai" as const, signalDate: sessionDate });
     });
     if (skipped.length > 0) {
       logger.warn({ skipped }, "EdgeAI import skipped duplicate candidate identities");

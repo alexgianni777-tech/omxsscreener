@@ -2,6 +2,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { candidatesTable, screenerSessionsTable, top3SelectionSnapshotsTable } from "@workspace/db";
 import { logger } from "./logger";
+import { candidateOrigin } from "./candidateOrigin";
 import {
   candidateIdentity as policyCandidateIdentity,
   effectiveCandidateInputs,
@@ -69,6 +70,22 @@ export function mergeCandidateInputs<T extends CandidateInput>(
 }
 
 /**
+ * Machine reports can be partial. Preserve previously imported suggestions
+ * even when a later report omits them; incoming identities still take priority.
+ * Unlike the normal force-reimport policy, this cannot remove a pending row.
+ */
+export function preserveCandidateInputs<T extends CandidateInput>(
+  incoming: T[],
+  existing: CandidateInput[],
+): T[] {
+  const incomingIdentities = new Set(incoming.map(candidateIdentity));
+  return [
+    ...incoming,
+    ...existing.filter((candidate) => !incomingIdentities.has(candidateIdentity(candidate))),
+  ] as T[];
+}
+
+/**
  * Return the pending rows that synchronizeCandidates will delete for an
  * incoming batch. Keeping this calculation beside the writer is important:
  * conflict previews must not grow a subtly different notion of "effective"
@@ -114,6 +131,7 @@ const DIFF_TRACKED_FIELDS = [
   "earningsKnowledge",
   "market",
   "signalSource",
+  "origin",
   "edgeWinRate",
   "edgeExpectancyR",
   "edgeSampleN",
@@ -291,10 +309,17 @@ export async function synchronizeCandidates(
           resolutionEntryPrice: current.resolutionEntryPrice,
           resolutionStopPrice: current.resolutionStopPrice,
           resolutionDirection: current.resolutionDirection,
-           signalSource: synchronizedSignalSource(
-             values.signalSource as string | null | undefined,
-             current.signalSource,
-           ),
+          signalSource: synchronizedSignalSource(
+            values.signalSource as string | null | undefined,
+            current.signalSource,
+          ),
+          origin: candidateOrigin(
+            current.origin,
+            values.signalSource as string | null | undefined,
+          ) ?? candidateOrigin(
+            values.origin as "edgeai" | "legacy" | "manual" | null | undefined,
+            values.signalSource as string | null | undefined,
+          ),
           isTop3Pick: current.isTop3Pick,
         } as any)
         .where(eq(candidatesTable.id, current.id));

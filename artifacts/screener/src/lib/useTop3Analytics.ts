@@ -81,6 +81,29 @@ export interface Top3Stats {
     LONG: Top3DirectionStats;
     SHORT: Top3DirectionStats;
   };
+  bySource: {
+    edgeai: Top3SourceStats;
+    legacy: Top3SourceStats;
+  };
+}
+
+export interface Top3SourceStats {
+  selectedTrades: number;
+  resolvedTrades: number;
+  pendingTrades: number;
+  excludedTrades: number;
+  resolutionRate: number | null;
+  maturedSessions: number;
+  matureCohort: {
+    totalTrades: number;
+    wins: number;
+    losses: number;
+    totalR: number;
+    winRate: number | null;
+    expectedValue: number | null;
+  };
+  resolvedOnly: Top3SourceStats["matureCohort"];
+  byDirection: { LONG: Top3DirectionStats; SHORT: Top3DirectionStats };
 }
 
 export interface Top3Analytics {
