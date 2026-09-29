@@ -49,6 +49,17 @@ function edgeScore(c: Candidate): number {
   return normalizeWinRate(c.perf1m) * expectancyR;
 }
 
+function evidenceLabel(candidate: Candidate): "VALIDATED" | "PROMISING" | "WATCH" {
+  if (candidate.gapWarning == null) return "VALIDATED";
+  return candidate.gapWarning > -0.75 ? "PROMISING" : "WATCH";
+}
+
+function evidenceColor(label: "VALIDATED" | "PROMISING" | "WATCH"): string {
+  if (label === "VALIDATED") return "text-success border-success/30 bg-success/10";
+  if (label === "PROMISING") return "text-amber-400 border-amber-500/30 bg-amber-500/10";
+  return "text-muted-foreground border-border bg-muted/50";
+}
+
 function edgeScoreColor(score: number): string {
   if (score >= 0.15) return "text-success border-success/30 bg-success/10";
   if (score >= 0.05) return "text-amber-400 border-amber-500/30 bg-amber-500/10";
@@ -490,6 +501,7 @@ function CandidateRow({
 
   // EdgeAI per-candidate edge score
   const score = edgeScore(candidate);
+  const evidence = evidenceLabel(candidate);
   const expectancyR = candidate.rsi / 100;
   const winRatePct = Math.round(normalizeWinRate(candidate.perf1m) * 100);
   const sampleN = candidate.pctB;
@@ -522,6 +534,14 @@ function CandidateRow({
               >
                 <AlertTriangle className="w-3 h-3" />
                 {earningsLabel}
+              </div>
+            )}
+            {isEdgeAI && (
+              <div
+                className={`px-2 py-0.5 rounded border text-[10px] font-bold ${evidenceColor(evidence)}`}
+                title="EdgeAI evidence tier"
+              >
+                {evidence}
               </div>
             )}
             {/* Edge probability score badge — only for EdgeAI sessions */}
