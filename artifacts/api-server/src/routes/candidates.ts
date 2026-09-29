@@ -84,11 +84,18 @@ router.patch("/candidates/:id/outcome", async (req, res): Promise<void> => {
     return;
   }
 
+  const requiresExit = body.data.outcome === "WIN" || body.data.outcome === "LOSS";
+  const exitPrice = body.data.exitPrice ?? null;
+  if (requiresExit && (exitPrice == null || !Number.isFinite(exitPrice) || exitPrice <= 0)) {
+    res.status(400).json({ error: "WIN/LOSS requires a valid positive exitPrice" });
+    return;
+  }
+
   const [updated] = await db
     .update(candidatesTable)
     .set({
       outcome: body.data.outcome,
-      exitPrice: body.data.exitPrice ?? null,
+      exitPrice: requiresExit ? exitPrice : null,
       outcomeNotes: body.data.outcomeNotes ?? null,
     })
     .where(eq(candidatesTable.id, params.data.id))
