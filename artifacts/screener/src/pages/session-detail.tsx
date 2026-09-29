@@ -1,4 +1,4 @@
-import { useGetSession, getGetSessionQueryKey, useGetQuotes, Candidate, CandidateOutcomeProperty, useUpdateCandidateOutcome, QuoteResult } from "@workspace/api-client-react";
+import { useGetSession, getGetSessionQueryKey, useGetQuotes, getGetQuotesQueryKey, Candidate, CandidateOutcomeProperty, useUpdateCandidateOutcome, QuoteResult } from "@workspace/api-client-react";
 import { useParams, Link } from "wouter";
 import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
 import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity, AlertTriangle, Clock, Newspaper, ExternalLink, CandlestickChart as CandlestickIcon } from "lucide-react";
@@ -84,7 +84,7 @@ export function SessionDetail() {
   const tickersParam = tickers.join(",");
   const { data: quotes } = useGetQuotes(
     { tickers: tickersParam },
-    { query: { enabled: tickers.length > 0, refetchInterval: 60_000 } }
+    { query: { queryKey: getGetQuotesQueryKey({ tickers: tickersParam }), enabled: tickers.length > 0, refetchInterval: 60_000 } }
   );
   const { news, loading: newsLoading } = useSessionNews(tickers);
 
