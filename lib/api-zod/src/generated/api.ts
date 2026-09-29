@@ -236,6 +236,8 @@ export const GetQuotesResponseItem = zod.object({
   "change": zod.number().nullish().describe('Absolute price change from previous close'),
   "changePct": zod.number().nullish().describe('Percent change from previous close'),
   "marketState": zod.string().nullish().describe('REGULAR, PRE, POST, CLOSED'),
+  "earningsDate": zod.string().nullish().describe('Upcoming earnings date (YYYY-MM-DD), when available'),
+  "earningsInDays": zod.number().nullish().describe('Calendar days until earnings; negative means already reported'),
   "error": zod.string().nullish()
 })
 export const GetQuotesResponse = zod.array(GetQuotesResponseItem)

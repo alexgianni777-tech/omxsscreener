@@ -4,8 +4,15 @@
     "outDir": "dist",
     "rootDir": "src",
     "jsx": "react-jsx",
-    "lib": ["esnext", "dom", "dom.iterable"],
-    "types": []
+    "lib": [
+      "esnext",
+      "dom",
+      "dom.iterable"
+    ],
+    "types": [],
+    "composite": true
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ]
 }

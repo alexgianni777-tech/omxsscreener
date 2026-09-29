@@ -1,4 +1,4 @@
-import { useGetSession, getGetSessionQueryKey, useGetQuotes, Candidate, CandidateOutcomeProperty, useUpdateCandidateOutcome, QuoteResult } from "@workspace/api-client-react";
+import { useGetSession, getGetSessionQueryKey, useGetQuotes, getGetQuotesQueryKey, Candidate, CandidateOutcomeProperty, useUpdateCandidateOutcome, QuoteResult } from "@workspace/api-client-react";
 import { useParams, Link } from "wouter";
 import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
 import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity, AlertTriangle, Clock, Newspaper, ExternalLink, CandlestickChart as CandlestickIcon } from "lucide-react";
@@ -37,10 +37,27 @@ function useSessionNews(tickers: string[]) {
 // ── Edge score helpers ────────────────────────────────────────────────────────
 // For EdgeAI sessions: rsi field stores expectancyR × 100; perf1m stores winRate.
 // compositeScore = winRate × expectancyR (Kelly-ish proxy).
+// Historical rows may contain winRate as either 0-1 or 0-100.
+function normalizeWinRate(value: number | null | undefined): number {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n)) return 0;
+  return Math.abs(n) > 1 ? n / 100 : n;
+}
+
 function edgeScore(c: Candidate): number {
-  const expectancyR = c.rsi / 100; // stored as rsi×100
-  const winRate = c.perf1m;        // stored as decimal 0-1
-  return winRate * expectancyR;
+  const expectancyR = c.rsi / 100;
+  return normalizeWinRate(c.perf1m) * expectancyR;
+}
+
+function evidenceLabel(candidate: Candidate): "VALIDATED" | "PROMISING" | "WATCH" {
+  if (candidate.gapWarning == null) return "VALIDATED";
+  return candidate.gapWarning > -0.75 ? "PROMISING" : "WATCH";
+}
+
+function evidenceColor(label: "VALIDATED" | "PROMISING" | "WATCH"): string {
+  if (label === "VALIDATED") return "text-success border-success/30 bg-success/10";
+  if (label === "PROMISING") return "text-amber-400 border-amber-500/30 bg-amber-500/10";
+  return "text-muted-foreground border-border bg-muted/50";
 }
 
 function edgeScoreColor(score: number): string {
@@ -67,7 +84,7 @@ export function SessionDetail() {
   const tickersParam = tickers.join(",");
   const { data: quotes } = useGetQuotes(
     { tickers: tickersParam },
-    { query: { enabled: tickers.length > 0, refetchInterval: 60_000 } }
+    { query: { queryKey: getGetQuotesQueryKey({ tickers: tickersParam }), enabled: tickers.length > 0, refetchInterval: 60_000 } }
   );
   const { news, loading: newsLoading } = useSessionNews(tickers);
 
@@ -281,7 +298,7 @@ function EdgeAIPanel({ session }: { session: EdgeAISessionExtra }) {
         <div className="bg-background rounded p-3 border border-border">
           <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider">Win Rate OOS</div>
           <div className="font-mono font-bold text-lg">
-            {session.edgeWinRate != null ? Math.round(session.edgeWinRate * 100) + "%" : "—"}
+            {session.edgeWinRate != null ? Math.round(normalizeWinRate(session.edgeWinRate) * 100) + "%" : "—"}
           </div>
           <div className="text-[10px] text-muted-foreground mt-0.5">historical</div>
         </div>
@@ -306,14 +323,14 @@ function EdgeAIPanel({ session }: { session: EdgeAISessionExtra }) {
         <div className="bg-muted/40 rounded p-3 border border-border text-sm flex flex-wrap gap-4 items-center">
           <div>
             <span className="text-muted-foreground text-xs uppercase tracking-wider">Actual WR </span>
-            <span className={`font-mono font-semibold ${actualWR! >= session.edgeWinRate ? "text-success" : "text-destructive"}`}>
+            <span className={`font-mono font-semibold ${actualWR! >= normalizeWinRate(session.edgeWinRate) ? "text-success" : "text-destructive"}`}>
               {Math.round(actualWR! * 100)}%
             </span>
           </div>
           <div className="text-muted-foreground text-xs">vs</div>
           <div>
             <span className="text-muted-foreground text-xs uppercase tracking-wider">Edge WR </span>
-            <span className="font-mono font-semibold">{Math.round(session.edgeWinRate * 100)}%</span>
+            <span className="font-mono font-semibold">{Math.round(normalizeWinRate(session.edgeWinRate) * 100)}%</span>
           </div>
           <div className="text-muted-foreground text-xs ml-auto">
             {resolved.length} resolved · {session.candidates.filter(c => c.outcome === "PENDING").length} pending
@@ -484,8 +501,9 @@ function CandidateRow({
 
   // EdgeAI per-candidate edge score
   const score = edgeScore(candidate);
+  const evidence = evidenceLabel(candidate);
   const expectancyR = candidate.rsi / 100;
-  const winRatePct = Math.round(candidate.perf1m * 100);
+  const winRatePct = Math.round(normalizeWinRate(candidate.perf1m) * 100);
   const sampleN = candidate.pctB;
   const barsAgo = Math.round(candidate.distFrom20dH);
 
@@ -516,6 +534,14 @@ function CandidateRow({
               >
                 <AlertTriangle className="w-3 h-3" />
                 {earningsLabel}
+              </div>
+            )}
+            {isEdgeAI && (
+              <div
+                className={`px-2 py-0.5 rounded border text-[10px] font-bold ${evidenceColor(evidence)}`}
+                title="EdgeAI evidence tier"
+              >
+                {evidence}
               </div>
             )}
             {/* Edge probability score badge — only for EdgeAI sessions */}

@@ -16,12 +16,18 @@ const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] 
 const EDGEAI_URL = "https://alexgianni777-tech.github.io/edgeai/public/data.json";
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
-// Import window: OMXS30 closes 17:30 CET/CEST = 15:30 UTC (summer) and
-// US market open +2 h = 11:30 ET = 15:30 UTC (EDT, summer) — same moment.
-// In winter (CET/EST) both shift to ~16:30 UTC, but EdgeAI data is
-// generated in the morning so 15:30 UTC is always a safe lower bound.
-const EARLIEST_HOUR_UTC   = 15;
-const EARLIEST_MINUTE_UTC = 30;
+function normalizeRate(value: unknown): number {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n)) return 0;
+  return Math.abs(n) > 1 ? n / 100 : n;
+}
+
+// EdgeAI's first daily build is scheduled for 06:00 UTC. We begin polling
+// shortly afterwards and import only when data.json itself says generatedAt
+// is today. This preserves the intended "previous completed close -> today's
+// proposal" workflow without waiting until market close.
+const EARLIEST_HOUR_UTC   = 6;
+const EARLIEST_MINUTE_UTC = 20;
 
 // In-memory status — reset on server restart
 export let schedulerStatus: {
@@ -98,13 +104,18 @@ function mapSetup(s: any, rankCounter: Record<string, number>) {
     ticker,
     price: entry,
     rs3m: Number(s.rs ?? 0),
-    perf1m: Number(s.edge?.winRate ?? 0),
+    perf1m: normalizeRate(s.edge?.winRate),
     rsi: Number(s.edge?.expectancyR ?? 0) * 100,
     pctB: Number(s.edge?.sample ?? 0),
     atr: oneR,
     volMultiplier: Number(s.rr ?? 0),
     distFrom20dH: barsAgo,
-    gapWarning: s.grade === "A" ? null : -1,
+    gapWarning:
+      String(s.grade ?? "").toUpperCase() === "A"
+        ? null
+        : String(s.grade ?? "").toUpperCase() === "B"
+          ? -0.5
+          : -1,
     direction,
     entryPrice: entry,
     stopPrice: stop,
@@ -115,8 +126,8 @@ function mapSetup(s: any, rankCounter: Record<string, number>) {
   };
 }
 
-async function runImport(date: string): Promise<void> {
-  logger.info({ date }, "[scheduler] Fetching EdgeAI data.json");
+async function runImport(expectedDate: string): Promise<"imported" | "waiting" | "empty"> {
+  logger.info({ expectedDate }, "[scheduler] Fetching EdgeAI data.json");
 
   const resp = await fetch(EDGEAI_URL, {
     headers: { Accept: "application/json" },
@@ -126,17 +137,31 @@ async function runImport(date: string): Promise<void> {
   if (!resp.ok) throw new Error(`EdgeAI fetch HTTP ${resp.status}`);
 
   const edgeData: any = await resp.json();
+  const generatedAt = String(edgeData?.generatedAt ?? "");
+  const generatedDate = generatedAt.slice(0, 10);
+
+  if (!generatedDate || Number.isNaN(new Date(generatedAt).getTime())) {
+    throw new Error("EdgeAI generatedAt is missing or invalid");
+  }
+
+  if (generatedDate !== expectedDate) {
+    logger.info(
+      { expectedDate, generatedDate, generatedAt },
+      "[scheduler] Today's EdgeAI build is not available yet",
+    );
+    return "waiting";
+  }
+
   const se = edgeData?.markets?.SE;
   const seSetups: any[] = se?.setups ?? [];
   const usSetups: any[] = edgeData?.markets?.US?.setups ?? [];
   const allSetups = [...seSetups, ...usSetups];
 
   if (allSetups.length === 0) {
-    logger.info({ date, generatedAt: edgeData.generatedAt }, "[scheduler] No setups today — skipping");
-    return;
+    logger.info({ generatedDate, generatedAt }, "[scheduler] No setups today — skipping");
+    return "empty";
   }
 
-  // Fetch real OMXS30 market data
   let mw = { omxsValue: 0, perf5d: 0, perf1m: 0, perf3m: 0, marketRsi: 0 };
   try {
     mw = await fetchOmxsMarketWeather();
@@ -145,39 +170,56 @@ async function runImport(date: string): Promise<void> {
   }
 
   const { candidatesTable } = await import("@workspace/db");
-
   const rankCounter: Record<string, number> = {};
   const mapped = allSetups.map((s) => mapSetup(s, rankCounter));
 
   try {
-    const [inserted] = await db
-      .insert(screenerSessionsTable)
-      .values({
-        date,
-        omxsValue: mw.omxsValue,
-        perf5d: mw.perf5d,
-        perf1m: mw.perf1m,
-        perf3m: mw.perf3m,
-        marketRsi: mw.marketRsi,
-        trendLabel: se.regime?.label ?? "n/a",
-        rawText: `EdgeAI auto-import — generatedAt ${edgeData.generatedAt}`,
-        source: "edgeai",
-        edgeRegime: JSON.stringify(se.regime ?? {}),
-        edgeExpectancy: se.edge?.expectancyR ?? null,
-        edgeWinRate: se.edge?.winRate ?? null,
-        edgePF: se.edge?.profitFactor ?? null,
-        edgeN: se.edge?.n ?? null,
-      })
-      .returning();
+    const sessionId = await db.transaction(async (tx) => {
+      const already = await tx
+        .select({ id: screenerSessionsTable.id })
+        .from(screenerSessionsTable)
+        .where(eq(screenerSessionsTable.date, generatedDate));
 
-    await db.insert(candidatesTable).values(
-      mapped.map((c) => ({ ...c, sessionId: inserted.id } as any)),
-    );
+      if (already.length > 0) return already[0].id;
+
+      const [inserted] = await tx
+        .insert(screenerSessionsTable)
+        .values({
+          date: generatedDate,
+          omxsValue: mw.omxsValue,
+          perf5d: mw.perf5d,
+          perf1m: mw.perf1m,
+          perf3m: mw.perf3m,
+          marketRsi: mw.marketRsi,
+          trendLabel: se.regime?.label ?? "n/a",
+          rawText: `EdgeAI auto-import — generatedAt ${generatedAt} · SE dataAsOf ${se?.dataAsOf ?? "n/a"} · US dataAsOf ${edgeData?.markets?.US?.dataAsOf ?? "n/a"}`,
+          source: "edgeai",
+          edgeRegime: JSON.stringify(se.regime ?? {}),
+          edgeExpectancy: se.edge?.expectancyR ?? null,
+          edgeWinRate: normalizeRate(se.edge?.winRate),
+          edgePF: se.edge?.profitFactor ?? null,
+          edgeN: se.edge?.n ?? null,
+        })
+        .returning();
+
+      await tx.insert(candidatesTable).values(
+        mapped.map((candidate) => ({ ...candidate, sessionId: inserted.id } as any)),
+      );
+
+      return inserted.id;
+    });
 
     logger.info(
-      { date, sessionId: inserted.id, seSetups: seSetups.length, usSetups: usSetups.length, omxsValue: mw.omxsValue },
+      {
+        generatedDate,
+        sessionId,
+        seSetups: seSetups.length,
+        usSetups: usSetups.length,
+        omxsValue: mw.omxsValue,
+      },
       "[scheduler] Auto-import complete",
     );
+    return "imported";
   } catch (err: any) {
     throw new Error(`DB insert failed: ${err.message}`);
   }
@@ -198,9 +240,11 @@ async function tick() {
   logger.info({ today }, "[scheduler] No session found, auto-importing from EdgeAI");
 
   try {
-    await runImport(today);
-    schedulerStatus.lastImported = today;
-    schedulerStatus.lastError = null;
+    const result = await runImport(today);
+    if (result === "imported") {
+      schedulerStatus.lastImported = today;
+      schedulerStatus.lastError = null;
+    }
   } catch (err: any) {
     schedulerStatus.lastError = err.message ?? String(err);
     logger.warn({ err: err.message }, "[scheduler] Auto-import failed");
@@ -216,6 +260,6 @@ export function startScheduler() {
   const nextCheck = new Date(Date.now() + CHECK_INTERVAL_MS);
   schedulerStatus.nextCheckAt = nextCheck.toISOString();
 
-  logger.info("[scheduler] Started — checking EdgeAI every 5 min on weekdays; imports after 15:30 UTC (≈ OMXS30 close / US open +2 h)");
+  logger.info("[scheduler] Started — checking EdgeAI every 5 min on weekdays; imports today's generated file after 06:20 UTC");
   return interval;
 }

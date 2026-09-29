@@ -96,33 +96,81 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     outcomeNotes: preserved?.outcomeNotes ?? null,
   });
 
-  // ---------- force re-import: preserve outcomes, replace everything else ----------
-  if (existing.length > 0 && force) {
-    const existingId = existing[0].id;
+  // ---------- import / force re-import, atomically ----------
+  const result = await db.transaction(async (tx) => {
+    if (existing.length > 0 && force) {
+      const existingId = existing[0].id;
 
-    // Snapshot existing outcomes before deleting
-    const existingCandidates = await db
-      .select({
-        ticker: candidatesTable.ticker,
-        outcome: candidatesTable.outcome,
-        exitPrice: candidatesTable.exitPrice,
-        outcomeNotes: candidatesTable.outcomeNotes,
-      })
-      .from(candidatesTable)
-      .where(eq(candidatesTable.sessionId, existingId));
+      const existingCandidates = await tx
+        .select({
+          ticker: candidatesTable.ticker,
+          category: candidatesTable.category,
+          direction: candidatesTable.direction,
+          outcome: candidatesTable.outcome,
+          exitPrice: candidatesTable.exitPrice,
+          outcomeNotes: candidatesTable.outcomeNotes,
+        })
+        .from(candidatesTable)
+        .where(eq(candidatesTable.sessionId, existingId));
 
-    const outcomeByTicker = new Map(
-      existingCandidates
-        .filter((c) => c.outcome !== "PENDING")
-        .map((c) => [c.ticker, { outcome: c.outcome, exitPrice: c.exitPrice, outcomeNotes: c.outcomeNotes }]),
-    );
+      const outcomeMap = new Map(
+        existingCandidates
+          .filter((cand) => cand.outcome !== "PENDING")
+          .map((cand) => [
+            `${cand.ticker}|${cand.direction}|${cand.category}`,
+            {
+              outcome: cand.outcome,
+              exitPrice: cand.exitPrice,
+              outcomeNotes: cand.outcomeNotes,
+            },
+          ]),
+      );
 
-    // Delete old candidates then update session metadata
-    await db.delete(candidatesTable).where(eq(candidatesTable.sessionId, existingId));
+      await tx.delete(candidatesTable).where(eq(candidatesTable.sessionId, existingId));
 
-    const [updatedSession] = await db
-      .update(screenerSessionsTable)
-      .set({
+      const [updatedSession] = await tx
+        .update(screenerSessionsTable)
+        .set({
+          omxsValue: session.marketWeather.omxsValue,
+          perf5d: session.marketWeather.perf5d,
+          perf1m: session.marketWeather.perf1m,
+          perf3m: session.marketWeather.perf3m,
+          marketRsi: session.marketWeather.rsi,
+          trendLabel: session.marketWeather.trendLabel,
+          rawText: parsed.data.rawText,
+          source: null,
+          edgeRegime: null,
+          edgeExpectancy: null,
+          edgeWinRate: null,
+          edgePF: null,
+          edgeN: null,
+        })
+        .where(eq(screenerSessionsTable.id, existingId))
+        .returning();
+
+      const updatedCandidates = await tx
+        .insert(candidatesTable)
+        .values(
+          session.candidates.map((cand) => {
+            const preserved = outcomeMap.get(
+              `${cand.ticker}|${cand.direction}|${cand.category}`,
+            );
+            return buildCandidateRow(updatedSession.id, cand, preserved);
+          }),
+        )
+        .returning();
+
+      return {
+        status: 200 as const,
+        session: updatedSession,
+        candidates: updatedCandidates,
+      };
+    }
+
+    const [insertedSession] = await tx
+      .insert(screenerSessionsTable)
+      .values({
+        date: session.date,
         omxsValue: session.marketWeather.omxsValue,
         perf5d: session.marketWeather.perf5d,
         perf1m: session.marketWeather.perf1m,
@@ -131,71 +179,35 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
         trendLabel: session.marketWeather.trendLabel,
         rawText: parsed.data.rawText,
       })
-      .where(eq(screenerSessionsTable.id, existingId))
       .returning();
 
-    const updatedCandidates = await db
+    const insertedCandidates = await tx
       .insert(candidatesTable)
-      .values(
-        session.candidates.map((c) =>
-          buildCandidateRow(updatedSession.id, c, outcomeByTicker.get(c.ticker)),
-        ),
-      )
+      .values(session.candidates.map((cand) => buildCandidateRow(insertedSession.id, cand)))
       .returning();
 
-    const response = ImportSessionResponse.parse({
-      id: updatedSession.id,
-      date: updatedSession.date,
-      marketWeather: {
-        omxsValue: updatedSession.omxsValue,
-        perf5d: updatedSession.perf5d,
-        perf1m: updatedSession.perf1m,
-        perf3m: updatedSession.perf3m,
-        rsi: updatedSession.marketRsi,
-        trendLabel: updatedSession.trendLabel,
-      },
-      candidates: updatedCandidates.map(mapCandidate),
-    });
-
-    res.status(200).json(response);
-    return;
-  }
-
-  // ---------- normal insert (no existing session) ----------
-  const [insertedSession] = await db
-    .insert(screenerSessionsTable)
-    .values({
-      date: session.date,
-      omxsValue: session.marketWeather.omxsValue,
-      perf5d: session.marketWeather.perf5d,
-      perf1m: session.marketWeather.perf1m,
-      perf3m: session.marketWeather.perf3m,
-      marketRsi: session.marketWeather.rsi,
-      trendLabel: session.marketWeather.trendLabel,
-      rawText: parsed.data.rawText,
-    })
-    .returning();
-
-  const insertedCandidates = await db
-    .insert(candidatesTable)
-    .values(session.candidates.map((c) => buildCandidateRow(insertedSession.id, c)))
-    .returning();
-
-  const response = ImportSessionResponse.parse({
-    id: insertedSession.id,
-    date: insertedSession.date,
-    marketWeather: {
-      omxsValue: insertedSession.omxsValue,
-      perf5d: insertedSession.perf5d,
-      perf1m: insertedSession.perf1m,
-      perf3m: insertedSession.perf3m,
-      rsi: insertedSession.marketRsi,
-      trendLabel: insertedSession.trendLabel,
-    },
-    candidates: insertedCandidates.map(mapCandidate),
+    return {
+      status: 201 as const,
+      session: insertedSession,
+      candidates: insertedCandidates,
+    };
   });
 
-  res.status(201).json(response);
+  const response = ImportSessionResponse.parse({
+    id: result.session.id,
+    date: result.session.date,
+    marketWeather: {
+      omxsValue: result.session.omxsValue,
+      perf5d: result.session.perf5d,
+      perf1m: result.session.perf1m,
+      perf3m: result.session.perf3m,
+      rsi: result.session.marketRsi,
+      trendLabel: result.session.trendLabel,
+    },
+    candidates: result.candidates.map(mapCandidate),
+  });
+
+  res.status(result.status).json(response);
 });
 
 // GET /screener/sessions
