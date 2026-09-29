@@ -15,3 +15,4 @@
 - [Source-balanced ranking](source-balanced-ranking.md) — rank within each signal source, then interleave; never compare overloaded EdgeAI and Telegram fields directly.
 - [Equity signal risk and owned products](equity-only-risk-model.md) — screen unleveraged shares; held product P&L follows product price, not underlying direction or leverage.
 - [Official Top 3 cutoff](top3-cutoff-policy.md) — 16:30 Stockholm with both sources is a user decision; prior completed volume is dated context, not today's bar.
+- [GitHub sync caution](github-sync-caution.md) — upstream fixes may be based on older trading code; port compatible changes instead of overwriting local selection policy.
