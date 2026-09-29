@@ -110,7 +110,12 @@ function mapSetup(s: any, rankCounter: Record<string, number>) {
     atr: oneR,
     volMultiplier: Number(s.rr ?? 0),
     distFrom20dH: barsAgo,
-    gapWarning: s.grade === "A" ? null : -1,
+    gapWarning:
+      String(s.grade ?? "").toUpperCase() === "A"
+        ? null
+        : String(s.grade ?? "").toUpperCase() === "B"
+          ? -0.5
+          : -1,
     direction,
     entryPrice: entry,
     stopPrice: stop,
