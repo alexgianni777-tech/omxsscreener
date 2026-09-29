@@ -37,10 +37,16 @@ function useSessionNews(tickers: string[]) {
 // ── Edge score helpers ────────────────────────────────────────────────────────
 // For EdgeAI sessions: rsi field stores expectancyR × 100; perf1m stores winRate.
 // compositeScore = winRate × expectancyR (Kelly-ish proxy).
+// Historical rows may contain winRate as either 0-1 or 0-100.
+function normalizeWinRate(value: number | null | undefined): number {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n)) return 0;
+  return Math.abs(n) > 1 ? n / 100 : n;
+}
+
 function edgeScore(c: Candidate): number {
-  const expectancyR = c.rsi / 100; // stored as rsi×100
-  const winRate = c.perf1m;        // stored as decimal 0-1
-  return winRate * expectancyR;
+  const expectancyR = c.rsi / 100;
+  return normalizeWinRate(c.perf1m) * expectancyR;
 }
 
 function edgeScoreColor(score: number): string {
@@ -281,7 +287,7 @@ function EdgeAIPanel({ session }: { session: EdgeAISessionExtra }) {
         <div className="bg-background rounded p-3 border border-border">
           <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider">Win Rate OOS</div>
           <div className="font-mono font-bold text-lg">
-            {session.edgeWinRate != null ? Math.round(session.edgeWinRate * 100) + "%" : "—"}
+            {session.edgeWinRate != null ? Math.round(normalizeWinRate(session.edgeWinRate) * 100) + "%" : "—"}
           </div>
           <div className="text-[10px] text-muted-foreground mt-0.5">historical</div>
         </div>
@@ -306,14 +312,14 @@ function EdgeAIPanel({ session }: { session: EdgeAISessionExtra }) {
         <div className="bg-muted/40 rounded p-3 border border-border text-sm flex flex-wrap gap-4 items-center">
           <div>
             <span className="text-muted-foreground text-xs uppercase tracking-wider">Actual WR </span>
-            <span className={`font-mono font-semibold ${actualWR! >= session.edgeWinRate ? "text-success" : "text-destructive"}`}>
+            <span className={`font-mono font-semibold ${actualWR! >= normalizeWinRate(session.edgeWinRate) ? "text-success" : "text-destructive"}`}>
               {Math.round(actualWR! * 100)}%
             </span>
           </div>
           <div className="text-muted-foreground text-xs">vs</div>
           <div>
             <span className="text-muted-foreground text-xs uppercase tracking-wider">Edge WR </span>
-            <span className="font-mono font-semibold">{Math.round(session.edgeWinRate * 100)}%</span>
+            <span className="font-mono font-semibold">{Math.round(normalizeWinRate(session.edgeWinRate) * 100)}%</span>
           </div>
           <div className="text-muted-foreground text-xs ml-auto">
             {resolved.length} resolved · {session.candidates.filter(c => c.outcome === "PENDING").length} pending
@@ -485,7 +491,7 @@ function CandidateRow({
   // EdgeAI per-candidate edge score
   const score = edgeScore(candidate);
   const expectancyR = candidate.rsi / 100;
-  const winRatePct = Math.round(candidate.perf1m * 100);
+  const winRatePct = Math.round(normalizeWinRate(candidate.perf1m) * 100);
   const sampleN = candidate.pctB;
   const barsAgo = Math.round(candidate.distFrom20dH);
 
