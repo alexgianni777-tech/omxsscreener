@@ -195,8 +195,7 @@ export const UpdateCandidateOutcomeParams = zod.object({
 export const UpdateCandidateOutcomeBody = zod.object({
   "outcome": zod.enum(['WIN', 'LOSS', 'SKIP', 'PENDING']),
   "exitPrice": zod.number().nullish(),
-  "outcomeNotes": zod.string().nullish(),
-  "origin": zod.string().nullish().describe('Candidate source (edgeai, legacy, manual); null for historical rows')
+  "outcomeNotes": zod.string().nullish()
 })
 
 export const UpdateCandidateOutcomeResponse = zod.object({
