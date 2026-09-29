@@ -654,6 +654,12 @@ components:
         marketState:
           type: ["string", "null"]
           description: REGULAR, PRE, POST, CLOSED
+        earningsDate:
+          type: ["string", "null"]
+          description: Upcoming earnings date (YYYY-MM-DD), when available
+        earningsInDays:
+          type: ["number", "null"]
+          description: Calendar days until earnings; negative means already reported
         error:
           type: ["string", "null"]
 
