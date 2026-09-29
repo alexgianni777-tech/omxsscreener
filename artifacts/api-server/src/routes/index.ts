@@ -11,11 +11,16 @@ import newsRouter from "./news";
 import analyticsRouter from "./analytics";
 import earningsScreenerRouter from "./earningsScreener";
 import priceChartRouter from "./priceChart";
+import { requireAuth } from "../middlewares/authMiddleware";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(authRouter);
+
+// Everything below is private application data/actions.
+router.use(requireAuth);
+
 router.use(screenerRouter);
 router.use(candidatesRouter);
 router.use(dashboardRouter);
