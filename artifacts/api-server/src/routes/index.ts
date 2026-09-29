@@ -11,12 +11,15 @@ import newsRouter from "./news";
 import analyticsRouter from "./analytics";
 import earningsScreenerRouter from "./earningsScreener";
 import priceChartRouter from "./priceChart";
+import telegramImportRouter from "./telegramImport";
 import { requireAuth } from "../middlewares/authMiddleware";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(authRouter);
+// Legacy GitHub Action uses bearer-secret machine auth instead of a browser session.
+router.use(telegramImportRouter);
 
 // Everything below is private application data/actions.
 router.use(requireAuth);
