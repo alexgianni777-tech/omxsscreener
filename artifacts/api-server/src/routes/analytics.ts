@@ -12,6 +12,12 @@ import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
+function normalizeStoredRate(value: number | null | undefined): number {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n)) return 0;
+  return Math.abs(n) > 1 ? n / 100 : n;
+}
+
 router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
   const sessions = await db
     .select({ id: screenerSessionsTable.id, date: screenerSessionsTable.date })
@@ -44,8 +50,8 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
     // Rank by E[R] proxy, then keep only one position per ticker.
     const sorted = [...candidates].sort(
       (a, b) =>
-        (b.perf1m ?? 0) * ((b.rsi ?? 0) / 100) -
-        (a.perf1m ?? 0) * ((a.rsi ?? 0) / 100),
+        normalizeStoredRate(b.perf1m) * ((b.rsi ?? 0) / 100) -
+        normalizeStoredRate(a.perf1m) * ((a.rsi ?? 0) / 100),
     );
 
     const top3 = [];
@@ -78,7 +84,7 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
         ticker: candidate.ticker,
         direction: candidate.direction,
         edgeScore: Number(
-          (((candidate.perf1m ?? 0) * ((candidate.rsi ?? 0) / 100))).toFixed(4),
+          (normalizeStoredRate(candidate.perf1m) * ((candidate.rsi ?? 0) / 100)).toFixed(4),
         ),
         outcome: candidate.outcome,
         r,
