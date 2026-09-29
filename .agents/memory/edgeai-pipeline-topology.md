@@ -37,13 +37,13 @@ This app's daily screener data comes from **three separate GitHub repos**, each 
 
 **Complete-report retry rule:** do not send a Telegram/dashboard screening until the index and every included stock have a closed daily bar for the same report date. Retry missing data quietly, skip already-delivered dates, and allow an explicit historical date if the normal retry window has passed.
 
-**Why:** Yahoo can publish the index daily bar while keeping Swedish stock daily bars a day behind; hourly closes may be fresh but hourly volume does not match the completed daily volume. Re-running without a delivery record can duplicate a trading list.
+**Why:** Yahoo can publish the index daily bar while returning dated but null-close daily candles for all Swedish shares well into the next morning; hourly closes may be fresh but hourly volume does not match the completed daily volume. Re-running without a delivery record can duplicate a trading list.
 
 **How to apply:** treat missing stock data as a failed report, not just an in-message warning. Keep scheduled retries scoped to the pending completed session, and provide an explicit-date backfill path for longer outages rather than relabeling yesterday's prices as today.
 
-**Quiet-retry status rule:** a retry that is merely waiting for Yahoo's completed bars must end without a GitHub failure notification and without marking the report delivered. Unexpected errors must still fail the workflow.
+**Quiet-retry status rule:** any scheduled run, including a delayed primary run, that is merely waiting for Yahoo's completed bars must end without a GitHub failure notification or STOPPAD Telegram alert, and without marking the report delivered. Unexpected errors must still fail the workflow.
 
-**Why:** suppressing only Telegram errors still makes GitHub email the user on every scheduled retry; treating a waiting retry as successful without gating the delivery marker would permanently skip an unsent report.
+**Why:** suppressing only Telegram errors still makes GitHub email the user on every scheduled retry; a primary run delayed past midnight used to send an alarming STOPPAD notice despite having valid retry opportunities. Treating a waiting run as successful without gating the delivery marker would permanently skip an unsent report.
 
 **How to apply:** distinguish transient data-not-ready from real failures at the workflow boundary, and keep the delivery-marker step conditional on an actual send.
 
