@@ -1,0 +1,38 @@
+Det beror på den nya freeze-logiken vi bad Replit bygga in. I bilden står det faktiskt exakt vad som händer:
+”Officiellt Top 3 fryses kl. 16:30 svensk tid om både dagens Telegram-lista och EdgeAI-import finns.”
+
+Du har importerat 101 EdgeAI-signaler kl. 14:33, men systemet väntar fortfarande på två saker: dagens Telegram-lista och cutoff 16:30. Därför visas signalerna längst ned, men ingen av dem får ännu status Officiell Top 3.
+Så det är sannolikt inte ett fel i rankingen. Det är konsekvensen av att vi nyligen ändrade systemet för att undvika att den första datakällan som råkar komma in bestämmer dagens historiska Top 3.
+Men jag tycker UX:en bör förbättras
+Jag skulle inte vilja ha en tom ruta fram till 16:30. Jag skulle be Replit visa:
+”Preliminär Top 3” direkt efter EdgeAI-importen, beräknad på tillgängliga signaler.
+Sedan vid 16:30:
+”Officiell Top 3” fryses point-in-time och används i all statistik.
+Och det behövs en viktig fallback. Om Telegram av någon anledning inte kommer den dagen får systemet inte stå utan Top 3 hela dagen. Vid 16:30 bör det i stället frysa urvalet från de källor som faktiskt finns och visa exempelvis:
+⚠️ Official Top 3 frozen from EdgeAI only — Telegram source unavailable.
+
+Jag skulle skicka detta till Replit:
+Improve Top3 selection UX without changing official-top3-v1 ranking logic.
+
+1. Before the 16:30 cutoff, whenever at least one valid source has been imported,
+   calculate and display a PRELIMINARY Top 3 using the same server-side selectionPolicy.
+   Label it clearly "Preliminär Top 3 – kan ändras före 16:30".
+   Preliminary picks must never enter official performance analytics.
+
+2. At 16:30 Europe/Stockholm:
+   - if EdgeAI + Telegram are both available, freeze Official Top 3 from both.
+   - if only one source is available, freeze Official Top 3 from the available source
+     and persist a warning/source-completeness flag.
+   - never leave the day without an official snapshot merely because one expected
+     source failed to arrive.
+
+3. Show status clearly:
+   EdgeAI: received / missing
+   Telegram: received / missing
+   Official freeze: countdown / frozen
+   Source set used in official snapshot.
+
+4. Do not change ranking weights, eligibility rules or historical snapshots.
+
+Det här blir enligt mig bättre än att ta bort freeze-funktionen. Freeze-funktionen är bra för vår statistik; det som saknas är bara en användbar preliminär vy före 16:30.
+Och jag skulle särskilt vilja att appen redan nu visar vilka av de 101 signalerna som är TRADEABLE / WAIT / BLOCKED, för då kan vi börja analysera kandidaterna utan att förstöra den officiella OOS-mätningen.
