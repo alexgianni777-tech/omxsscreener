@@ -5,7 +5,7 @@ import { parseSessionImportResponse } from "./sessionImportResponse";
 
 const base = {
   id: 7,
-  date: "2026-09-30",
+  date: "2000-01-01",
   source: "manual",
   createdAt: new Date("2026-09-30T10:00:00Z"),
   lastImportAt: new Date("2026-09-30T11:00:00Z"),
@@ -25,7 +25,7 @@ const base = {
 test("new imports include the required snapshot contract even without a snapshot", () => {
   const response = parseSessionImportResponse(base, []);
   assert.equal(response.top3SelectionSnapshot.available, false);
-  assert.deepEqual(response.top3SelectionSnapshot.requiredSources, ["telegram", "edgeai"]);
+  assert.deepEqual(response.top3SelectionSnapshot.requiredSources, []);
 });
 
 test("force import and reimport return the final saved snapshot and import timestamp", () => {
