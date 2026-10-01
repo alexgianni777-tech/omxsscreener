@@ -47,6 +47,52 @@ test("force import and reimport return the final saved snapshot and import times
   assert.deepEqual(response.importDiff, diff);
 });
 
+test("import responses derive live source receipts from final raw DB candidates", () => {
+  const now = new Date("2026-09-30T10:00:00.000Z");
+  const rawCandidate = {
+    id: 18,
+    ticker: "LIVE",
+    category: "MOMENTUM",
+    rank: 1,
+    market: "SE",
+    direction: "LONG",
+    signalSource: "telegram",
+    signalDate: "2026-09-30",
+    createdAt: new Date("2026-09-30T09:30:00.000Z"),
+    price: 100,
+    perf1m: 4,
+    rs3m: 3,
+    rsi: 50,
+    pctB: 0.5,
+    distFrom20dH: 1,
+    edgeExpectancyR: null,
+    edgeSampleN: null,
+    signalAgeBars: null,
+    maxHoldDays: 10,
+    signalRsi: null,
+    signalGapPct: null,
+    volMultiplier: 1,
+    volumeAsOf: "2026-09-29",
+    earningsInDays: 30,
+    earningsKnowledge: "SIGNAL_TIME",
+    entryPrice: 100,
+    stopPrice: 95,
+    targetPrice: 106,
+    rr: 1.2,
+  } as any;
+  const response = parseSessionImportResponse(
+    { ...base, date: "2026-09-30" },
+    [],
+    undefined,
+    [rawCandidate],
+    now,
+  );
+
+  assert.equal(response.top3LiveSelection?.previewAvailable, true);
+  assert.equal(response.top3LiveSelection?.sourceReceipts.telegram.candidateCount, 1);
+  assert.equal(response.top3LiveSelection?.picks[0]?.candidateId, rawCandidate.id);
+});
+
 test("invalid candidates throw during response construction, before the route transaction commits", () => {
   assert.throws(() => parseSessionImportResponse(base, [{ ticker: "INVALID" }]));
 });

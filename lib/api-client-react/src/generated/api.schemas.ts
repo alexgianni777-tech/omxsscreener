@@ -907,6 +907,58 @@ export interface Top3SelectionSnapshotStatus {
   requiredSources: Top3SelectionSnapshotStatusRequiredSourcesItem[];
 }
 
+export interface Top3LiveSourceReceipt {
+  received: boolean;
+  candidateCount: number;
+  receivedBeforeCutoff: boolean;
+}
+
+export type Top3LiveSelectionPickMarket = typeof Top3LiveSelectionPickMarket[keyof typeof Top3LiveSelectionPickMarket];
+
+
+export const Top3LiveSelectionPickMarket = {
+  SE: 'SE',
+  US: 'US',
+} as const;
+
+export type Top3LiveSelectionPickDirection = typeof Top3LiveSelectionPickDirection[keyof typeof Top3LiveSelectionPickDirection];
+
+
+export const Top3LiveSelectionPickDirection = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
+export type Top3LiveSelectionPickSignalSource = typeof Top3LiveSelectionPickSignalSource[keyof typeof Top3LiveSelectionPickSignalSource];
+
+
+export const Top3LiveSelectionPickSignalSource = {
+  telegram: 'telegram',
+  edgeai: 'edgeai',
+} as const;
+
+export interface Top3LiveSelectionPick {
+  candidateId: number;
+  rank: number;
+  score: number;
+  market: Top3LiveSelectionPickMarket;
+  direction: Top3LiveSelectionPickDirection;
+  signalSource: Top3LiveSelectionPickSignalSource;
+}
+
+export type Top3LiveSelectionSourceReceipts = {
+  telegram: Top3LiveSourceReceipt;
+  edgeai: Top3LiveSourceReceipt;
+};
+
+export interface Top3LiveSelection {
+  evaluatedAt: string;
+  cutoffAt: string;
+  previewAvailable: boolean;
+  sourceReceipts: Top3LiveSelectionSourceReceipts;
+  picks: Top3LiveSelectionPick[];
+}
+
 export type SessionReview = SignalReview & {
   tradableCount: number;
 };
@@ -1078,6 +1130,8 @@ export interface SessionDetail {
   /** What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads. */
   importDiff?: ImportDiff;
   top3SelectionSnapshot: Top3SelectionSnapshotStatus;
+  /** Read-only same-day source receipts and preliminary picks; omitted for historical sessions. */
+  top3LiveSelection?: Top3LiveSelection;
 }
 
 /**

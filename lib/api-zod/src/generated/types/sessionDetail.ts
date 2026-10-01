@@ -10,6 +10,7 @@ import type { ImportDiff } from './importDiff';
 import type { MarketWeather } from './marketWeather';
 import type { SessionDetailEdgeRegime } from './sessionDetailEdgeRegime';
 import type { SessionReview } from './sessionReview';
+import type { Top3LiveSelection } from './top3LiveSelection';
 import type { Top3SelectionSnapshotStatus } from './top3SelectionSnapshotStatus';
 
 export interface SessionDetail {
@@ -41,4 +42,6 @@ export interface SessionDetail {
   /** What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads. */
   importDiff?: ImportDiff;
   top3SelectionSnapshot: Top3SelectionSnapshotStatus;
+  /** Read-only same-day source receipts and preliminary picks; omitted for historical sessions. */
+  top3LiveSelection?: Top3LiveSelection;
 }

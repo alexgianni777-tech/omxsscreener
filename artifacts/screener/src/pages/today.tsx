@@ -7,14 +7,16 @@
  *  3. Klicka VANN / FÖRLORADE per pick → loggar till challenge + markerar utfall
  *  4. "Kolla priser" → hämtar live-priser via Yahoo Finance, auto-föreslår utfall
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import {
   TrendingUp, TrendingDown, Trophy, ChevronRight,
   Target, Settings2, CheckCircle2, XCircle, RefreshCw, Zap, AlertTriangle,
   Star,
 } from "lucide-react";
+import { LiveTop3Preview, DecisionBadge, EdgeAiStatusTotals, type LiveSelection } from "../components/LiveTop3Preview";
 import { edgeAiMetrics } from "../lib/edgeAiMetrics";
+import { createLatestRequestGuard } from "../lib/latestRequestGuard";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const api = (p: string) => `${BASE}/api${p}`;
@@ -30,14 +32,13 @@ function pct(n: number, dec = 1) {
 }
 
 function todayISO() {
-  // Explicit YYYY-MM-DD in local time — toLocaleDateString output format varies by browser/OS
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  // Stockholm calendar date, independent of browser timezone
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm" }).format(new Date());
 }
 
 function sessionLabel(date: string): string {
   const today = todayISO();
-  const yesterday = new Date(Date.now() - 86_400_000).toLocaleDateString("sv-SE");
+  const yesterday = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm" }).format(new Date(Date.now() - 86_400_000));
   if (date === today) return "IDAG";
   if (date === yesterday) return "IGÅR";
   return new Date(date).toLocaleDateString("sv-SE", { weekday: "short", day: "numeric", month: "short" }).toUpperCase();
@@ -111,6 +112,7 @@ type Session = {
     trendLabel: string;
   } | null;
   candidates: Candidate[];
+  top3LiveSelection?: LiveSelection | null;
   top3SelectionSnapshot?: {
     available: boolean;
     state: "AVAILABLE" | "WAITING_FOR_CUTOFF" | "EVALUATING" | "MISSING_SOURCES" | "LEGACY_UNAVAILABLE";
@@ -158,6 +160,7 @@ export function Today() {
   const [session, setSession] = useState<Session | null>(null);
   const [challenge, setChallenge] = useState<ChallengeData | null>(null);
   const [loading, setLoading] = useState(true);
+  const refreshGuard = useRef(createLatestRequestGuard());
 
   // per-trade logging state
   const [logging, setLogging] = useState<number | null>(null); // candidate id
@@ -191,15 +194,18 @@ export function Today() {
   };
 
   const load = async () => {
+    const isCurrent = refreshGuard.current.begin();
     try {
       const [sessionsRes, challengeRes] = await Promise.all([
         fetch(api("/screener/sessions")).then(r => r.ok ? r.json() : []),
         fetch(api("/survival")).then(r => r.ok ? r.json() : null).catch(() => null),
       ]);
+      if (!isCurrent()) return;
 
       if (Array.isArray(sessionsRes) && sessionsRes.length > 0) {
         const latest = sessionsRes[0];
         const detail = await fetch(api(`/screener/sessions/${latest.id}`)).then(r => r.json());
+        if (!isCurrent()) return;
         setSession(detail);
       }
 
@@ -212,15 +218,18 @@ export function Today() {
         }
       }
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   };
 
   useEffect(() => {
     load();
-    // Auto-refresh every 5 min so new screener imports appear without manual reload
-    const interval = setInterval(load, 5 * 60_000);
-    return () => clearInterval(interval);
+    // Refresh source arrivals and the official cutoff result without manual reload.
+    const interval = setInterval(load, 30_000);
+    return () => {
+      clearInterval(interval);
+      refreshGuard.current.invalidate();
+    };
   }, []);
 
   // ── derived ───────────────────────────────────────────────────────────────
@@ -538,7 +547,7 @@ export function Today() {
             </span>
           </div>
         )}
-        {picks.length === 0 && !loading && (
+        {picks.length === 0 && !loading && !(session && isToday && session.top3LiveSelection) && (
           <div className={`text-sm text-center py-12 border border-dashed rounded-xl ${
             session && !isToday
               ? "text-amber-600 border-amber-500/30 bg-amber-500/5"
@@ -547,13 +556,22 @@ export function Today() {
             {session && !isToday
               ? !session.top3SelectionSnapshot?.available
                 ? `Officiellt Top 3-urval saknas för äldre session ${session.date}; historiska picks räknas inte om eller återskapas.${edgeAiCandidates.length ? " Importerade EdgeAI-signaler visas separat nedan." : ""}`
-                : `Senaste sessionen är från ${new Date(`${session.date}T12:00:00`).toLocaleDateString("sv-SE", { weekday: "long", day: "numeric", month: "short" })}. Inga signaler valdes som officiella picks i snapshoten. En ny signal kontrolleras automatiskt var 5:e minut.`
+                : `Senaste sessionen är från ${new Date(`${session.date}T12:00:00`).toLocaleDateString("sv-SE", { weekday: "long", day: "numeric", month: "short" })}. Inga signaler valdes som officiella picks i snapshoten. En ny signal kontrolleras automatiskt var 30:e sekund.`
               : session && !session.top3SelectionSnapshot?.available
                 ? session.top3SelectionSnapshot?.unavailableReason ?? "Officiellt Top 3-urval saknas för den här sessionen."
               : session?.sessionReview?.status === "BLOCKED"
                 ? "Ingen kvalificerad trade idag — signalerna stoppades av risk- och datakvalitetsregler."
-                : "Inga picks idag ännu — kontrolleras automatiskt var 5:e minut från börsöppningen kl 09:00."}
+                : "Inga picks idag ännu — kontrolleras automatiskt var 30:e sekund."}
           </div>
+        )}
+        {session && isToday && session.top3LiveSelection && (
+          <LiveTop3Preview
+            live={session.top3LiveSelection}
+            candidates={allCandidates}
+            frozen={session.top3SelectionSnapshot}
+            sessionId={session.id}
+            onCutoff={load}
+          />
         )}
         {session && edgeAiCandidates.length > 0 && (
           <div data-testid="edgeai-import-preview" className="mt-3 rounded-xl border border-border bg-card p-4">
@@ -569,13 +587,15 @@ export function Today() {
                 Visa alla <ChevronRight className="inline h-3 w-3" />
               </Link>
             </div>
+            <EdgeAiStatusTotals candidates={edgeAiCandidates} />
             <div className="mt-3 flex flex-wrap gap-2">
               {edgeAiCandidates.slice(0, 6).map(candidate => (
-                <span key={candidate.id} className="rounded-md border border-border bg-muted/50 px-2 py-1 text-xs">
+                <span key={candidate.id} title={candidate.decision?.reasons.join(" ") || undefined} className="rounded-md border border-border bg-muted/50 px-2 py-1 text-xs">
                   <span className="font-mono font-semibold">{candidate.ticker}</span>
                   <span className="ml-1.5 text-muted-foreground">
                     {candidate.market ?? "—"} · {candidate.direction === "SHORT" ? "Sälj" : "Köp"}
                   </span>
+                  <span className="ml-1.5"><DecisionBadge decision={candidate.decision} /></span>
                 </span>
               ))}
               {edgeAiCandidates.length > 6 && (

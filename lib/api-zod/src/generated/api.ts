@@ -25,6 +25,16 @@ export const ImportSessionBody = zod.object({
   "force": zod.boolean().optional().describe('If true, replace the existing session for this date while preserving logged outcomes')
 })
 
+export const importSessionResponseTop3LiveSelectionSourceReceiptsTelegramCandidateCountMultipleOf = 1;
+
+export const importSessionResponseTop3LiveSelectionSourceReceiptsEdgeaiCandidateCountMultipleOf = 1;
+
+export const importSessionResponseTop3LiveSelectionPicksItemCandidateIdMultipleOf = 1;
+
+export const importSessionResponseTop3LiveSelectionPicksItemRankMultipleOf = 1;
+
+
+
 export const ImportSessionResponse = zod.object({
   "id": zod.number(),
   "date": zod.string().describe('YYYY-MM-DD'),
@@ -163,7 +173,32 @@ export const ImportSessionResponse = zod.object({
   "evaluatedAt": zod.coerce.date().nullable(),
   "participatingSources": zod.array(zod.enum(['telegram', 'edgeai'])).nullable(),
   "requiredSources": zod.array(zod.enum(['telegram', 'edgeai']))
+}),
+  "top3LiveSelection": zod.object({
+  "evaluatedAt": zod.coerce.date(),
+  "cutoffAt": zod.coerce.date(),
+  "previewAvailable": zod.boolean(),
+  "sourceReceipts": zod.object({
+  "telegram": zod.object({
+  "received": zod.boolean(),
+  "candidateCount": zod.number().multipleOf(importSessionResponseTop3LiveSelectionSourceReceiptsTelegramCandidateCountMultipleOf),
+  "receivedBeforeCutoff": zod.boolean()
+}),
+  "edgeai": zod.object({
+  "received": zod.boolean(),
+  "candidateCount": zod.number().multipleOf(importSessionResponseTop3LiveSelectionSourceReceiptsEdgeaiCandidateCountMultipleOf),
+  "receivedBeforeCutoff": zod.boolean()
 })
+}),
+  "picks": zod.array(zod.object({
+  "candidateId": zod.number().multipleOf(importSessionResponseTop3LiveSelectionPicksItemCandidateIdMultipleOf),
+  "rank": zod.number().multipleOf(importSessionResponseTop3LiveSelectionPicksItemRankMultipleOf),
+  "score": zod.number(),
+  "market": zod.enum(['SE', 'US']),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "signalSource": zod.enum(['telegram', 'edgeai'])
+}))
+}).optional().describe('Read-only same-day source receipts and preliminary picks; omitted for historical sessions.')
 })
 
 
@@ -203,6 +238,16 @@ export const ReimportSessionBody = zod.object({
   "targetDate": zod.coerce.date().optional().describe('Optional trading-session date. The date inside rawText remains the source-data date.'),
   "force": zod.boolean().optional().describe('If true, replace the existing session for this date while preserving logged outcomes')
 })
+
+export const reimportSessionResponseTop3LiveSelectionSourceReceiptsTelegramCandidateCountMultipleOf = 1;
+
+export const reimportSessionResponseTop3LiveSelectionSourceReceiptsEdgeaiCandidateCountMultipleOf = 1;
+
+export const reimportSessionResponseTop3LiveSelectionPicksItemCandidateIdMultipleOf = 1;
+
+export const reimportSessionResponseTop3LiveSelectionPicksItemRankMultipleOf = 1;
+
+
 
 export const ReimportSessionResponse = zod.object({
   "id": zod.number(),
@@ -342,7 +387,32 @@ export const ReimportSessionResponse = zod.object({
   "evaluatedAt": zod.coerce.date().nullable(),
   "participatingSources": zod.array(zod.enum(['telegram', 'edgeai'])).nullable(),
   "requiredSources": zod.array(zod.enum(['telegram', 'edgeai']))
+}),
+  "top3LiveSelection": zod.object({
+  "evaluatedAt": zod.coerce.date(),
+  "cutoffAt": zod.coerce.date(),
+  "previewAvailable": zod.boolean(),
+  "sourceReceipts": zod.object({
+  "telegram": zod.object({
+  "received": zod.boolean(),
+  "candidateCount": zod.number().multipleOf(reimportSessionResponseTop3LiveSelectionSourceReceiptsTelegramCandidateCountMultipleOf),
+  "receivedBeforeCutoff": zod.boolean()
+}),
+  "edgeai": zod.object({
+  "received": zod.boolean(),
+  "candidateCount": zod.number().multipleOf(reimportSessionResponseTop3LiveSelectionSourceReceiptsEdgeaiCandidateCountMultipleOf),
+  "receivedBeforeCutoff": zod.boolean()
 })
+}),
+  "picks": zod.array(zod.object({
+  "candidateId": zod.number().multipleOf(reimportSessionResponseTop3LiveSelectionPicksItemCandidateIdMultipleOf),
+  "rank": zod.number().multipleOf(reimportSessionResponseTop3LiveSelectionPicksItemRankMultipleOf),
+  "score": zod.number(),
+  "market": zod.enum(['SE', 'US']),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "signalSource": zod.enum(['telegram', 'edgeai'])
+}))
+}).optional().describe('Read-only same-day source receipts and preliminary picks; omitted for historical sessions.')
 })
 
 
@@ -352,6 +422,16 @@ export const ReimportSessionResponse = zod.object({
 export const GetSessionParams = zod.object({
   "id": zod.coerce.number()
 })
+
+export const getSessionResponseTop3LiveSelectionSourceReceiptsTelegramCandidateCountMultipleOf = 1;
+
+export const getSessionResponseTop3LiveSelectionSourceReceiptsEdgeaiCandidateCountMultipleOf = 1;
+
+export const getSessionResponseTop3LiveSelectionPicksItemCandidateIdMultipleOf = 1;
+
+export const getSessionResponseTop3LiveSelectionPicksItemRankMultipleOf = 1;
+
+
 
 export const GetSessionResponse = zod.object({
   "id": zod.number(),
@@ -491,7 +571,32 @@ export const GetSessionResponse = zod.object({
   "evaluatedAt": zod.coerce.date().nullable(),
   "participatingSources": zod.array(zod.enum(['telegram', 'edgeai'])).nullable(),
   "requiredSources": zod.array(zod.enum(['telegram', 'edgeai']))
+}),
+  "top3LiveSelection": zod.object({
+  "evaluatedAt": zod.coerce.date(),
+  "cutoffAt": zod.coerce.date(),
+  "previewAvailable": zod.boolean(),
+  "sourceReceipts": zod.object({
+  "telegram": zod.object({
+  "received": zod.boolean(),
+  "candidateCount": zod.number().multipleOf(getSessionResponseTop3LiveSelectionSourceReceiptsTelegramCandidateCountMultipleOf),
+  "receivedBeforeCutoff": zod.boolean()
+}),
+  "edgeai": zod.object({
+  "received": zod.boolean(),
+  "candidateCount": zod.number().multipleOf(getSessionResponseTop3LiveSelectionSourceReceiptsEdgeaiCandidateCountMultipleOf),
+  "receivedBeforeCutoff": zod.boolean()
 })
+}),
+  "picks": zod.array(zod.object({
+  "candidateId": zod.number().multipleOf(getSessionResponseTop3LiveSelectionPicksItemCandidateIdMultipleOf),
+  "rank": zod.number().multipleOf(getSessionResponseTop3LiveSelectionPicksItemRankMultipleOf),
+  "score": zod.number(),
+  "market": zod.enum(['SE', 'US']),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "signalSource": zod.enum(['telegram', 'edgeai'])
+}))
+}).optional().describe('Read-only same-day source receipts and preliminary picks; omitted for historical sessions.')
 })
 
 

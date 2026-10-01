@@ -1081,6 +1081,65 @@ components:
             type: string
             enum: [telegram, edgeai]
 
+    Top3LiveSourceReceipt:
+      type: object
+      required: [received, candidateCount, receivedBeforeCutoff]
+      properties:
+        received:
+          type: boolean
+        candidateCount:
+          type: number
+          multipleOf: 1
+        receivedBeforeCutoff:
+          type: boolean
+
+    Top3LiveSelectionPick:
+      type: object
+      required: [candidateId, rank, score, market, direction, signalSource]
+      properties:
+        candidateId:
+          type: number
+          multipleOf: 1
+        rank:
+          type: number
+          multipleOf: 1
+        score:
+          type: number
+        market:
+          type: string
+          enum: [SE, US]
+        direction:
+          type: string
+          enum: [LONG, SHORT]
+        signalSource:
+          type: string
+          enum: [telegram, edgeai]
+
+    Top3LiveSelection:
+      type: object
+      required: [evaluatedAt, cutoffAt, previewAvailable, sourceReceipts, picks]
+      properties:
+        evaluatedAt:
+          type: string
+          format: date-time
+        cutoffAt:
+          type: string
+          format: date-time
+        previewAvailable:
+          type: boolean
+        sourceReceipts:
+          type: object
+          required: [telegram, edgeai]
+          properties:
+            telegram:
+              $ref: "#/components/schemas/Top3LiveSourceReceipt"
+            edgeai:
+              $ref: "#/components/schemas/Top3LiveSourceReceipt"
+        picks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Top3LiveSelectionPick"
+
     SessionReview:
       allOf:
         - $ref: "#/components/schemas/SignalReview"
@@ -1225,6 +1284,9 @@ components:
           $ref: "#/components/schemas/ImportDiff"
         top3SelectionSnapshot:
           $ref: "#/components/schemas/Top3SelectionSnapshotStatus"
+        top3LiveSelection:
+          description: Read-only same-day source receipts and preliminary picks; omitted for historical sessions.
+          $ref: "#/components/schemas/Top3LiveSelection"
 
     Top3AnalyticsPick:
       type: object

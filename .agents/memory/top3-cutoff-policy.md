@@ -14,3 +14,9 @@ description: User-chosen fixed Stockholm cutoff and truthful volume provenance.
 **Why:** The user wants today's EdgeAI trade ideas to remain usable with yesterday's completed OMXS30 prices, not a new preliminary morning Telegram report. Mixing a partial current-day index bar with prior-day stock bars would be misleading.
 
 **How to apply:** Align index context to the SE data-as-of day and verify that day's completed bar; keep signal date, market-data date, and Telegram candidate date distinct. Do not change the 16:30 selection cutoff merely to accommodate prior-close context.
+
+**Preliminary-view decision:** On 2026-10-01 the user explicitly kept the two-source requirement when offered a single-source official fallback. The requested preliminary Top 3 is a separate, changeable pre-cutoff view, not permission to relax official freezing.
+
+**Why:** The attached proposal included single-source fallback, but the user's explicit selection rejected that part. Useful live suggestions must not change the meaning of the official out-of-sample cohort.
+
+**How to apply:** Keep preliminary suggestions out of official performance statistics and historical snapshots. Preserve ranking and eligibility, and expose source completeness rather than treating yesterday's Telegram candidates as today's receipt.

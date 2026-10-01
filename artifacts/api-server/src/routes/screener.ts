@@ -39,6 +39,7 @@ import {
 import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
 import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
 import { describeTop3Snapshot } from "../lib/top3SnapshotStatus";
+import { buildTop3LiveSelection, type Top3LiveCandidate } from "../lib/top3LiveSelection";
 import { parseSessionImportResponse } from "../lib/sessionImportResponse";
 
 const router: IRouter = Router();
@@ -263,7 +264,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
         { id: updatedSession.id, date: updatedSession.date, source: aggregateSource },
         updatedCandidates,
       );
-      return validatedImportResponse(tx, updatedSession.id, updatedCandidates, diff);
+      return validatedImportResponse(tx, updatedSession.id, diff);
     });
 
     res.status(200).json(response);
@@ -313,7 +314,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
       { id: insertedSession.id, date: insertedSession.date, source: aggregateSource },
       insertedCandidates,
     );
-    return validatedImportResponse(tx, insertedSession.id, insertedCandidates);
+    return validatedImportResponse(tx, insertedSession.id);
   });
 
   res.status(201).json(response);
@@ -461,7 +462,7 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
         { id: updatedSession.id, date: updatedSession.date, source: aggregateSource },
         resultCandidates,
       );
-      return validatedImportResponse(tx, updatedSession.id, resultCandidates, diff);
+      return validatedImportResponse(tx, updatedSession.id, diff);
     });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Could not synchronize candidates" });
@@ -589,6 +590,12 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     .from(candidatesTable)
     .where(eq(candidatesTable.sessionId, session.id))
     .orderBy(candidatesTable.category, candidatesTable.rank);
+  const now = new Date();
+  const liveSelection = buildTop3LiveSelection(
+    session,
+    candidates as Top3LiveCandidate[],
+    now,
+  );
 
   const selectionSnapshots = await db
     .select()
@@ -623,7 +630,7 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     candidatesWithReview.map((candidate) => candidate.review),
     session.marketRsi,
   );
-  const snapshotStatus = describeTop3Snapshot(session);
+  const snapshotStatus = describeTop3Snapshot(session, now);
 
   const parsed = GetSessionResponse.parse({
     id: session.id,
@@ -643,6 +650,7 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     sessionReview,
     importDiff: (session.lastImportDiff as any) ?? undefined,
     top3SelectionSnapshot: snapshotStatus,
+    top3LiveSelection: liveSelection,
   });
 
   // Append fields not in Zod schema — passed through directly
@@ -658,6 +666,7 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     edgeN: session.edgeN ?? null,
     lastImportAt: session.lastImportAt ?? null,
     top3SelectionSnapshot: snapshotStatus,
+    top3LiveSelection: liveSelection,
   });
 });
 
@@ -722,17 +731,19 @@ async function fetchLinkedTradeIds(candidateIds: number[], query = db): Promise<
 async function validatedImportResponse(
   tx: any,
   sessionId: number,
-  candidates: (typeof candidatesTable.$inferSelect)[],
   diff?: import("../lib/candidateSynchronization").CandidateSyncDiff,
 ) {
   const [storedSession] = await tx.select().from(screenerSessionsTable)
     .where(eq(screenerSessionsTable.id, sessionId));
   if (!storedSession) throw new Error("Imported session is missing");
+  const candidates = await tx.select().from(candidatesTable)
+    .where(eq(candidatesTable.sessionId, sessionId)) as (typeof candidatesTable.$inferSelect)[];
   const linkedIds = await fetchLinkedTradeIds(candidates.map((candidate) => candidate.id), tx);
   return parseSessionImportResponse(
     storedSession,
     candidates.map((candidate) => mapCandidate(candidate, linkedIds.has(candidate.id))),
     diff,
+    candidates as Top3LiveCandidate[],
   );
 }
 
