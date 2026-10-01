@@ -15,6 +15,7 @@ import {
   Star,
 } from "lucide-react";
 import { LiveTop3Preview, DecisionBadge, EdgeAiStatusTotals, type LiveSelection } from "../components/LiveTop3Preview";
+import { TodayDiagnostics } from "../components/TodayDiagnostics";
 import { edgeAiMetrics } from "../lib/edgeAiMetrics";
 import { createLatestRequestGuard } from "../lib/latestRequestGuard";
 
@@ -80,14 +81,16 @@ type Candidate = {
   volMultiplier: number;
   volumeAsOf?: string | null;
   signalDate?: string | null;
+  createdAt?: string | null;
   signalRsi?: number | null;
   signalGapPct?: number | null;
   review?: { status: "APPROVED" | "WARN" | "BLOCKED"; reasons: string[] };
-  decision?: { status: "TRADEABLE" | "WAIT" | "BLOCKED" | "INVALID" | "STALE"; reasons: string[] };
+  decision?: { status: "TRADEABLE" | "WAIT" | "BLOCKED" | "INVALID" | "STALE" | "CONFLICT"; reasons: string[] };
   officialSelection?: {
     selected: boolean;
     rank: number | null;
     score: number;
+    decision?: { status: "TRADEABLE" | "WAIT" | "BLOCKED" | "INVALID" | "STALE" | "CONFLICT"; reasons: string[] };
     policyVersion: string;
     selectedAt: string;
     type: string;
@@ -563,6 +566,15 @@ export function Today() {
                 ? "Ingen kvalificerad trade idag — signalerna stoppades av risk- och datakvalitetsregler."
                 : "Inga picks idag ännu — kontrolleras automatiskt var 30:e sekund."}
           </div>
+        )}
+        {session && isToday && (
+          <TodayDiagnostics
+            sessionDate={session.date}
+            today={todayISO()}
+            candidates={allCandidates}
+            live={session.top3LiveSelection}
+            frozen={session.top3SelectionSnapshot}
+          />
         )}
         {session && isToday && session.top3LiveSelection && (
           <LiveTop3Preview

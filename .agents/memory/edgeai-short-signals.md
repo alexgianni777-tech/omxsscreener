@@ -34,20 +34,17 @@ validation. Do not emit Big Short candidates just because its criteria are
 broader; its out-of-sample metrics must independently pass the live quality
 gate.
 
-## How direction is mapped
-
-In both `edgeai.ts` route and `scheduler.ts`:
-```js
-const direction = s.dir === "short" ? "SHORT" : "LONG";
-```
-Exact lowercase match. EdgeAI sends `dir: "long"` or `dir: "short"` on each setup object.
-
 ## When shorts appear
 
-EdgeAI generates `dir: "short"` only when the Burry filter is both
-walk-forward validated and freshly triggered for an eligible weak stock. It is
-normal for the daily file to contain zero shorts when no candidate passes both
-tests.
+Short strategies must independently pass their walk-forward quality gates and
+freshly trigger for an eligible stock. It is normal for no shorts to qualify;
+do not weaken quality gates merely to fill the SHORT group.
+
+**Why:** The broader Big Short strategy is not permission to bypass validation
+or force a daily sell suggestion.
+
+**How to apply:** Distinguish generated setups, imported candidates, and
+TRADEABLE selections when investigating missing shorts.
 
 ## Why a database can show zero shorts
 
