@@ -9,14 +9,12 @@ import {
 } from "@workspace/db";
 import {
   ImportSessionBody,
-  ImportSessionResponse,
   ListSessionsResponse,
   GetSessionParams,
   GetSessionResponse,
   DeleteSessionParams,
   ReimportSessionParams,
   ReimportSessionBody,
-  ReimportSessionResponse,
   SetCandidateTop3AnnotationParams,
   SetCandidateTop3AnnotationBody,
   SetCandidateTop3AnnotationResponse,
@@ -41,6 +39,7 @@ import {
 import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
 import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
 import { describeTop3Snapshot } from "../lib/top3SnapshotStatus";
+import { parseSessionImportResponse } from "../lib/sessionImportResponse";
 
 const router: IRouter = Router();
 
@@ -223,7 +222,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
   // ---------- force re-import: preserve outcomes, replace everything else ----------
   if (existing.length > 0 && force) {
     const existingId = existing[0].id;
-    const { updatedSession, updatedCandidates, diff } = await db.transaction(async (tx) => {
+    const response = await db.transaction(async (tx) => {
       await lockScreenerSession(tx, session.date);
       // Re-read under the same lock used by outcome mutation; a pre-lock copy
       // could otherwise merge stale PENDING/null resolution fields.
@@ -264,26 +263,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
         { id: updatedSession.id, date: updatedSession.date, source: aggregateSource },
         updatedCandidates,
       );
-      return { updatedSession: { ...updatedSession, source: aggregateSource }, updatedCandidates, diff };
-    });
-
-    const linkedIds = await fetchLinkedTradeIds(updatedCandidates.map((c: any) => c.id));
-    const response = ImportSessionResponse.parse({
-      id: updatedSession.id,
-      date: updatedSession.date,
-      source: updatedSession.source ?? null,
-      createdAt: updatedSession.createdAt ?? null,
-      lastImportAt: updatedSession.lastImportAt ?? null,
-      marketWeather: {
-        omxsValue: updatedSession.omxsValue,
-        perf5d: updatedSession.perf5d,
-        perf1m: updatedSession.perf1m,
-        perf3m: updatedSession.perf3m,
-        rsi: updatedSession.marketRsi,
-        trendLabel: updatedSession.trendLabel,
-      },
-      candidates: updatedCandidates.map((c: any) => mapCandidate(c, linkedIds.has(c.id))),
-      importDiff: diff,
+      return validatedImportResponse(tx, updatedSession.id, updatedCandidates, diff);
     });
 
     res.status(200).json(response);
@@ -291,7 +271,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
   }
 
   // ---------- normal insert (no existing session) ----------
-  const { insertedSession, insertedCandidates } = await db.transaction(async (tx) => {
+  const response = await db.transaction(async (tx) => {
     await lockScreenerSession(tx, session.date);
     const [alreadyStored] = await tx
       .select({ id: screenerSessionsTable.id })
@@ -333,24 +313,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
       { id: insertedSession.id, date: insertedSession.date, source: aggregateSource },
       insertedCandidates,
     );
-    return { insertedSession: { ...insertedSession, source: aggregateSource }, insertedCandidates };
-  });
-
-  const response = ImportSessionResponse.parse({
-    id: insertedSession.id,
-    date: insertedSession.date,
-    source: insertedSession.source ?? null,
-    createdAt: insertedSession.createdAt ?? null,
-    lastImportAt: insertedSession.lastImportAt ?? null,
-    marketWeather: {
-      omxsValue: insertedSession.omxsValue,
-      perf5d: insertedSession.perf5d,
-      perf1m: insertedSession.perf1m,
-      perf3m: insertedSession.perf3m,
-      rsi: insertedSession.marketRsi,
-      trendLabel: insertedSession.trendLabel,
-    },
-    candidates: insertedCandidates.map((c: any) => mapCandidate(c)),
+    return validatedImportResponse(tx, insertedSession.id, insertedCandidates);
   });
 
   res.status(201).json(response);
@@ -427,11 +390,9 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
     _yf,
     parsedSession.date,
   );
-  let updatedSession: typeof existingSession;
-  let resultCandidates: (typeof candidatesTable.$inferSelect)[];
-  let diff: import("../lib/candidateSynchronization").CandidateSyncDiff;
+  let response: ReturnType<typeof parseSessionImportResponse>;
   try {
-    ({ updatedSession, resultCandidates, diff } = await db.transaction(async (tx) => {
+    response = await db.transaction(async (tx) => {
       await lockScreenerSession(tx, existingSession.date);
       const [updatedSession] = await tx
         .update(screenerSessionsTable)
@@ -500,33 +461,14 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
         { id: updatedSession.id, date: updatedSession.date, source: aggregateSource },
         resultCandidates,
       );
-      return { updatedSession: { ...updatedSession, source: aggregateSource }, resultCandidates, diff };
-    }));
+      return validatedImportResponse(tx, updatedSession.id, resultCandidates, diff);
+    });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : "Could not synchronize candidates" });
     return;
   }
 
-  const linkedIds = await fetchLinkedTradeIds(resultCandidates.map((c) => c.id));
-  res.json(
-    ReimportSessionResponse.parse({
-      id: updatedSession.id,
-      date: updatedSession.date,
-      source: updatedSession.source ?? null,
-      createdAt: updatedSession.createdAt ?? null,
-      lastImportAt: updatedSession.lastImportAt ?? null,
-      marketWeather: {
-        omxsValue: updatedSession.omxsValue,
-        perf5d: updatedSession.perf5d,
-        perf1m: updatedSession.perf1m,
-        perf3m: updatedSession.perf3m,
-        rsi: updatedSession.marketRsi,
-        trendLabel: updatedSession.trendLabel,
-      },
-      candidates: resultCandidates.map((c) => mapCandidate(c, linkedIds.has(c.id))),
-      importDiff: diff,
-    })
-  );
+  res.json(response);
 });
 
 // GET /screener/sessions
@@ -767,13 +709,31 @@ router.delete("/screener/sessions/:id", async (req, res): Promise<void> => {
 });
 
 /** Fetch which of the given candidate ids have a linked Challenge Tracker trade. */
-async function fetchLinkedTradeIds(candidateIds: number[]): Promise<Set<number>> {
+async function fetchLinkedTradeIds(candidateIds: number[], query = db): Promise<Set<number>> {
   if (candidateIds.length === 0) return new Set();
-  const rows = await db
+  const rows = await query
     .select({ sourceCandidateId: survivalTradesTable.sourceCandidateId })
     .from(survivalTradesTable)
     .where(inArray(survivalTradesTable.sourceCandidateId, candidateIds));
   return new Set(rows.map((r) => r.sourceCandidateId).filter((id): id is number => id != null));
+}
+
+/** Read the final snapshot metadata and validate before committing any writes. */
+async function validatedImportResponse(
+  tx: any,
+  sessionId: number,
+  candidates: (typeof candidatesTable.$inferSelect)[],
+  diff?: import("../lib/candidateSynchronization").CandidateSyncDiff,
+) {
+  const [storedSession] = await tx.select().from(screenerSessionsTable)
+    .where(eq(screenerSessionsTable.id, sessionId));
+  if (!storedSession) throw new Error("Imported session is missing");
+  const linkedIds = await fetchLinkedTradeIds(candidates.map((candidate) => candidate.id), tx);
+  return parseSessionImportResponse(
+    storedSession,
+    candidates.map((candidate) => mapCandidate(candidate, linkedIds.has(candidate.id))),
+    diff,
+  );
 }
 
 function mapCandidate(c: {
