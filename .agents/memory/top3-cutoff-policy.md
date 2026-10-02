@@ -15,6 +15,12 @@ description: Refresh current recommendations, accept one previous close with tru
 
 **How to apply:** Use today's Stockholm trading/display session while retaining the real report date and market-data date. Show accepted delay explicitly in source diagnostics and recommendations. Apply the same limit to manual and scheduled EdgeAI imports and Telegram pastes/imports. Do not accept unknown dates, future reports or a second previous weekday close, and do not bypass independent risk/quality guards. The weekday policy handles weekends; it does not infer exchange-specific holidays.
 
+**Calendar-provenance constraint:** Accepting previous-close reports must not be confused with having verified their earnings risk. If checking the calendar today, retain today's observation provenance rather than claiming it was known on the original report day.
+
+**Why:** Accepting report delay while skipping calendar lookups for prior-date reports leaves otherwise usable signals waiting indefinitely on Rule 7, despite complete source receipts.
+
+**How to apply:** Diagnose source completeness separately from eligibility. Do not solve missing calendar evidence by disabling Rule 7 or fabricating a historical observation; an actual current-day check needs truthful provenance and must leave prior trades and frozen cohorts unchanged.
+
 **New-report identity rule:** A newly dated source report is a new signal, not permission to mutate the old registered trade's source date, plan or outcome.
 
 **Why:** A previous-close signal can legitimately be followed by today's refreshed signal within the same trading session. Their execution history must remain distinguishable.
@@ -42,6 +48,6 @@ pastes remain manual; prior manual rows are not retrospectively relabeled.
 participation without treating every pasted report as verified Telegram.
 
 **How to apply:** Carry explicit confirmation through initial import and
-reimport. Confirmation cannot make yesterday's signals current or add later
+reimport. Confirmation cannot rewrite the original report date or add later
 arrivals to the original frozen statistical cohort. Later valid signals can enter
 a new recommendation version. Preserve existing outcomes and previous versions.
