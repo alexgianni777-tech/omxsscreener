@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 
-import { candidatesTable, screenerSessionsTable, top3SelectionSnapshotsTable } from "@workspace/db";
+import { candidatesTable, screenerSessionsTable, top3SelectionSnapshotsTable, survivalTradesTable } from "@workspace/db";
 import { logger } from "./logger";
 import { candidateOrigin } from "./candidateOrigin";
 import {
@@ -240,6 +240,12 @@ export async function synchronizeCandidates(
   const existingByIdentity = new Map<string, any>(
     existing.map((candidate) => [candidateIdentity(candidate), candidate]),
   );
+  const linkedTrades: Array<{ candidateId: number }> = existing.length
+    ? await tx.select({ candidateId: survivalTradesTable.sourceCandidateId })
+      .from(survivalTradesTable)
+      .where(inArray(survivalTradesTable.sourceCandidateId, existing.map((row) => row.id)))
+    : [];
+  const registeredCandidateIds = new Set(linkedTrades.map((row) => row.candidateId));
   const incomingIdentities = new Set(incoming.map(candidateIdentity));
   const protectedCandidateIds = new Set<number>();
   if (protectPreCutoffCohort && session) {
@@ -272,6 +278,8 @@ export async function synchronizeCandidates(
       // imports rewrite either its signal/plan fields or its identity fields.
       // Outcome updates remain handled by the dedicated outcome PATCH path.
       if (selectedCandidateIds.has(current.id)) continue;
+      if (registeredCandidateIds.has(current.id) ||
+        ["WIN", "LOSS", "TIME_EXIT", "SKIP"].includes(current.outcome)) continue;
 
       // A known source date is immutable. Legacy NULL means unknown and must
       // remain unknown rather than being retrospectively backfilled.
@@ -339,6 +347,7 @@ export async function synchronizeCandidates(
     (candidate: any) =>
       candidate.outcome === "PENDING" &&
       !selectedCandidateIds.has(candidate.id) &&
+      !registeredCandidateIds.has(candidate.id) &&
       !protectedCandidateIds.has(candidate.id) &&
       !incomingIdentities.has(candidateIdentity(candidate)),
   );

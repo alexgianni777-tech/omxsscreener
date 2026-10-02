@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { screenerSessionsTable, top3SelectionSnapshotsTable } from "@workspace/db";
+import { screenerSessionsTable, top3SelectionSnapshotsTable, survivalTradesTable } from "@workspace/db";
 
 import {
   candidateIdentity,
@@ -47,6 +47,7 @@ function synchronizationTx(
   snapshots: Array<{ candidateId: number; selected: boolean }>,
   incoming: any[],
   session?: any,
+  linkedTrades: Array<{ candidateId: number }> = [],
 ) {
   const tx: any = {
     select: () => {
@@ -68,6 +69,7 @@ function synchronizationTx(
               ? snapshots.filter((snapshot) => snapshot.selected)
               : selectedTable === screenerSessionsTable
                 ? (session ? [session] : [])
+              : selectedTable === survivalTradesTable ? linkedTrades
               : candidates,
           ).then(resolve, reject);
         },
@@ -168,6 +170,25 @@ test("selected snapshot candidates keep their row and signal plan through reimpo
     [[101, 1, 100, 110]],
   );
   assert.ok(candidates.some((candidate) => candidate.id === 102));
+});
+
+test("resolved and linked pending trades retain their original complete plan on reimport", async () => {
+  for (const outcome of ["WIN", "PENDING"]) {
+    const original = {
+      ...row("REGISTERED", "SE", outcome as Row["outcome"]),
+      id: 989, signalDate: "2026-10-02", price: 100,
+      entryPrice: 100, stopPrice: 95, targetPrice: 110, rr: 2,
+      exitPrice: outcome === "WIN" ? 110 : null, realizedR: outcome === "WIN" ? 2 : null,
+    };
+    const before = structuredClone(original);
+    const incoming = [{ ...original, price: 120, entryPrice: 120, stopPrice: 114, targetPrice: 132 }];
+    const result = await synchronizeCandidates(
+      synchronizationTx([original], [], incoming, undefined, outcome === "PENDING" ? [{ candidateId: original.id }] : []),
+      91, incoming,
+    );
+    assert.deepEqual(original, before);
+    assert.equal(result.diff.updated.length, 0);
+  }
 });
 
 test("selected snapshot and Today retain the same candidate identity", async () => {

@@ -6,6 +6,7 @@ import {
   candidatesTable,
   survivalTradesTable,
   top3SelectionSnapshotsTable,
+  top3SelectionRevisionsTable,
 } from "@workspace/db";
 import {
   ImportSessionBody,
@@ -39,6 +40,7 @@ import {
 import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
 import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
 import { describeTop3Snapshot } from "../lib/top3SnapshotStatus";
+import { mapTop3Revision } from "../lib/top3SelectionRevisions";
 import { buildTop3LiveSelection, type Top3LiveCandidate } from "../lib/top3LiveSelection";
 import { parseSessionImportResponse } from "../lib/sessionImportResponse";
 import { pastedSignalSource } from "../lib/pastedSignalSource";
@@ -146,7 +148,10 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     const wouldRemove = pendingCandidatesToRemove(
       existingRows as Array<typeof existingRows[number] & { category: string }>,
       session.candidates.map((c) => ({ ...c, market: "SE", signalSource })),
-      new Set(selectedSnapshotRows.map((row) => row.candidateId)),
+      new Set([
+        ...selectedSnapshotRows.map((row) => row.candidateId),
+        ...await fetchLinkedTradeIds(existingRows.map((row) => row.id)),
+      ]),
     );
 
     res.status(409).json({
@@ -264,7 +269,9 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
       await snapshotNewSessionTop3(
         tx,
         { id: updatedSession.id, date: updatedSession.date, source: aggregateSource },
-        updatedCandidates,
+        session.candidates.map((candidate) =>
+          buildCandidateRow(updatedSession.id, candidate, earningsBatch.get(candidate.ticker) ?? UNKNOWN_EARNINGS),
+        ),
       );
       return validatedImportResponse(tx, updatedSession.id, diff);
     });
@@ -314,7 +321,9 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     await snapshotNewSessionTop3(
       tx,
       { id: insertedSession.id, date: insertedSession.date, source: aggregateSource },
-      insertedCandidates,
+      session.candidates.map((candidate) =>
+        buildCandidateRow(insertedSession.id, candidate, earningsBatch.get(candidate.ticker) ?? UNKNOWN_EARNINGS),
+      ),
     );
     return validatedImportResponse(tx, insertedSession.id);
   });
@@ -471,7 +480,7 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
       await snapshotNewSessionTop3(
         tx,
         { id: updatedSession.id, date: updatedSession.date, source: aggregateSource },
-        resultCandidates,
+        rows,
       );
       return validatedImportResponse(tx, updatedSession.id, diff);
     });
@@ -613,6 +622,9 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     .from(top3SelectionSnapshotsTable)
     .where(eq(top3SelectionSnapshotsTable.sessionId, session.id));
   const selectionByCandidate = new Map(selectionSnapshots.map((snapshot) => [snapshot.candidateId, snapshot]));
+  const revisions = await db.select().from(top3SelectionRevisionsTable)
+    .where(eq(top3SelectionRevisionsTable.sessionId, session.id));
+  revisions.sort((a, b) => b.revision - a.revision);
 
   const linkedIds = await fetchLinkedTradeIds(candidates.map((c) => c.id));
   const candidatesWithReview = candidates.map((candidate) => {
@@ -662,6 +674,7 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     importDiff: (session.lastImportDiff as any) ?? undefined,
     top3SelectionSnapshot: snapshotStatus,
     top3LiveSelection: liveSelection,
+    top3Revisions: revisions.map(mapTop3Revision),
   });
 
   // Append fields not in Zod schema — passed through directly

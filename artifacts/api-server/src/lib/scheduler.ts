@@ -202,7 +202,8 @@ async function runImport(date: string): Promise<void> {
         await snapshotNewSessionTop3(
           tx,
           { id: alreadyStored.id, date, source },
-          synchronizedCandidates,
+          mapped,
+          undefined, ["edgeai"],
         );
         logger.info(
           { date, sessionId: alreadyStored.id, seSetups: seSetups.length, usSetups: usSetups.length },
@@ -236,7 +237,8 @@ async function runImport(date: string): Promise<void> {
       await snapshotNewSessionTop3(
         tx,
         { id: inserted.id, date, source: "edgeai" },
-        insertedCandidates,
+        mapped,
+        undefined, ["edgeai"],
       );
       // Fresh insert: nothing existed before, so a diff would be all-"added" noise — skip it.
       logger.info(

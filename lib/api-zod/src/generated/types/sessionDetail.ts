@@ -11,6 +11,7 @@ import type { MarketWeather } from './marketWeather';
 import type { SessionDetailEdgeRegime } from './sessionDetailEdgeRegime';
 import type { SessionReview } from './sessionReview';
 import type { Top3LiveSelection } from './top3LiveSelection';
+import type { Top3Revision } from './top3Revision';
 import type { Top3SelectionSnapshotStatus } from './top3SelectionSnapshotStatus';
 
 export interface SessionDetail {
@@ -44,4 +45,6 @@ export interface SessionDetail {
   top3SelectionSnapshot: Top3SelectionSnapshotStatus;
   /** Read-only same-day source receipts and preliminary picks; omitted for historical sessions. */
   top3LiveSelection?: Top3LiveSelection;
+  /** Append-only current recommendation versions, newest first. Original official snapshots and actual trade records are not rewritten. */
+  top3Revisions?: Top3Revision[];
 }

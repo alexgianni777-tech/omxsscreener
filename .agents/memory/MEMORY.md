@@ -14,5 +14,5 @@
 - [Trading Outcome Integrity](trading-outcome-integrity.md) — actual fills, immutable R inputs, Rule 7 provenance, Challenge sync, and import/outcome locking rules.
 - [Source-balanced ranking](source-balanced-ranking.md) — rank within each signal source, then interleave; never compare overloaded EdgeAI and Telegram fields directly.
 - [Equity signal risk and owned products](equity-only-risk-model.md) — screen unleveraged shares; held product P&L follows product price, not underlying direction or leverage.
-- [Official Top 3 freezing](top3-cutoff-policy.md) — freeze when both same-day sources arrive, not at 16:30; preserve legacy cohorts and dated completed-volume context.
+- [Top 3 reimport policy](top3-cutoff-policy.md) — update current recommendations as versions; preserve trades and original statistical cohort; require both same-day sources without waiting for 16:30.
 - [GitHub sync caution](github-sync-caution.md) — upstream fixes may be based on older trading code; port compatible changes instead of overwriting local selection policy.

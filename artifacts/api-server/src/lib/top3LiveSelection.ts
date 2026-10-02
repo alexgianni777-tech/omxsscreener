@@ -51,7 +51,7 @@ export function buildTop3LiveSelection(
       candidateCount: sourceCandidates.length,
       receivedBeforeCutoff: sourceCandidates.some(
         (candidate) => cutoff == null ||
-          (session.top3PolicyVersion === TOP3_POLICY_VERSION
+          ([TOP3_POLICY_VERSION, "official-top3-v4"].includes(session.top3PolicyVersion ?? "")
             ? candidate.createdAt!.getTime() <= cutoff.getTime()
             : candidate.createdAt!.getTime() < cutoff.getTime()),
       ),

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { screenerSessionsTable } from "@workspace/db";
+import { screenerSessionsTable, top3SelectionRevisionsTable } from "@workspace/db";
 import { snapshotNewSessionTop3 } from "./top3SelectionPolicy.ts";
 import { top3CutoffForDate } from "./top3SelectionPolicyCore.ts";
 
@@ -55,6 +55,8 @@ function candidate(
   };
 }
 
+const revisionHistory = new WeakMap<object, any[]>();
+
 function transaction(candidates: any[], sharedSession?: any) {
   const session: any = sharedSession ?? {
     id: 900,
@@ -64,9 +66,12 @@ function transaction(candidates: any[], sharedSession?: any) {
     top3ParticipatingSources: null,
   };
   const inserted: any[] = [];
+  const revisions = revisionHistory.get(session) ?? [];
+  revisionHistory.set(session, revisions);
   return {
     session,
     inserted,
+    revisions,
     select: () => {
       let selectedTable: unknown;
       const query: any = {
@@ -74,15 +79,24 @@ function transaction(candidates: any[], sharedSession?: any) {
           selectedTable = table;
           return query;
         },
-        where() {
-          return Promise.resolve(selectedTable === screenerSessionsTable ? [session] : candidates);
+        where() { return query; },
+        orderBy() { return query; },
+        limit() { return query; },
+        then(resolve: any, reject: any) {
+          return Promise.resolve(selectedTable === screenerSessionsTable ? [session]
+            : selectedTable === top3SelectionRevisionsTable ? revisions.slice(-1) : candidates).then(resolve, reject);
         },
       };
       return query;
     },
-    insert: () => ({
-      values: async (rows: any[]) => {
+    insert: (table: unknown) => ({
+      values: (rows: any) => {
+        if (table === top3SelectionRevisionsTable) {
+          if (!revisions.some((row) => row.revision === rows.revision)) revisions.push(rows);
+          return { onConflictDoNothing: async () => undefined };
+        }
         inserted.push(...rows);
+        return Promise.resolve();
       },
     }),
     update: () => ({
@@ -115,7 +129,7 @@ test("both sources seal immediately before the old 16:30 cutoff", async () => {
   );
   assert.equal(tx.session.top3SnapshotAt?.getTime(), cutoff.getTime() - 1);
   assert.equal(tx.session.top3CutoffAt?.getTime(), cutoff.getTime() - 1);
-  assert.equal(tx.session.top3PolicyVersion, "official-top3-v4");
+  assert.equal(tx.session.top3PolicyVersion, "official-top3-v5");
   assert.equal(tx.inserted.length, 2);
 });
 

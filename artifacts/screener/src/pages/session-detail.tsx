@@ -8,6 +8,7 @@ import { CandlestickChart } from "../components/CandlestickChart";
 import { AddToPortfolioModal } from "../components/AddToPortfolioModal";
 import { edgeAiMetrics, edgeAiScore } from "../lib/edgeAiMetrics";
 import { LiveTop3Preview } from "../components/LiveTop3Preview";
+import { CurrentTop3Selection } from "../components/CurrentTop3Selection";
 
 type Candidate = ApiCandidate & {
   volumeAsOf?: string | null;
@@ -278,7 +279,10 @@ export function SessionDetail() {
       {session.importDiff && (
         <ImportDiffBanner diff={session.importDiff} importedAt={session.lastImportAt} />
       )}
-      {session.top3LiveSelection && (
+      {!!session.top3Revisions?.length && (
+        <CurrentTop3Selection revisions={session.top3Revisions} sessionId={session.id} />
+      )}
+      {!session.top3Revisions?.length && session.top3LiveSelection && (
         <LiveTop3Preview
           live={session.top3LiveSelection}
           candidates={candidates}
@@ -293,7 +297,7 @@ export function SessionDetail() {
           : "border-amber-500/30 bg-amber-500/5 text-amber-700"
       }`}>
         {top3Snapshot?.available
-          ? `Officiellt Top 3 fryst ${new Date(top3Snapshot.selectedAt).toLocaleString("sv-SE")} · ${top3Snapshot.policyVersion}. Källor: ${top3Snapshot.participatingSources?.join(" + ") || "äldre policy"}. Stjärnor är separata anteckningar.`
+          ? `Ursprungligt urval för statistik: ${new Date(top3Snapshot.selectedAt).toLocaleString("sv-SE")} · ${top3Snapshot.policyVersion}. Källor: ${top3Snapshot.participatingSources?.join(" + ") || "äldre policy"}. Aktuella förslag ovan kan uppdateras; denna historik behålls.`
           : `${top3Snapshot?.unavailableReason ?? "Officiellt Top 3-urval saknas för denna session."} Historiken räknas inte om; stjärnor nedan är endast anteckningar.`}
       </div>
 

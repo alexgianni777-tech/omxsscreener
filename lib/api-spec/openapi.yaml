@@ -1292,6 +1292,67 @@ components:
         top3LiveSelection:
           description: Read-only same-day source receipts and preliminary picks; omitted for historical sessions.
           $ref: "#/components/schemas/Top3LiveSelection"
+        top3Revisions:
+          type: array
+          description: Append-only current recommendation versions, newest first. Original official snapshots and actual trade records are not rewritten.
+          items:
+            $ref: "#/components/schemas/Top3Revision"
+
+    Top3Revision:
+      type: object
+      required: [revision, available, selectedAt, policyVersion, sources, picks]
+      properties:
+        revision:
+          type: number
+        available:
+          type: boolean
+        selectedAt:
+          type: string
+          format: date-time
+        policyVersion:
+          type: string
+        sources:
+          type: array
+          items:
+            type: string
+        picks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Top3RevisionPick"
+
+    Top3RevisionPick:
+      type: object
+      required: [candidateId, ticker, category, rank, score, market, direction, source, entryPrice, stopPrice, targetPrice, rr, decision]
+      properties:
+        candidateId:
+          type: number
+        ticker:
+          type: string
+        category:
+          type: string
+        rank:
+          type: number
+        score:
+          type: number
+        market:
+          type: string
+          enum: [SE, US]
+        direction:
+          type: string
+          enum: [LONG, SHORT]
+        source:
+          type: string
+          enum: [telegram, edgeai]
+        entryPrice:
+          type: number
+        stopPrice:
+          type: number
+        targetPrice:
+          type: number
+        rr:
+          type: number
+        decision:
+          $ref: "#/components/schemas/CandidateDecision"
 
     Top3AnalyticsPick:
       type: object

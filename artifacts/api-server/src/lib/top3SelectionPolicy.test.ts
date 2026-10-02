@@ -84,7 +84,7 @@ test("official Top 3 includes only tradeable rows and caps each market/direction
   assert.equal(selected.filter((row) => row.market === "US" && row.direction === "LONG").length, 1);
   assert.equal(rows.find((row) => row.candidateId === 10)?.decision.status, "INVALID");
   assert.equal(rows.find((row) => row.candidateId === 10)?.selected, false);
-  assert.ok(rows.every((row) => row.policyVersion === "official-top3-v4"));
+  assert.ok(rows.every((row) => row.policyVersion === "official-top3-v5"));
 });
 
 test("opposing directions for the same canonical underlying are neither auto-selected and carry CONFLICT", () => {

@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { LiveTop3Preview, DecisionBadge, EdgeAiStatusTotals, type LiveSelection } from "../components/LiveTop3Preview";
 import { TodayDiagnostics } from "../components/TodayDiagnostics";
+import { CurrentTop3Selection } from "../components/CurrentTop3Selection";
+import type { Top3Revision } from "@workspace/api-client-react";
 import { edgeAiMetrics } from "../lib/edgeAiMetrics";
 import { createLatestRequestGuard } from "../lib/latestRequestGuard";
 
@@ -116,6 +118,7 @@ type Session = {
   } | null;
   candidates: Candidate[];
   top3LiveSelection?: LiveSelection | null;
+  top3Revisions?: Top3Revision[];
   top3SelectionSnapshot?: {
     available: boolean;
     state: "AVAILABLE" | "WAITING_FOR_CUTOFF" | "WAITING_FOR_SOURCES" | "EVALUATING" | "MISSING_SOURCES" | "LEGACY_UNAVAILABLE";
@@ -502,7 +505,9 @@ export function Today() {
             {session && (
               <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2">
                 <span>
-                  {session.top3SelectionSnapshot?.available
+                  {session.top3Revisions?.length
+                    ? "Aktuell Top 3 uppdateras vid import · tidigare urval sparas"
+                    : session.top3SelectionSnapshot?.available
                     ? `Fryst officiellt urval · ${session.top3SelectionSnapshot.policyVersion}`
                     : session.top3SelectionSnapshot?.state === "WAITING_FOR_SOURCES"
                       ? "Officiellt Top 3 låses direkt när båda dagens källor finns"
@@ -543,6 +548,12 @@ export function Today() {
           </div>
         </div>
 
+        {!!session?.top3Revisions?.length && (
+          <CurrentTop3Selection revisions={session.top3Revisions} sessionId={session.id} />
+        )}
+        {session?.top3Revisions?.length && picks.length > 0 ? (
+          <p className="mb-3 text-xs text-muted-foreground">Ursprungliga statistik-picks och registrerade trades visas nedan. Deras nivåer ändras inte av den aktuella listan ovan.</p>
+        ) : null}
         {session && !isToday && picks.length > 0 && (
           <div data-testid="status-historical-picks" role="status" className="flex items-start gap-2.5 px-4 py-3 rounded-xl text-sm mb-3 bg-amber-500/5 border border-amber-500/30 text-amber-700">
             <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
@@ -578,7 +589,7 @@ export function Today() {
             frozen={session.top3SelectionSnapshot}
           />
         )}
-        {session && isToday && session.top3LiveSelection && (
+        {session && isToday && !session.top3Revisions?.length && session.top3LiveSelection && (
           <LiveTop3Preview
             live={session.top3LiveSelection}
             candidates={allCandidates}

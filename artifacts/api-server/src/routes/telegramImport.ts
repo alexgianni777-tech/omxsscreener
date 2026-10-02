@@ -305,7 +305,9 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
       await snapshotNewSessionTop3(
         tx,
         { id: stored.id, date, source: aggregateSource },
-        storedCandidates,
+        candidates.map((candidate) =>
+          buildRow(stored.id, candidate, earningsBatch.get(candidate.ticker) ?? UNKNOWN_EARNINGS),
+        ),
       );
     } else {
       await tx
@@ -315,7 +317,9 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
       await snapshotNewSessionTop3(
         tx,
         { id: stored.id, date, source: aggregateSource },
-        storedCandidates,
+        candidates.map((candidate) =>
+          buildRow(stored.id, candidate, earningsBatch.get(candidate.ticker) ?? UNKNOWN_EARNINGS),
+        ),
       );
     }
     return { stored, candidateCount: storedCandidates.length, updated: Boolean(existing) };

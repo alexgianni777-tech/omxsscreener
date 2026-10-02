@@ -304,8 +304,8 @@ MARKNADSVÄDER  OMXS30 3305.0 | 5d  2.7% | 1m  1.8% | 3m  8.9% | RSI  79
             <span className="block text-sm font-medium">Jag bekräftar att den inklistrade listan kommer från Telegram</span>
             <span className="block text-xs text-muted-foreground mt-0.5">
               Den här importen registreras som Telegram-källa, med manuellt ursprung.
-              Rapportens signaldatum behålls. Det officiella urvalet låses direkt
-              när både dagens Telegram och EdgeAI finns; senare importer ändrar det inte.
+              Rapportens signaldatum behålls. Dagens Top 3 räknas om direkt
+              vid återimport när båda dagens källor finns. Tidigare urval och trades bevaras.
               Tidigare manuella rader märks inte om och kan finnas kvar separat.
             </span>
           </span>
@@ -373,7 +373,7 @@ MARKNADSVÄDER  OMXS30 3305.0 | 5d  2.7% | 1m  1.8% | 3m  8.9% | RSI  79
               {conflict.rawText !== "__edgeai__" && (
                 <p className="text-sm font-medium" data-testid="text-conflict-import-source">
                   Källa för denna import: {conflict.confirmedTelegram ? "bekräftad Telegram" : "manuell (ej bekräftad Telegram)"}.
-                  {" "}Tidigare källmärkning och frysta urval ändras inte.
+                  {" "}Aktuell Top 3 räknas om; tidigare urval, källmärkning och registrerade trades bevaras.
                 </p>
               )}
               {conflict.affectedOutcomes.length === 0 ? (

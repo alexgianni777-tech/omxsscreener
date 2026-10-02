@@ -6,6 +6,7 @@ import {
   TOP3_REQUIRED_SOURCES,
   type PolicyCandidate,
 } from "./top3SelectionPolicyCore";
+import { appendTop3Revision } from "./top3SelectionRevisions";
 
 export { buildTop3SelectionSnapshot, TOP3_POLICY_VERSION, TOP3_SELECTION_TYPE } from "./top3SelectionPolicyCore";
 
@@ -17,8 +18,9 @@ export { buildTop3SelectionSnapshot, TOP3_POLICY_VERSION, TOP3_SELECTION_TYPE } 
 export async function snapshotNewSessionTop3(
   tx: any,
   session: { id: number; date: string; source: string | null },
-  _candidates: PolicyCandidate[],
+  incoming: any[],
   now = new Date(),
+  replacedSources: string[] = [],
 ): Promise<void> {
   const stockholmDate = new Intl.DateTimeFormat("sv-SE", {
     timeZone: "Europe/Stockholm",
@@ -37,13 +39,17 @@ export async function snapshotNewSessionTop3(
     .where(eq(screenerSessionsTable.id, session.id));
   // Legacy snapshots remain intact and are not retroactively assigned cohort
   // metadata. A new evaluation (successful or unavailable) is also terminal.
-  if (!storedSession || storedSession.top3SnapshotAt || storedSession.top3CutoffEvaluatedAt) return;
+  if (!storedSession) return;
+  if (incoming.length === 0 && replacedSources.length === 0 &&
+    (storedSession.top3SnapshotAt || storedSession.top3CutoffEvaluatedAt)) return;
 
   const cutoff = now;
   const arrivals: any[] = await tx
     .select()
     .from(candidatesTable)
     .where(eq(candidatesTable.sessionId, session.id));
+  await appendTop3Revision(tx, session, arrivals, incoming, now, replacedSources);
+  if (storedSession.top3SnapshotAt || storedSession.top3CutoffEvaluatedAt) return;
   const cohort = arrivals.filter((candidate: any) =>
     candidate.createdAt instanceof Date &&
     candidate.createdAt.getTime() <= cutoff.getTime() &&

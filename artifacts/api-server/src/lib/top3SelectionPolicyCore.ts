@@ -1,7 +1,7 @@
 import { candidateSelectionScore, selectSourceBalancedCandidates } from "./candidateRanking.ts";
 import { decideCandidate, reviewCandidate } from "./screeningReview.ts";
 
-export const TOP3_POLICY_VERSION = "official-top3-v4";
+export const TOP3_POLICY_VERSION = "official-top3-v5";
 export const TOP3_SELECTION_TYPE = "AUTO";
 export const TOP3_CUTOFF_HOUR = 16;
 export const TOP3_CUTOFF_MINUTE = 30;

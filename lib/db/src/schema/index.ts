@@ -4,3 +4,4 @@ export * from "./survivalTrades";
 export * from "./auth";
 export * from "./openPositions";
 export * from "./top3SelectionSnapshots";
+export * from "./top3SelectionRevisions";

@@ -1,13 +1,13 @@
 ---
-name: Official Top 3 source-ready freeze policy
-description: Freeze when both current-day sources arrive; preserve legacy timed cohorts and truthful volume provenance.
+name: Current Top 3 revisions and original statistical cohort
+description: Refresh current recommendations on reimport, preserve prior versions and trades, and keep two-source same-day evidence.
 ---
 
-**Rule:** Official mixed-source Top 3 freezes immediately when both Telegram and EdgeAI are present for the same current Stockholm signal day. Do not wait until 16:30. A missing source leaves the session open; later arrivals or reimports cannot revise an already frozen cohort. Preserve ranking weights and all other eligibility rules.
+**Rule:** Current Top 3 recommendations recalculate after reimports with changed signal data. Preserve previous selections as versions and leave registered trades' original entry, stop, target and outcomes untouched. Both Telegram and EdgeAI must still belong to the current Stockholm signal day; do not wait until 16:30. The initial official statistical cohort remains immutable and is distinct from the latest recommendation version.
 
-**Why:** The user explicitly replaced the earlier 16:30 rule by choosing “Lås direkt när båda källorna finns”. This is permission to change prospective timing, not to relax the two-source requirement or reconstruct earlier cohorts. Actual receipt/freeze timestamps must not masquerade as signal-time market evidence.
+**Why:** After initially choosing “Lås direkt när båda källorna finns”, the user explicitly confirmed “Ja, uppdatera Top 3 och bevara historiken”. Permanently freezing current recommendations was too restrictive. Updating suggestions is not permission to rewrite trades, relax source requirements or retrospectively improve performance statistics.
 
-**How to apply:** Show the saved official picks directly after import. Keep source participation separate from candidate quality: both sources can freeze an empty selection if nothing qualifies. Previously frozen or terminally evaluated 16:30 cohorts stay untouched. Preserve observed completed-volume dates as prior-day context; never reconstruct old source sets or observations.
+**How to apply:** Display the latest recommendation version after import and reload, with older versions available separately. Keep original statistical picks clearly labeled rather than presenting them as the current list. Both sources can yield an empty current selection if nothing qualifies; never substitute older picks. Preserve historical cohorts, ranking, eligibility and dated completed-volume context. Do not reconstruct prior selections or relabel signal dates.
 
 **Prior-close context rule:** Keep the existing evening OMXS30 Telegram schedule. EdgeAI generated today may use the OMXS30 index close, RSI, and stock volume from EdgeAI's latest completed Swedish data day (often the previous trading day) as dated market context. This does not turn yesterday's Telegram candidates into today's signals or satisfy the official same-day, two-source Top 3 requirement.
 
@@ -31,4 +31,5 @@ participation without treating every pasted report as verified Telegram.
 
 **How to apply:** Carry explicit confirmation through initial import and
 reimport. Confirmation cannot make yesterday's signals current or add later
-arrivals to an already frozen cohort. Preserve existing outcomes and frozen cohorts.
+arrivals to the original frozen statistical cohort. Later valid signals can enter
+a new recommendation version. Preserve existing outcomes and previous versions.

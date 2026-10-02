@@ -5,12 +5,13 @@
  * and creates a screener session — no copy-paste needed.
  */
 import { Router, type IRouter } from "express";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   db,
   screenerSessionsTable,
   candidatesTable,
   top3SelectionSnapshotsTable,
+  survivalTradesTable,
 } from "@workspace/db";
 import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "../lib/omxs30TickerMap";
@@ -154,10 +155,17 @@ router.post(
           eq(top3SelectionSnapshotsTable.sessionId, existingId),
           eq(top3SelectionSnapshotsTable.selected, true),
         ));
+      const linkedTrades = existingRows.length ? await db
+        .select({ candidateId: survivalTradesTable.sourceCandidateId })
+        .from(survivalTradesTable)
+        .where(inArray(survivalTradesTable.sourceCandidateId, existingRows.map((row) => row.id))) : [];
       const wouldRemove = pendingCandidatesToRemove(
         existingRows,
         uniqueMappedSetups,
-        new Set(selectedSnapshotRows.map((row) => row.candidateId)),
+        new Set([
+          ...selectedSnapshotRows.map((row) => row.candidateId),
+          ...linkedTrades.map((row) => row.candidateId!),
+        ]),
       );
 
       res.status(409).json({
@@ -271,7 +279,8 @@ router.post(
         await snapshotNewSessionTop3(
           tx,
           { id: updated.id, date: sessionDate, source: aggregateSource },
-          synchronizedCandidates,
+          uniqueMappedSetups,
+          undefined, ["edgeai"],
         );
         return updated.id;
       });
@@ -311,7 +320,8 @@ router.post(
         await snapshotNewSessionTop3(
           tx,
           { id: inserted.id, date: sessionDate, source: "edgeai" },
-          insertedCandidates,
+          uniqueMappedSetups,
+          undefined, ["edgeai"],
         );
         // Fresh insert: nothing existed before, so a diff would be all-"added" noise — skip it.
         return inserted.id;

@@ -201,7 +201,32 @@ export const ImportSessionResponse = zod.object({
   "direction": zod.enum(['LONG', 'SHORT']),
   "signalSource": zod.enum(['telegram', 'edgeai'])
 }))
-}).optional().describe('Read-only same-day source receipts and preliminary picks; omitted for historical sessions.')
+}).optional().describe('Read-only same-day source receipts and preliminary picks; omitted for historical sessions.'),
+  "top3Revisions": zod.array(zod.object({
+  "revision": zod.number(),
+  "available": zod.boolean(),
+  "selectedAt": zod.coerce.date(),
+  "policyVersion": zod.string(),
+  "sources": zod.array(zod.string()),
+  "picks": zod.array(zod.object({
+  "candidateId": zod.number(),
+  "ticker": zod.string(),
+  "category": zod.string(),
+  "rank": zod.number(),
+  "score": zod.number(),
+  "market": zod.enum(['SE', 'US']),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "source": zod.enum(['telegram', 'edgeai']),
+  "entryPrice": zod.number(),
+  "stopPrice": zod.number(),
+  "targetPrice": zod.number(),
+  "rr": zod.number(),
+  "decision": zod.object({
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE', 'CONFLICT']),
+  "reasons": zod.array(zod.string())
+})
+}))
+})).optional().describe('Append-only current recommendation versions, newest first. Original official snapshots and actual trade records are not rewritten.')
 })
 
 
@@ -418,7 +443,32 @@ export const ReimportSessionResponse = zod.object({
   "direction": zod.enum(['LONG', 'SHORT']),
   "signalSource": zod.enum(['telegram', 'edgeai'])
 }))
-}).optional().describe('Read-only same-day source receipts and preliminary picks; omitted for historical sessions.')
+}).optional().describe('Read-only same-day source receipts and preliminary picks; omitted for historical sessions.'),
+  "top3Revisions": zod.array(zod.object({
+  "revision": zod.number(),
+  "available": zod.boolean(),
+  "selectedAt": zod.coerce.date(),
+  "policyVersion": zod.string(),
+  "sources": zod.array(zod.string()),
+  "picks": zod.array(zod.object({
+  "candidateId": zod.number(),
+  "ticker": zod.string(),
+  "category": zod.string(),
+  "rank": zod.number(),
+  "score": zod.number(),
+  "market": zod.enum(['SE', 'US']),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "source": zod.enum(['telegram', 'edgeai']),
+  "entryPrice": zod.number(),
+  "stopPrice": zod.number(),
+  "targetPrice": zod.number(),
+  "rr": zod.number(),
+  "decision": zod.object({
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE', 'CONFLICT']),
+  "reasons": zod.array(zod.string())
+})
+}))
+})).optional().describe('Append-only current recommendation versions, newest first. Original official snapshots and actual trade records are not rewritten.')
 })
 
 
@@ -602,7 +652,32 @@ export const GetSessionResponse = zod.object({
   "direction": zod.enum(['LONG', 'SHORT']),
   "signalSource": zod.enum(['telegram', 'edgeai'])
 }))
-}).optional().describe('Read-only same-day source receipts and preliminary picks; omitted for historical sessions.')
+}).optional().describe('Read-only same-day source receipts and preliminary picks; omitted for historical sessions.'),
+  "top3Revisions": zod.array(zod.object({
+  "revision": zod.number(),
+  "available": zod.boolean(),
+  "selectedAt": zod.coerce.date(),
+  "policyVersion": zod.string(),
+  "sources": zod.array(zod.string()),
+  "picks": zod.array(zod.object({
+  "candidateId": zod.number(),
+  "ticker": zod.string(),
+  "category": zod.string(),
+  "rank": zod.number(),
+  "score": zod.number(),
+  "market": zod.enum(['SE', 'US']),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "source": zod.enum(['telegram', 'edgeai']),
+  "entryPrice": zod.number(),
+  "stopPrice": zod.number(),
+  "targetPrice": zod.number(),
+  "rr": zod.number(),
+  "decision": zod.object({
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE', 'CONFLICT']),
+  "reasons": zod.array(zod.string())
+})
+}))
+})).optional().describe('Append-only current recommendation versions, newest first. Original official snapshots and actual trade records are not rewritten.')
 })
 
 

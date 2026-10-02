@@ -1108,6 +1108,55 @@ export interface ImportDiff {
   removed: ImportDiffEntry[];
 }
 
+export type Top3RevisionPickMarket = typeof Top3RevisionPickMarket[keyof typeof Top3RevisionPickMarket];
+
+
+export const Top3RevisionPickMarket = {
+  SE: 'SE',
+  US: 'US',
+} as const;
+
+export type Top3RevisionPickDirection = typeof Top3RevisionPickDirection[keyof typeof Top3RevisionPickDirection];
+
+
+export const Top3RevisionPickDirection = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
+export type Top3RevisionPickSource = typeof Top3RevisionPickSource[keyof typeof Top3RevisionPickSource];
+
+
+export const Top3RevisionPickSource = {
+  telegram: 'telegram',
+  edgeai: 'edgeai',
+} as const;
+
+export interface Top3RevisionPick {
+  candidateId: number;
+  ticker: string;
+  category: string;
+  rank: number;
+  score: number;
+  market: Top3RevisionPickMarket;
+  direction: Top3RevisionPickDirection;
+  source: Top3RevisionPickSource;
+  entryPrice: number;
+  stopPrice: number;
+  targetPrice: number;
+  rr: number;
+  decision: CandidateDecision;
+}
+
+export interface Top3Revision {
+  revision: number;
+  available: boolean;
+  selectedAt: string;
+  policyVersion: string;
+  sources: string[];
+  picks: Top3RevisionPick[];
+}
+
 export interface SessionDetail {
   id: number;
   /** YYYY-MM-DD */
@@ -1139,6 +1188,8 @@ export interface SessionDetail {
   top3SelectionSnapshot: Top3SelectionSnapshotStatus;
   /** Read-only same-day source receipts and preliminary picks; omitted for historical sessions. */
   top3LiveSelection?: Top3LiveSelection;
+  /** Append-only current recommendation versions, newest first. Original official snapshots and actual trade records are not rewritten. */
+  top3Revisions?: Top3Revision[];
 }
 
 /**
