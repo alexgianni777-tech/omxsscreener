@@ -10,7 +10,11 @@ import type { Top3LiveSelectionSourceReceipts } from './top3LiveSelectionSourceR
 
 export interface Top3LiveSelection {
   evaluatedAt: Date;
-  cutoffAt: Date;
+  /**
+     * Actual freeze boundary once both sources are present; null while waiting for sources. Legacy frozen sessions retain their original timed cutoff.
+     * @nullable
+     */
+  cutoffAt: Date | null;
   previewAvailable: boolean;
   sourceReceipts: Top3LiveSelectionSourceReceipts;
   picks: Top3LiveSelectionPick[];

@@ -1,21 +1,21 @@
 ---
-name: Official Top 3 cutoff policy
-description: User-chosen fixed Stockholm cutoff and truthful volume provenance.
+name: Official Top 3 source-ready freeze policy
+description: Freeze when both current-day sources arrive; preserve legacy timed cohorts and truthful volume provenance.
 ---
 
-**Rule:** Official mixed-source Top 3 uses both pasted Telegram signals and EdgeAI received before 16:30 Europe/Stockholm. A missing source makes that day's official selection unavailable; later arrivals must not revise the frozen cohort. This time is a fixed user decision, not the OMXS30 close or a relative market-open offset. Preserve the ranking weights while collecting out-of-sample results.
+**Rule:** Official mixed-source Top 3 freezes immediately when both Telegram and EdgeAI are present for the same current Stockholm signal day. Do not wait until 16:30. A missing source leaves the session open; later arrivals or reimports cannot revise an already frozen cohort. Preserve ranking weights and all other eligibility rules.
 
-**Why:** The user explicitly selected both sources and 16:30 despite the Swedish market normally closing later. A current-day daily volume bar is not complete at 16:30, so a same-day selection may use only the latest *earlier completed* trading bar as dated context; calling it today's volume would be misleading. Arrival/order and transaction-start timestamps must not masquerade as signal-time evidence.
+**Why:** The user explicitly replaced the earlier 16:30 rule by choosing “Lås direkt när båda källorna finns”. This is permission to change prospective timing, not to relax the two-source requirement or reconstruct earlier cohorts. Actual receipt/freeze timestamps must not masquerade as signal-time market evidence.
 
-**How to apply:** For snapshot, import, analytics, or UI changes, keep source participation and actual cutoff evaluation separate from candidate quality; preserve the real observed volume date and show it as prior-day context. Never reconstruct old source sets or calendar/volume observations retrospectively.
+**How to apply:** Show the saved official picks directly after import. Keep source participation separate from candidate quality: both sources can freeze an empty selection if nothing qualifies. Previously frozen or terminally evaluated 16:30 cohorts stay untouched. Preserve observed completed-volume dates as prior-day context; never reconstruct old source sets or observations.
 
 **Prior-close context rule:** Keep the existing evening OMXS30 Telegram schedule. EdgeAI generated today may use the OMXS30 index close, RSI, and stock volume from EdgeAI's latest completed Swedish data day (often the previous trading day) as dated market context. This does not turn yesterday's Telegram candidates into today's signals or satisfy the official same-day, two-source Top 3 requirement.
 
 **Why:** The user wants today's EdgeAI trade ideas to remain usable with yesterday's completed OMXS30 prices, not a new preliminary morning Telegram report. Mixing a partial current-day index bar with prior-day stock bars would be misleading.
 
-**How to apply:** Align index context to the SE data-as-of day and verify that day's completed bar; keep signal date, market-data date, and Telegram candidate date distinct. Do not change the 16:30 selection cutoff merely to accommodate prior-close context.
+**How to apply:** Align index context to the SE data-as-of day and verify that day's completed bar; keep signal date, market-data date, and Telegram candidate date distinct. Do not treat yesterday's Telegram as today's second source merely to trigger an immediate freeze.
 
-**Preliminary-view decision:** On 2026-10-01 the user explicitly kept the two-source requirement when offered a single-source official fallback. The requested preliminary Top 3 is a separate, changeable pre-cutoff view, not permission to relax official freezing.
+**Preliminary-view decision:** The user kept the two-source requirement when offered a single-source official fallback. The preliminary Top 3 remains separate and changeable while waiting for the second source, even after the former 16:30 deadline.
 
 **Why:** The attached proposal included single-source fallback, but the user's explicit selection rejected that part. Useful live suggestions must not change the meaning of the official out-of-sample cohort.
 
@@ -30,5 +30,5 @@ pastes remain manual; prior manual rows are not retrospectively relabeled.
 participation without treating every pasted report as verified Telegram.
 
 **How to apply:** Carry explicit confirmation through initial import and
-reimport. Confirmation cannot make yesterday's signals current or late arrivals
-eligible for an earlier cutoff. Preserve existing outcomes and frozen cohorts.
+reimport. Confirmation cannot make yesterday's signals current or add later
+arrivals to an already frozen cohort. Preserve existing outcomes and frozen cohorts.

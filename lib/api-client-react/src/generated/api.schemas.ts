@@ -870,6 +870,7 @@ export type Top3SelectionSnapshotStatusState = typeof Top3SelectionSnapshotStatu
 export const Top3SelectionSnapshotStatusState = {
   AVAILABLE: 'AVAILABLE',
   WAITING_FOR_CUTOFF: 'WAITING_FOR_CUTOFF',
+  WAITING_FOR_SOURCES: 'WAITING_FOR_SOURCES',
   EVALUATING: 'EVALUATING',
   MISSING_SOURCES: 'MISSING_SOURCES',
   LEGACY_UNAVAILABLE: 'LEGACY_UNAVAILABLE',
@@ -955,7 +956,11 @@ export type Top3LiveSelectionSourceReceipts = {
 
 export interface Top3LiveSelection {
   evaluatedAt: string;
-  cutoffAt: string;
+  /**
+     * Actual freeze boundary once both sources are present; null while waiting for sources. Legacy frozen sessions retain their original timed cutoff.
+     * @nullable
+     */
+  cutoffAt: string | null;
   previewAvailable: boolean;
   sourceReceipts: Top3LiveSelectionSourceReceipts;
   picks: Top3LiveSelectionPick[];
@@ -1216,6 +1221,7 @@ export type Top3AnalyticsSessionCutoffState = typeof Top3AnalyticsSessionCutoffS
 export const Top3AnalyticsSessionCutoffState = {
   AVAILABLE: 'AVAILABLE',
   WAITING_FOR_CUTOFF: 'WAITING_FOR_CUTOFF',
+  WAITING_FOR_SOURCES: 'WAITING_FOR_SOURCES',
   EVALUATING: 'EVALUATING',
   MISSING_SOURCES: 'MISSING_SOURCES',
   LEGACY_UNAVAILABLE: 'LEGACY_UNAVAILABLE',

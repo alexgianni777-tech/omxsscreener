@@ -22,7 +22,6 @@ import {
 } from "./candidateSynchronization";
 import { aggregateSessionSource } from "./candidateSynchronizationPolicy";
 import { snapshotNewSessionTop3 } from "./top3SelectionPolicy";
-import { isTop3CutoffDue } from "./top3SelectionPolicyCore";
 import { calendarDaysUntil } from "./marketCalendar";
 import { mapEdgeAiSetup } from "./edgeAiMapping";
 import { withRetry } from "./retry";
@@ -277,14 +276,12 @@ async function tick() {
   schedulerStatus.lastChecked = now.toISOString();
 
   const stockholm = stockholmClock(now);
-  if (isTop3CutoffDue(stockholm.date, now)) {
     try {
       await evaluateTop3Cutoff(stockholm.date, now);
     } catch (err: any) {
       schedulerStatus.lastError = err.message ?? String(err);
-      logger.warn({ err: err.message }, "[scheduler] Top 3 cutoff evaluation failed");
+      logger.warn({ err: err.message }, "[scheduler] Top 3 source-readiness evaluation failed");
     }
-  }
   if (stockholm.weekday === "Sat" || stockholm.weekday === "Sun") return;
 
   // ── Daily import (Mon–Fri from 09:00 Europe/Stockholm) ──────────────────────

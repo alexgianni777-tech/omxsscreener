@@ -7,6 +7,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { CandlestickChart } from "../components/CandlestickChart";
 import { AddToPortfolioModal } from "../components/AddToPortfolioModal";
 import { edgeAiMetrics, edgeAiScore } from "../lib/edgeAiMetrics";
+import { LiveTop3Preview } from "../components/LiveTop3Preview";
 
 type Candidate = ApiCandidate & {
   volumeAsOf?: string | null;
@@ -146,7 +147,7 @@ function ImportDiffBanner({ diff, importedAt }: { diff: ImportDiff; importedAt?:
 export function SessionDetail() {
   const params = useParams();
   const id = parseInt(params.id || "0", 10);
-  const { data: session, isLoading, isError } = useGetSession(id, { query: { enabled: !!id, queryKey: getGetSessionQueryKey(id) } });
+  const { data: session, isLoading, isError, refetch } = useGetSession(id, { query: { enabled: !!id, queryKey: getGetSessionQueryKey(id), refetchInterval: 30_000 } });
 
   const tickers = session?.candidates.map((c) => c.ticker) ?? [];
   const tickersParam = tickers.join(",");
@@ -276,6 +277,15 @@ export function SessionDetail() {
       {/* ── Import diff — exactly what the last (re-)import changed ── */}
       {session.importDiff && (
         <ImportDiffBanner diff={session.importDiff} importedAt={session.lastImportAt} />
+      )}
+      {session.top3LiveSelection && (
+        <LiveTop3Preview
+          live={session.top3LiveSelection}
+          candidates={candidates}
+          frozen={session.top3SelectionSnapshot}
+          sessionId={session.id}
+          onCutoff={() => { void refetch(); }}
+        />
       )}
       <div className={`rounded-lg border px-4 py-3 text-xs ${
         top3Snapshot?.available

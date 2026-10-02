@@ -101,7 +101,7 @@ function transaction(candidates: any[], sharedSession?: any) {
   };
 }
 
-test("before cutoff, imports do not seal the session", async () => {
+test("both sources seal immediately before the old 16:30 cutoff", async () => {
   const date = stockholmDate();
   const cutoff = top3CutoffForDate(date);
   const telegram = candidate(1, "TELEGRAM", date, "telegram", new Date(cutoff.getTime() - 60 * 60_000));
@@ -113,12 +113,13 @@ test("before cutoff, imports do not seal the session", async () => {
     [],
     new Date(cutoff.getTime() - 1),
   );
-  assert.equal(tx.session.top3SnapshotAt, null);
-  assert.equal(tx.session.top3CutoffEvaluatedAt, null);
-  assert.equal(tx.inserted.length, 0);
+  assert.equal(tx.session.top3SnapshotAt?.getTime(), cutoff.getTime() - 1);
+  assert.equal(tx.session.top3CutoffAt?.getTime(), cutoff.getTime() - 1);
+  assert.equal(tx.session.top3PolicyVersion, "official-top3-v4");
+  assert.equal(tx.inserted.length, 2);
 });
 
-test("cutoff includes both pre-cutoff sources regardless of arrival order", async () => {
+test("both sources freeze once regardless of arrival order", async () => {
   const date = stockholmDate();
   const cutoff = top3CutoffForDate(date);
   for (const sourceOrder of [
@@ -132,7 +133,7 @@ test("cutoff includes both pre-cutoff sources regardless of arrival order", asyn
     const evaluatedAt = new Date(cutoff.getTime() + 5 * 60_000);
     await snapshotNewSessionTop3(tx as any, { id: 901, date, source: "mixed" }, [], evaluatedAt);
     assert.equal(tx.session.top3SnapshotAt?.getTime(), evaluatedAt.getTime());
-    assert.equal(tx.session.top3CutoffAt?.getTime(), cutoff.getTime());
+    assert.equal(tx.session.top3CutoffAt?.getTime(), evaluatedAt.getTime());
     assert.equal(tx.session.top3CutoffEvaluatedAt?.getTime(), evaluatedAt.getTime());
     assert.deepEqual(tx.session.top3ParticipatingSources, ["edgeai", "telegram"]);
     assert.deepEqual(tx.inserted.map((row) => row.candidateId).sort(), [1, 2]);
@@ -167,7 +168,7 @@ test("concurrent import and scheduler evaluations can only claim and insert one 
   assert.ok([importTx.inserted.length, schedulerTx.inserted.length].includes(2));
 });
 
-test("missing source at cutoff makes the day unavailable and a late source cannot seal it", async () => {
+test("a missing source stays open past 16:30 and its arrival freezes the selection", async () => {
   const date = stockholmDate();
   const cutoff = top3CutoffForDate(date);
   const telegram = candidate(1, "TELEGRAM", date, "telegram", new Date(cutoff.getTime() - 1));
@@ -175,14 +176,77 @@ test("missing source at cutoff makes the day unavailable and a late source canno
   const tx = transaction(arrivals);
   await snapshotNewSessionTop3(tx as any, { id: 902, date, source: "telegram" }, [], cutoff);
   assert.equal(tx.session.top3SnapshotAt, null);
-  assert.equal(tx.session.top3CutoffAt?.getTime(), cutoff.getTime());
-  assert.ok(tx.session.top3CutoffEvaluatedAt instanceof Date);
-  assert.deepEqual(tx.session.top3ParticipatingSources, ["telegram"]);
+  assert.equal(tx.session.top3CutoffAt, null);
+  assert.equal(tx.session.top3CutoffEvaluatedAt, null);
 
   const lateEdgeAi = candidate(2, "LATE-EDGEAI", date, "edgeai", new Date(cutoff.getTime() + 1));
   arrivals.push(lateEdgeAi);
   await snapshotNewSessionTop3(tx as any, { id: 902, date, source: "mixed" }, [], new Date(cutoff.getTime() + 1));
+  assert.equal(tx.session.top3SnapshotAt?.getTime(), cutoff.getTime() + 1);
+  assert.deepEqual(tx.session.top3ParticipatingSources, ["edgeai", "telegram"]);
+  assert.equal(tx.inserted.length, 2);
+
+  const previousRows = structuredClone(tx.inserted);
+  arrivals.push(candidate(3, "LATER", date, "telegram", new Date(cutoff.getTime() + 2)));
+  await snapshotNewSessionTop3(tx as any, { id: 902, date, source: "mixed" }, [], new Date(cutoff.getTime() + 3));
+  assert.deepEqual(tx.inserted, previousRows);
+  assert.equal(tx.session.top3SnapshotAt?.getTime(), cutoff.getTime() + 1);
+});
+
+test("unconfirmed, stale and future arrivals cannot complete the source set", async () => {
+  const date = stockholmDate();
+  const now = new Date(`${date}T10:00:00Z`);
+  const arrivals = [
+    candidate(1, "EDGEAI", date, "edgeai", now),
+    candidate(2, "MANUAL", date, "manual", now),
+    candidate(3, "STALE", "2020-01-01", "telegram", now),
+    candidate(4, "FUTURE", date, "telegram", new Date(now.getTime() + 1)),
+  ];
+  const tx = transaction(arrivals);
+  await snapshotNewSessionTop3(tx as any, { id: 900, date, source: "mixed" }, [], now);
   assert.equal(tx.session.top3SnapshotAt, null);
-  assert.deepEqual(tx.session.top3ParticipatingSources, ["telegram"]);
+  assert.equal(tx.session.top3CutoffEvaluatedAt, null);
   assert.equal(tx.inserted.length, 0);
+  arrivals.push(candidate(5, "CONFIRMED", date, "telegram", now));
+  await snapshotNewSessionTop3(tx as any, { id: 900, date, source: "mixed" }, [], now);
+  assert.deepEqual(tx.inserted.map((row) => row.candidateId), [1, 5]);
+});
+
+test("legacy frozen and legacy unavailable sessions are never rewritten", async () => {
+  const date = stockholmDate();
+  const now = new Date(`${date}T12:00:00Z`);
+  for (const fields of [
+    { top3SnapshotAt: now, top3PolicyVersion: "official-top3-v3" },
+    { top3CutoffEvaluatedAt: now, top3ParticipatingSources: ["telegram"] },
+  ]) {
+    const tx = transaction([
+      candidate(1, "TELEGRAM", date, "telegram", now),
+      candidate(2, "EDGEAI", date, "edgeai", now),
+    ]);
+    Object.assign(tx.session, fields);
+    const before = structuredClone(tx.session);
+    await snapshotNewSessionTop3(tx as any, { id: 900, date, source: "mixed" }, [], now);
+    assert.deepEqual(tx.session, before);
+    assert.equal(tx.inserted.length, 0);
+  }
+});
+
+test("historical sessions are never reconstructed under the new timing policy", async () => {
+  const tx = transaction([]);
+  await snapshotNewSessionTop3(tx as any, { id: 900, date: "2020-01-01", source: "mixed" }, []);
+  assert.equal(tx.session.top3SnapshotAt, null);
+  assert.equal(tx.session.top3CutoffEvaluatedAt, null);
+});
+
+test("complete sources freeze even when no candidate is tradeable", async () => {
+  const date = stockholmDate();
+  const now = new Date(`${date}T10:00:00Z`);
+  const tx = transaction([
+    { ...candidate(1, "TELEGRAM", date, "telegram", now), volMultiplier: 0 },
+    { ...candidate(2, "EDGEAI", date, "edgeai", now), volMultiplier: 0 },
+  ]);
+  await snapshotNewSessionTop3(tx as any, { id: 900, date, source: "mixed" }, [], now);
+  assert.equal(tx.session.top3SnapshotAt?.getTime(), now.getTime());
+  assert.equal(tx.inserted.length, 2);
+  assert.ok(tx.inserted.every((row) => !row.selected));
 });

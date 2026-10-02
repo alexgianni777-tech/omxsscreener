@@ -2,19 +2,17 @@ import { and, eq, isNull } from "drizzle-orm";
 import { candidatesTable, screenerSessionsTable, top3SelectionSnapshotsTable } from "@workspace/db";
 import {
   buildTop3SelectionSnapshot,
-  isTop3CutoffDue,
   TOP3_POLICY_VERSION,
   TOP3_REQUIRED_SOURCES,
-  top3CutoffForDate,
   type PolicyCandidate,
 } from "./top3SelectionPolicyCore";
 
 export { buildTop3SelectionSnapshot, TOP3_POLICY_VERSION, TOP3_SELECTION_TYPE } from "./top3SelectionPolicyCore";
 
 /**
- * Called inside a per-session transaction and advisory lock. Before 16:30
- * Stockholm it is intentionally a no-op. At/after cutoff it evaluates the
- * immutable createdAt cohort once; an incomplete source set remains unavailable.
+ * Called inside a per-session transaction and advisory lock. Freeze once both
+ * current-day sources are present, using this evaluation instant as the boundary.
+ * Missing sources never seal the session. Previously evaluated cohorts stay intact.
  */
 export async function snapshotNewSessionTop3(
   tx: any,
@@ -28,7 +26,7 @@ export async function snapshotNewSessionTop3(
     month: "2-digit",
     day: "2-digit",
   }).format(now);
-  if (session.date !== stockholmDate || !isTop3CutoffDue(session.date, now)) return;
+  if (session.date !== stockholmDate) return;
 
   const [storedSession] = await tx
     .select({
@@ -41,14 +39,14 @@ export async function snapshotNewSessionTop3(
   // metadata. A new evaluation (successful or unavailable) is also terminal.
   if (!storedSession || storedSession.top3SnapshotAt || storedSession.top3CutoffEvaluatedAt) return;
 
-  const cutoff = top3CutoffForDate(session.date);
+  const cutoff = now;
   const arrivals: any[] = await tx
     .select()
     .from(candidatesTable)
     .where(eq(candidatesTable.sessionId, session.id));
   const cohort = arrivals.filter((candidate: any) =>
     candidate.createdAt instanceof Date &&
-    candidate.createdAt.getTime() < cutoff.getTime() &&
+    candidate.createdAt.getTime() <= cutoff.getTime() &&
     candidate.signalDate === session.date &&
     (candidate.signalSource === "telegram" || candidate.signalSource === "edgeai"),
   );
@@ -57,12 +55,12 @@ export async function snapshotNewSessionTop3(
   )].sort();
 
   const sourceComplete = TOP3_REQUIRED_SOURCES.every((source) => participatingSources.includes(source));
+  if (!sourceComplete) return;
   const [claimed] = await tx
     .update(screenerSessionsTable)
     .set({
-      ...(sourceComplete
-        ? { top3SnapshotAt: now, top3PolicyVersion: TOP3_POLICY_VERSION }
-        : {}),
+      top3SnapshotAt: now,
+      top3PolicyVersion: TOP3_POLICY_VERSION,
       top3CutoffAt: cutoff,
       top3CutoffEvaluatedAt: now,
       top3ParticipatingSources: participatingSources,
@@ -70,6 +68,7 @@ export async function snapshotNewSessionTop3(
     .where(and(
       eq(screenerSessionsTable.id, session.id),
       isNull(screenerSessionsTable.top3CutoffEvaluatedAt),
+      isNull(screenerSessionsTable.top3SnapshotAt),
     ))
     .returning({ id: screenerSessionsTable.id });
   // The conditional row update is the atomic seal claim. The transaction-level

@@ -118,7 +118,7 @@ type Session = {
   top3LiveSelection?: LiveSelection | null;
   top3SelectionSnapshot?: {
     available: boolean;
-    state: "AVAILABLE" | "WAITING_FOR_CUTOFF" | "EVALUATING" | "MISSING_SOURCES" | "LEGACY_UNAVAILABLE";
+    state: "AVAILABLE" | "WAITING_FOR_CUTOFF" | "WAITING_FOR_SOURCES" | "EVALUATING" | "MISSING_SOURCES" | "LEGACY_UNAVAILABLE";
     unavailableReason: string | null;
     selectedAt: string | null;
     policyVersion: string | null;
@@ -504,8 +504,10 @@ export function Today() {
                 <span>
                   {session.top3SelectionSnapshot?.available
                     ? `Fryst officiellt urval · ${session.top3SelectionSnapshot.policyVersion}`
+                    : session.top3SelectionSnapshot?.state === "WAITING_FOR_SOURCES"
+                      ? "Officiellt Top 3 låses direkt när båda dagens källor finns"
                     : session.top3SelectionSnapshot?.state === "WAITING_FOR_CUTOFF"
-                      ? "Officiellt Top 3 fryses kl. 16:30 svensk tid"
+                      ? "Äldre policy · tidsstyrd låsning"
                       : session.top3SelectionSnapshot?.state === "MISSING_SOURCES"
                         ? "Officiellt Top 3 otillgängligt · källa saknades vid 16:30"
                         : "Officiellt Top 3-urval saknas"}

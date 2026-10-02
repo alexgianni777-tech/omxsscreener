@@ -27,7 +27,7 @@ export interface Top3Session {
   source: string | null;
   selectionStatus: "AVAILABLE" | "UNAVAILABLE";
   selectionUnavailableReason: string | null;
-  cutoffState: "AVAILABLE" | "WAITING_FOR_CUTOFF" | "EVALUATING" | "MISSING_SOURCES" | "LEGACY_UNAVAILABLE";
+  cutoffState: "AVAILABLE" | "WAITING_FOR_CUTOFF" | "WAITING_FOR_SOURCES" | "EVALUATING" | "MISSING_SOURCES" | "LEGACY_UNAVAILABLE";
   cutoffAt: string | null;
   cutoffEvaluatedAt: string | null;
   participatingSources: Array<"telegram" | "edgeai"> | null;

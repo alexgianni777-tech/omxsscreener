@@ -1,7 +1,7 @@
 import { candidateSelectionScore, selectSourceBalancedCandidates } from "./candidateRanking.ts";
 import { decideCandidate, reviewCandidate } from "./screeningReview.ts";
 
-export const TOP3_POLICY_VERSION = "official-top3-v3";
+export const TOP3_POLICY_VERSION = "official-top3-v4";
 export const TOP3_SELECTION_TYPE = "AUTO";
 export const TOP3_CUTOFF_HOUR = 16;
 export const TOP3_CUTOFF_MINUTE = 30;
@@ -17,7 +17,7 @@ const STOCKHOLM_DATE_TIME = new Intl.DateTimeFormat("en-GB", {
   hourCycle: "h23",
 });
 
-/** Resolve the fixed local cutoff to an instant, including DST transitions. */
+/** Resolve the legacy timed cutoff, including DST; new freezes use source readiness. */
 export function top3CutoffForDate(date: string): Date {
   const [year, month, day] = date.split("-").map(Number);
   const desiredLocalAsUtc = Date.UTC(year, month - 1, day, TOP3_CUTOFF_HOUR, TOP3_CUTOFF_MINUTE);

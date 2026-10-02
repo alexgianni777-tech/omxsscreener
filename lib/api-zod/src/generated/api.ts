@@ -168,7 +168,7 @@ export const ImportSessionResponse = zod.object({
 }).optional().describe('What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads.'),
   "top3SelectionSnapshot": zod.object({
   "available": zod.boolean(),
-  "state": zod.enum(['AVAILABLE', 'WAITING_FOR_CUTOFF', 'EVALUATING', 'MISSING_SOURCES', 'LEGACY_UNAVAILABLE']),
+  "state": zod.enum(['AVAILABLE', 'WAITING_FOR_CUTOFF', 'WAITING_FOR_SOURCES', 'EVALUATING', 'MISSING_SOURCES', 'LEGACY_UNAVAILABLE']),
   "unavailableReason": zod.string().nullable(),
   "selectedAt": zod.coerce.date().nullable(),
   "policyVersion": zod.string().nullable(),
@@ -179,7 +179,7 @@ export const ImportSessionResponse = zod.object({
 }),
   "top3LiveSelection": zod.object({
   "evaluatedAt": zod.coerce.date(),
-  "cutoffAt": zod.coerce.date(),
+  "cutoffAt": zod.coerce.date().nullable().describe('Actual freeze boundary once both sources are present; null while waiting for sources. Legacy frozen sessions retain their original timed cutoff.'),
   "previewAvailable": zod.boolean(),
   "sourceReceipts": zod.object({
   "telegram": zod.object({
@@ -385,7 +385,7 @@ export const ReimportSessionResponse = zod.object({
 }).optional().describe('What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads.'),
   "top3SelectionSnapshot": zod.object({
   "available": zod.boolean(),
-  "state": zod.enum(['AVAILABLE', 'WAITING_FOR_CUTOFF', 'EVALUATING', 'MISSING_SOURCES', 'LEGACY_UNAVAILABLE']),
+  "state": zod.enum(['AVAILABLE', 'WAITING_FOR_CUTOFF', 'WAITING_FOR_SOURCES', 'EVALUATING', 'MISSING_SOURCES', 'LEGACY_UNAVAILABLE']),
   "unavailableReason": zod.string().nullable(),
   "selectedAt": zod.coerce.date().nullable(),
   "policyVersion": zod.string().nullable(),
@@ -396,7 +396,7 @@ export const ReimportSessionResponse = zod.object({
 }),
   "top3LiveSelection": zod.object({
   "evaluatedAt": zod.coerce.date(),
-  "cutoffAt": zod.coerce.date(),
+  "cutoffAt": zod.coerce.date().nullable().describe('Actual freeze boundary once both sources are present; null while waiting for sources. Legacy frozen sessions retain their original timed cutoff.'),
   "previewAvailable": zod.boolean(),
   "sourceReceipts": zod.object({
   "telegram": zod.object({
@@ -569,7 +569,7 @@ export const GetSessionResponse = zod.object({
 }).optional().describe('What the most recent import changed, when this response comes from a (re-)import call. Absent on plain reads.'),
   "top3SelectionSnapshot": zod.object({
   "available": zod.boolean(),
-  "state": zod.enum(['AVAILABLE', 'WAITING_FOR_CUTOFF', 'EVALUATING', 'MISSING_SOURCES', 'LEGACY_UNAVAILABLE']),
+  "state": zod.enum(['AVAILABLE', 'WAITING_FOR_CUTOFF', 'WAITING_FOR_SOURCES', 'EVALUATING', 'MISSING_SOURCES', 'LEGACY_UNAVAILABLE']),
   "unavailableReason": zod.string().nullable(),
   "selectedAt": zod.coerce.date().nullable(),
   "policyVersion": zod.string().nullable(),
@@ -580,7 +580,7 @@ export const GetSessionResponse = zod.object({
 }),
   "top3LiveSelection": zod.object({
   "evaluatedAt": zod.coerce.date(),
-  "cutoffAt": zod.coerce.date(),
+  "cutoffAt": zod.coerce.date().nullable().describe('Actual freeze boundary once both sources are present; null while waiting for sources. Legacy frozen sessions retain their original timed cutoff.'),
   "previewAvailable": zod.boolean(),
   "sourceReceipts": zod.object({
   "telegram": zod.object({
@@ -626,7 +626,7 @@ export const GetTop3AnalyticsResponse = zod.object({
   "source": zod.string().nullable(),
   "selectionStatus": zod.enum(['AVAILABLE', 'UNAVAILABLE']),
   "selectionUnavailableReason": zod.string().nullable(),
-  "cutoffState": zod.enum(['AVAILABLE', 'WAITING_FOR_CUTOFF', 'EVALUATING', 'MISSING_SOURCES', 'LEGACY_UNAVAILABLE']),
+  "cutoffState": zod.enum(['AVAILABLE', 'WAITING_FOR_CUTOFF', 'WAITING_FOR_SOURCES', 'EVALUATING', 'MISSING_SOURCES', 'LEGACY_UNAVAILABLE']),
   "cutoffAt": zod.coerce.date().nullable(),
   "cutoffEvaluatedAt": zod.coerce.date().nullable(),
   "participatingSources": zod.array(zod.enum(['telegram', 'edgeai'])).nullable(),

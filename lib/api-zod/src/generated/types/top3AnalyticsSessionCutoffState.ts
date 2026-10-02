@@ -12,6 +12,7 @@ export type Top3AnalyticsSessionCutoffState = typeof Top3AnalyticsSessionCutoffS
 export const Top3AnalyticsSessionCutoffState = {
   AVAILABLE: 'AVAILABLE',
   WAITING_FOR_CUTOFF: 'WAITING_FOR_CUTOFF',
+  WAITING_FOR_SOURCES: 'WAITING_FOR_SOURCES',
   EVALUATING: 'EVALUATING',
   MISSING_SOURCES: 'MISSING_SOURCES',
   LEGACY_UNAVAILABLE: 'LEGACY_UNAVAILABLE',

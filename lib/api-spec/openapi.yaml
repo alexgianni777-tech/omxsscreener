@@ -1060,7 +1060,7 @@ components:
           type: boolean
         state:
           type: string
-          enum: [AVAILABLE, WAITING_FOR_CUTOFF, EVALUATING, MISSING_SOURCES, LEGACY_UNAVAILABLE]
+          enum: [AVAILABLE, WAITING_FOR_CUTOFF, WAITING_FOR_SOURCES, EVALUATING, MISSING_SOURCES, LEGACY_UNAVAILABLE]
         unavailableReason:
           type: ["string", "null"]
         selectedAt:
@@ -1127,8 +1127,9 @@ components:
           type: string
           format: date-time
         cutoffAt:
-          type: string
+          type: ["string", "null"]
           format: date-time
+          description: Actual freeze boundary once both sources are present; null while waiting for sources. Legacy frozen sessions retain their original timed cutoff.
         previewAvailable:
           type: boolean
         sourceReceipts:
@@ -1368,7 +1369,7 @@ components:
           type: ["string", "null"]
         cutoffState:
           type: string
-          enum: [AVAILABLE, WAITING_FOR_CUTOFF, EVALUATING, MISSING_SOURCES, LEGACY_UNAVAILABLE]
+          enum: [AVAILABLE, WAITING_FOR_CUTOFF, WAITING_FOR_SOURCES, EVALUATING, MISSING_SOURCES, LEGACY_UNAVAILABLE]
         cutoffAt:
           type: ["string", "null"]
           format: date-time

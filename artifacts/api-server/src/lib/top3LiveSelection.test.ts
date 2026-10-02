@@ -157,7 +157,7 @@ test("a received source with zero tradeable picks remains available without inve
   assert.deepEqual(result.picks, []);
 });
 
-test("strict cutoff boundary reports arrivals but does not offer a preliminary preview at cutoff", () => {
+test("an unfrozen single-source preview remains visible after the old timed cutoff", () => {
   const cutoff = top3CutoffForDate(sessionDate);
   const before = buildTop3LiveSelection(
     session(),
@@ -172,10 +172,11 @@ test("strict cutoff boundary reports arrivals but does not offer a preliminary p
 
   assert.equal(before.previewAvailable, true);
   assert.equal(before.sourceReceipts.telegram.receivedBeforeCutoff, true);
-  assert.equal(atCutoff.previewAvailable, false);
+  assert.equal(atCutoff.previewAvailable, true);
   assert.equal(atCutoff.sourceReceipts.telegram.received, true);
-  assert.equal(atCutoff.sourceReceipts.telegram.receivedBeforeCutoff, false);
-  assert.deepEqual(atCutoff.picks, []);
+  assert.equal(atCutoff.sourceReceipts.telegram.receivedBeforeCutoff, true);
+  assert.equal(atCutoff.cutoffAt, null);
+  assert.equal(atCutoff.picks.length, 1);
 });
 
 test("same-day live status remains visible after an official seal but preview picks are suppressed", () => {

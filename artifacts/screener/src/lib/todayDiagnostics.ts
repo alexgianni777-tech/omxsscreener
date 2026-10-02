@@ -23,7 +23,7 @@ export type TodayDiagnosticCandidate = {
 
 export type DiagnosticLiveSelection = {
   evaluatedAt: string;
-  cutoffAt: string;
+  cutoffAt: string | null;
   previewAvailable: boolean;
   sourceReceipts?: {
     edgeai?: { received: boolean; candidateCount?: number };
@@ -248,7 +248,7 @@ export function deriveTodayDiagnostics(input: {
   const now = input.now;
   const cutoffAt = validTime(live?.cutoffAt);
   const liveEvaluatedAt = validTime(live?.evaluatedAt);
-  const preliminaryAvailable = Boolean(live?.previewAvailable && cutoffAt != null && now < cutoffAt);
+  const preliminaryAvailable = Boolean(live?.previewAvailable && (cutoffAt == null || now < cutoffAt));
   const preliminaryCounts: SelectedCounts | null = preliminaryAvailable ? {} : null;
   if (preliminaryAvailable && live) {
     for (const pick of live.picks) {

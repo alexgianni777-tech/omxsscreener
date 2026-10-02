@@ -27,6 +27,22 @@ function candidate(
   };
 }
 
+test("source-waiting preliminary diagnostics need no 16:30 deadline", () => {
+  const short = candidate(80, { direction: "SHORT" });
+  const result = deriveTodayDiagnostics({
+    sessionDate: DAY, today: DAY,
+    candidates: [short],
+    live: live({
+      cutoffAt: null,
+      picks: [{ candidateId: short.id, rank: 1, score: 1, market: "SE", direction: "SHORT", signalSource: "edgeai" }],
+    }),
+    now: Date.parse("2026-10-12T19:00:00Z"),
+  });
+  assert.equal(result.issues.length, 0);
+  assert.equal(result.preliminary.available, true);
+  assert.ok(result.preliminary.selectedCounts);
+});
+
 function live(overrides: Partial<DiagnosticLiveSelection> = {}): DiagnosticLiveSelection {
   return {
     evaluatedAt: BEFORE_CUTOFF,

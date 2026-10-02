@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { Terminal, Upload, AlertTriangle, RefreshCw, X, ShieldAlert, Zap, CheckCircle2 } from "lucide-react";
-import { useImportSession, getListSessionsQueryKey } from "@workspace/api-client-react";
+import { useImportSession, getListSessionsQueryKey, getGetSessionQueryKey } from "@workspace/api-client-react";
 import { useAuthContext } from "../lib/auth-context";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -78,6 +78,7 @@ export function Import() {
       {
         onSuccess: (data) => {
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(data.id) });
           setLocation(`/sessions/${data.id}`);
         },
         onError: (err: any) => {
@@ -174,6 +175,7 @@ export function Import() {
         return;
       }
       queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(data.id) });
       setEdgeStatus({
         kind: "success",
         setupCount: data.setupCount,
@@ -302,8 +304,8 @@ MARKNADSVÄDER  OMXS30 3305.0 | 5d  2.7% | 1m  1.8% | 3m  8.9% | RSI  79
             <span className="block text-sm font-medium">Jag bekräftar att den inklistrade listan kommer från Telegram</span>
             <span className="block text-xs text-muted-foreground mt-0.5">
               Den här importen registreras som Telegram-källa, med manuellt ursprung.
-              Rapportens signaldatum behålls. Bara dagens signaler mottagna före 16:30
-              kan räknas i det officiella urvalet; EdgeAI krävs också.
+              Rapportens signaldatum behålls. Det officiella urvalet låses direkt
+              när både dagens Telegram och EdgeAI finns; senare importer ändrar det inte.
               Tidigare manuella rader märks inte om och kan finnas kvar separat.
             </span>
           </span>

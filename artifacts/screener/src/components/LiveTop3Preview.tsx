@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import type { Top3LiveSelection } from "@workspace/api-client-react";
-import { Clock, CheckCircle2, AlertTriangle, ChevronRight } from "lucide-react";
+import { CheckCircle2, AlertTriangle, ChevronRight } from "lucide-react";
 
 export type LiveSelection = Top3LiveSelection;
 type Cand = {
@@ -12,6 +11,15 @@ type Cand = {
   targetPrice: number;
   rr: number;
   decision?: { status: string; reasons: string[] };
+  officialSelection?: {
+    selected: boolean;
+    rank: number | null;
+    score: number;
+    market: "SE" | "US" | null;
+    direction: "LONG" | "SHORT";
+    source: string | null;
+    decision?: { status: string; reasons: string[] };
+  } | null;
 };
 type Frozen = {
   requiredSources: string[];
@@ -52,16 +60,10 @@ export function DecisionBadge({ decision }: { decision?: { status: string; reaso
   );
 }
 
-function fmt(ms: number) {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  return `${h > 0 ? `${h}:` : ""}${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-}
 const NAMES = { telegram: "Telegram", edgeai: "EdgeAI" } as const;
 
 export function LiveTop3Preview({
-  live, candidates, frozen, sessionId, onCutoff,
+  live, candidates, frozen, sessionId,
 }: {
   live: LiveSelection;
   candidates: Cand[];
@@ -69,26 +71,20 @@ export function LiveTop3Preview({
   sessionId: number;
   onCutoff: () => void;
 }) {
-  const [now, setNow] = useState(() => Date.now());
-  const cbRef = useRef(onCutoff);
-  cbRef.current = onCutoff;
-  const fired = useRef<string | null>(null);
-  const cutoff = new Date(live.cutoffAt).getTime();
-  const remaining = cutoff - now;
-  const expired = remaining <= 0;
-
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  useEffect(() => {
-    if (expired && fired.current !== live.cutoffAt) {
-      fired.current = live.cutoffAt;
-      cbRef.current();
-    }
-  }, [expired, live.cutoffAt]);
-
-  const show = live.previewAvailable && !expired;
+  const official = frozen?.available === true;
+  const show = live.previewAvailable || official;
+  const displayPicks: LiveSelection["picks"] = official
+    ? candidates.flatMap((candidate) => {
+      const selection = candidate.officialSelection;
+      if (!selection?.selected || selection.rank == null ||
+        (selection.market !== "SE" && selection.market !== "US") ||
+        (selection.source !== "telegram" && selection.source !== "edgeai")) return [];
+      return [{
+        candidateId: candidate.id, rank: selection.rank, score: selection.score,
+        market: selection.market, direction: selection.direction, signalSource: selection.source,
+      }];
+    })
+    : live.picks;
   const byId = new Map(candidates.map((c) => [c.id, c]));
   const groups = [
     { key: "SE:LONG", label: "Sverige · Topp 3 Köp" },
@@ -97,7 +93,7 @@ export function LiveTop3Preview({
     { key: "US:SHORT", label: "USA · Topp 3 Sälj" },
   ].map((g) => ({
     ...g,
-    picks: live.picks
+    picks: displayPicks
       .filter((p) => `${p.market}:${p.direction}` === g.key)
       .sort((a, b) => a.rank - b.rank)
       .slice(0, 3),
@@ -109,31 +105,21 @@ export function LiveTop3Preview({
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 data-testid="text-live-title" className="text-sm font-semibold">
-            {show
-              ? "Preliminär Top 3 – kan ändras före 16:30"
-              : frozen?.available
-                ? "Officiellt Top 3 – fryst urval"
-                : expired
-                  ? "Officiellt Top 3 – 16:30 passerat"
-                  : "Preliminär Top 3 – inväntar dagens signaler"}
+            {official
+              ? "Officiellt Top 3 – fryst urval"
+              : "Preliminär Top 3 – inväntar båda dagens källor"}
           </h3>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
-            Skrivskyddad förhandsvisning. Sparas inte, ger inga utfall, stjärnor eller prestanda i officiell statistik.
+            {official
+              ? "Urvalet är sparat. Senare importer ändrar inte dagens officiella picks."
+              : "Låses direkt när både dagens Telegram och EdgeAI finns. Förhandsvisningen räknas inte i officiell statistik."}
           </p>
         </div>
-        {(expired || frozen?.available) && (
+        {frozen?.available && (
           <div data-testid="text-official-freeze" className="shrink-0 text-xs font-semibold text-primary">
             {frozen?.available
               ? "Officiellt urval fryst"
-              : frozen?.state === "MISSING_SOURCES"
-                ? "Källa saknades vid 16:30"
-                : "Inväntar officiell utvärdering"}
-          </div>
-        )}
-        {!expired && !frozen?.available && (
-          <div data-testid="text-countdown" className="flex shrink-0 items-center gap-1 font-mono text-xs text-amber-600">
-            <Clock className="h-3.5 w-3.5" />
-            {fmt(remaining)}
+              : "Inväntar båda källorna"}
           </div>
         )}
       </div>
@@ -156,8 +142,8 @@ export function LiveTop3Preview({
                 {!r.received
                   ? "Ej mottagen idag"
                   : late
-                    ? `Mottagen efter 16:30 · ${r.candidateCount} kandidater`
-                    : `Mottagen före 16:30 · ${r.candidateCount} kandidater`}
+                    ? `Mottagen efter låsning · ${r.candidateCount} kandidater`
+                    : `Mottagen idag · ${r.candidateCount} kandidater`}
               </div>
             </div>
           );
@@ -166,18 +152,20 @@ export function LiveTop3Preview({
 
       {frozen && (
         <p data-testid="text-frozen-sources" className="mt-2 text-[11px] text-muted-foreground">
-          Lagrade källor vid 16:30-utvärdering:{" "}
+          Lagrade källor vid låsning:{" "}
           {frozen.participatingSources
             ? frozen.participatingSources.length ? frozen.participatingSources.join(" + ") : "inga"
             : "ingen utvärdering sparad"}
           {" · krav: "}{frozen.requiredSources.join(" + ")}
-          {frozen.available ? "" : expired ? " · inget officiellt urval fryst" : " · ännu inte fryst"}
+          {frozen.available ? "" : " · ännu inte fryst"}
         </p>
       )}
 
       {show &&
         (picks.length === 0 ? (
-          <p className="mt-3 text-xs text-muted-foreground">Servern har inga preliminära val just nu.</p>
+          <p className="mt-3 text-xs text-muted-foreground">
+            {official ? "Urvalet är låst, men inga kandidater klarade handelsreglerna." : "Servern har inga preliminära val just nu."}
+          </p>
         ) : (
           <div className="mt-3 space-y-3">
             {groups.map((g) => (
@@ -186,6 +174,7 @@ export function LiveTop3Preview({
                 <ol className="space-y-2">
             {g.picks.map((p) => {
               const c = byId.get(p.candidateId);
+              const decision = official ? c?.officialSelection?.decision : c?.decision;
               return (
                 <li key={p.candidateId} data-testid={`row-live-pick-${p.candidateId}`} className="rounded-lg border border-border px-3 py-2">
                   <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -194,15 +183,15 @@ export function LiveTop3Preview({
                     <span className="text-[11px] text-muted-foreground">
                       {p.market} · {p.direction === "SHORT" ? "Sälj" : "Köp"} · {NAMES[p.signalSource]} · poäng {p.score.toFixed(2)}
                     </span>
-                    <span className="ml-auto"><DecisionBadge decision={c?.decision} /></span>
+                    <span className="ml-auto"><DecisionBadge decision={decision} /></span>
                   </div>
                   {c && (
                     <div className="mt-1 font-mono text-[11px] text-muted-foreground">
                       Entry {c.entryPrice} · Stop {c.stopPrice} · Mål {c.targetPrice} · R/R {c.rr}
                     </div>
                   )}
-                  {c?.decision && c.decision.reasons.length > 0 && (
-                    <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{c.decision.reasons.join(" ")}</p>
+                  {decision && decision.reasons.length > 0 && (
+                    <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{decision.reasons.join(" ")}</p>
                   )}
                 </li>
               );
@@ -214,11 +203,7 @@ export function LiveTop3Preview({
         ))}
       {!show && (
         <p className="mt-3 text-xs text-muted-foreground">
-          {frozen?.available
-            ? "Det officiella urvalet visas separat. Ingen preliminär förhandsvisning efter frysning."
-            : expired
-              ? frozen?.unavailableReason ?? "Förhandsvisningen är avslutad. Väntar på officiell utvärdering; båda källorna krävs."
-              : "Ingen källa med dagens signaldatum har mottagits ännu."}
+          {frozen?.unavailableReason ?? "Ingen källa med dagens signaldatum har mottagits ännu."}
         </p>
       )}
       <Link href={`/sessions/${sessionId}`} className="mt-3 inline-flex items-center text-xs text-primary hover:underline">

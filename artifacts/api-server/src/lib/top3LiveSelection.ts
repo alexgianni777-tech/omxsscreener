@@ -1,6 +1,6 @@
 import {
   buildTop3SelectionSnapshot,
-  top3CutoffForDate,
+  TOP3_POLICY_VERSION,
   type PolicyCandidate,
 } from "./top3SelectionPolicyCore";
 
@@ -14,6 +14,8 @@ type LiveSession = {
   source: string | null;
   top3SnapshotAt: Date | null;
   top3CutoffEvaluatedAt: Date | null;
+  top3CutoffAt?: Date | null;
+  top3PolicyVersion?: string | null;
 };
 
 const STOCKHOLM_DATE = new Intl.DateTimeFormat("sv-SE", {
@@ -34,7 +36,7 @@ export function buildTop3LiveSelection(
   const today = STOCKHOLM_DATE.format(now);
   if (session.date !== today) return undefined;
 
-  const cutoff = top3CutoffForDate(session.date);
+  const cutoff = session.top3CutoffAt ?? null;
   const observed = candidates.filter((candidate) =>
     (candidate.signalSource === "telegram" || candidate.signalSource === "edgeai") &&
     candidate.signalDate === session.date &&
@@ -48,7 +50,10 @@ export function buildTop3LiveSelection(
       received: sourceCandidates.length > 0,
       candidateCount: sourceCandidates.length,
       receivedBeforeCutoff: sourceCandidates.some(
-        (candidate) => candidate.createdAt!.getTime() < cutoff.getTime(),
+        (candidate) => cutoff == null ||
+          (session.top3PolicyVersion === TOP3_POLICY_VERSION
+            ? candidate.createdAt!.getTime() <= cutoff.getTime()
+            : candidate.createdAt!.getTime() < cutoff.getTime()),
       ),
     }];
   })) as Record<(typeof LIVE_SOURCES)[number], {
@@ -57,8 +62,7 @@ export function buildTop3LiveSelection(
     receivedBeforeCutoff: boolean;
   }>;
 
-  const previewAvailable = now.getTime() < cutoff.getTime() &&
-    session.top3SnapshotAt == null &&
+  const previewAvailable = session.top3SnapshotAt == null &&
     session.top3CutoffEvaluatedAt == null &&
     LIVE_SOURCES.some((source) => sourceReceipts[source].received);
 
@@ -88,7 +92,7 @@ export function buildTop3LiveSelection(
 
   return {
     evaluatedAt: now.toISOString(),
-    cutoffAt: cutoff.toISOString(),
+    cutoffAt: cutoff?.toISOString() ?? null,
     previewAvailable,
     sourceReceipts,
     picks,
