@@ -2,6 +2,9 @@ import { isAcceptedSignalDate } from "./signalDatePolicy";
 
 export type ReviewStatus = "APPROVED" | "WARN" | "BLOCKED";
 
+/** The trader checks the calendar manually; importers must not fetch it. */
+export const AUTOMATIC_EARNINGS_CHECK_ENABLED = false;
+
 export type CandidateReviewInput = {
   category: string;
   direction: string;
@@ -92,11 +95,8 @@ export function reviewCandidate(
   if (isEdgeAi && edgeExpectancyR < 0 && !isShort) {
     blockers.push(`Negativ historisk förväntan (${edgeExpectancyR.toFixed(2)}R).`);
   }
-  if (candidate.earningsKnowledge !== "SIGNAL_TIME") {
-    warnings.push("Regel 7 ej bedömbar: rapportkalender saknar verifierad signal-tidsobservation.");
-  } else if (candidate.earningsInDays != null && candidate.earningsInDays >= 0 && candidate.earningsInDays <= 5) {
-    blockers.push(`Rapport inom ${candidate.earningsInDays} dagar — exkluderas enligt Regel 7.`);
-  }
+  // The trader explicitly owns the earnings-calendar check. Keep any stored
+  // observations intact, but do not use missing or near-term earnings as a gate.
 
   const targetDistance = candidate.entryPrice > 0 && candidate.targetPrice > 0
     ? Math.abs((candidate.targetPrice - candidate.entryPrice) / candidate.entryPrice) * 100
@@ -122,6 +122,7 @@ export function reviewCandidate(
   }
 
   const reasons = [...blockers, ...warnings];
+  reasons.push("Rapportkalender kontrolleras manuellt före trade — automatisk Regel 7-spärr är avstängd.");
   // Explicit user policy: negative expectancy alone may not block SHORT.
   // This is information, not a warning that would turn approval into WAIT.
   if (isEdgeAi && isShort && edgeExpectancyR < 0) {

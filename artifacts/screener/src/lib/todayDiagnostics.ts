@@ -106,6 +106,7 @@ const MARKETS = ["SE", "US"] as const;
 const DIRECTIONS = ["LONG", "SHORT"] as const;
 const RAW_STATUS_KEYS = ["INVALID", "STALE", "CONFLICT"] as const;
 const NON_BLOCKING_SHORT_REASON_PREFIXES = [
+  "Rapportkalender kontrolleras manuellt",
   "SHORT tillåten trots negativ historisk förväntan",
   "Låg relativ volym (",
   "Regel 7 ej bedömbar:",

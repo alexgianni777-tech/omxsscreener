@@ -35,6 +35,7 @@ import {
 import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
 import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
 import { isAcceptedSignalDate, stockholmSignalDate } from "../lib/signalDatePolicy";
+import { AUTOMATIC_EARNINGS_CHECK_ENABLED } from "../lib/screeningReview";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
@@ -64,7 +65,7 @@ async function fetchEarningsBatch(
   tickers: string[],
   signalDate: string,
 ): Promise<Map<string, EarningsObservation>> {
-  if (signalDate !== stockholmCalendarDate()) {
+  if (!AUTOMATIC_EARNINGS_CHECK_ENABLED || signalDate !== stockholmCalendarDate()) {
     return new Map(tickers.map((ticker) => [ticker, UNKNOWN_EARNINGS]));
   }
 

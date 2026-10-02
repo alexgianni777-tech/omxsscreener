@@ -25,7 +25,7 @@ import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "../lib/omxs30TickerMap";
 import { fetchCompletedVolumeBatch } from "../lib/completedVolumeBatch";
 import { calendarDaysBetween } from "../lib/marketCalendar";
-import { decideCandidate, reviewCandidate, reviewSession } from "../lib/screeningReview";
+import { AUTOMATIC_EARNINGS_CHECK_ENABLED, decideCandidate, reviewCandidate, reviewSession } from "../lib/screeningReview";
 import { logger } from "../lib/logger";
 import { candidateOrigin } from "../lib/candidateOrigin";
 import { withRetry } from "../lib/retry";
@@ -957,7 +957,7 @@ async function fetchEarningsBatch(
   tickers: string[],
   sessionDate: string,
 ): Promise<Map<string, EarningsObservation>> {
-  if (sessionDate !== stockholmCalendarDate()) {
+  if (!AUTOMATIC_EARNINGS_CHECK_ENABLED || sessionDate !== stockholmCalendarDate()) {
     return new Map(tickers.map((ticker) => [ticker, UNKNOWN_EARNINGS]));
   }
   const unique = [...new Set(tickers)];

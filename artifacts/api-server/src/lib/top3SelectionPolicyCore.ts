@@ -2,7 +2,7 @@ import { candidateSelectionScore, selectSourceBalancedCandidates } from "./candi
 import { decideCandidate, reviewCandidate } from "./screeningReview.ts";
 import { isAcceptedSignalDate } from "./signalDatePolicy";
 
-export const TOP3_POLICY_VERSION = "official-top3-v6";
+export const TOP3_POLICY_VERSION = "official-top3-v7";
 export const TOP3_SELECTION_TYPE = "AUTO";
 export const TOP3_CUTOFF_HOUR = 16;
 export const TOP3_CUTOFF_MINUTE = 30;
@@ -197,8 +197,9 @@ export function buildTop3SelectionSnapshot(
     score,
     review,
     decision,
-    earningsWarning: candidate.earningsKnowledge === "SIGNAL_TIME" &&
-      candidate.earningsInDays != null && candidate.earningsInDays >= 0 && candidate.earningsInDays <= 5,
+    // Automatic Rule 7 is not applied under the manual-calendar policy.
+    // Prior snapshots retain their original warning flags and decisions.
+    earningsWarning: false,
     policyVersion: TOP3_POLICY_VERSION,
     selectedAt,
     type: TOP3_SELECTION_TYPE,

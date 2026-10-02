@@ -53,7 +53,7 @@ export function buildTop3LiveSelection(
       signalDates: [...new Set(sourceCandidates.map((candidate) => candidate.signalDate!))].sort(),
       receivedBeforeCutoff: sourceCandidates.some(
         (candidate) => cutoff == null ||
-          ([TOP3_POLICY_VERSION, "official-top3-v5", "official-top3-v4"].includes(session.top3PolicyVersion ?? "")
+          ([TOP3_POLICY_VERSION, "official-top3-v6", "official-top3-v5", "official-top3-v4"].includes(session.top3PolicyVersion ?? "")
             ? candidate.createdAt!.getTime() <= cutoff.getTime()
             : candidate.createdAt!.getTime() < cutoff.getTime()),
       ),

@@ -38,6 +38,7 @@ import { mapEdgeAiSetup } from "../lib/edgeAiMapping";
 import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
 import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
 import { stockholmSignalDate } from "../lib/signalDatePolicy";
+import { AUTOMATIC_EARNINGS_CHECK_ENABLED } from "../lib/screeningReview";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
@@ -221,7 +222,7 @@ router.post(
       uniqueMappedSetups.map(async (c) => {
         try {
           const isSignalDay = signalDate === stockholmCalendarDate();
-          if (isSignalDay) {
+          if (AUTOMATIC_EARNINGS_CHECK_ENABLED && isSignalDay) {
             const q = (await withRetry(() => yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false }))) as any;
             const earningsInDays = daysUntil(q.earningsTimestamp);
             if (earningsInDays != null) {

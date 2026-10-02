@@ -49,6 +49,11 @@ export function CurrentTop3Selection({ revisions, sessionId }: { revisions: Top3
         Uppdaterad {timestamp(current.selectedAt)} · Källor: {current.sources.join(" + ") || "saknas"}.
         Nya importer med ändrad signaldata räknar om förslagen. Registrerade trades och ursprunglig statistik skrivs inte om.
       </p>
+      {current.policyVersion === "official-top3-v7" && (
+        <p data-testid="manual-earnings-check" className="mt-2 text-xs text-amber-600">
+          Rapportkalender: manuell kontroll före trade. Automatisk Regel 7-spärr är avstängd.
+        </p>
+      )}
       <div className="mt-3">
         {!current.available
           ? <p className="text-sm text-amber-600">Inväntar Telegram och EdgeAI för dagens session. Föregående handelsdags rapporter accepteras.</p>

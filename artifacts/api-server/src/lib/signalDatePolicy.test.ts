@@ -52,14 +52,33 @@ test("previous-close reports are received and can qualify for Top 3 without chan
   assert.ok(candidates.every((row) => row.signalDate === "2026-10-01"));
 });
 
-test("the lag exception does not bypass invalid volume, earnings, negative LONG edge or signal max-age", () => {
+test("the lag exception does not bypass invalid volume, negative LONG edge or signal max-age", () => {
   const original = candidate(1, "edgeai");
   for (const override of [
-    { volMultiplier: 0 }, { earningsInDays: 1 }, { edgeExpectancyR: -0.2 }, { signalAgeBars: 10 },
+    { volMultiplier: 0 }, { edgeExpectancyR: -0.2 }, { signalAgeBars: 10 },
   ]) {
     const input = { ...original, ...override };
     const decision = decideCandidate(input, reviewCandidate(input, "edgeai"), today, now);
     assert.notEqual(decision.status, "TRADEABLE");
+  }
+});
+
+test("manual earnings checks allow otherwise valid prior-close reports without fabricating calendar evidence", () => {
+  for (const source of ["telegram", "edgeai"] as const) {
+    for (const earnings of [
+      { earningsKnowledge: "UNKNOWN", earningsInDays: null },
+      { earningsKnowledge: null, earningsInDays: null },
+      { earningsKnowledge: "SIGNAL_TIME", earningsInDays: 0 },
+      { earningsKnowledge: "SIGNAL_TIME", earningsInDays: 3 },
+      { earningsKnowledge: "SIGNAL_TIME", earningsInDays: 30 },
+    ]) {
+      const input = { ...candidate(1, source), ...earnings };
+      const before = structuredClone(input);
+      const decision = decideCandidate(input, reviewCandidate(input, source), today, now);
+      assert.equal(decision.status, "TRADEABLE");
+      assert.ok(decision.reasons.some((reason) => reason.startsWith("Rapportkalender kontrolleras manuellt")));
+      assert.deepEqual(input, before);
+    }
   }
 });
 

@@ -59,7 +59,7 @@ test("allowing negative SHORT expectancy retains all other risk and data gates",
   };
   for (const changes of [
     { signalRsi: 34 }, { signalGapPct: 2.5 }, { volMultiplier: 0 },
-    { earningsInDays: 3 }, { rr: 1.1 }, { stopPrice: 95 },
+    { rr: 1.1 }, { stopPrice: 95 },
   ]) {
     const short = { ...base, ...changes };
     const review = reviewCandidate(short, "edgeai");
@@ -72,7 +72,7 @@ test("allowing negative SHORT expectancy retains all other risk and data gates",
   const unknownEarnings = { ...base, earningsKnowledge: "UNKNOWN" as const };
   assert.equal(decideCandidate(
     unknownEarnings, reviewCandidate(unknownEarnings, "edgeai"), base.signalDate,
-  ).status, "WAIT");
+  ).status, "TRADEABLE");
   const stale = { ...base, signalDate: "2020-01-01" };
   assert.equal(decideCandidate(stale, reviewCandidate(stale, "edgeai"), base.signalDate).status, "STALE");
 });

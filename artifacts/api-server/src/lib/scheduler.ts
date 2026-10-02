@@ -15,6 +15,7 @@ import { resolveYahooTicker } from "./omxs30TickerMap";
 import { fetchOmxsMarketWeather } from "./omxsMarketWeather";
 import { completedVolumeKey, fetchCompletedVolumeBatch } from "./completedVolumeBatch";
 import { edgeAiSessionDate, fetchFreshEdgeAiData } from "./edgeAiSource";
+import { AUTOMATIC_EARNINGS_CHECK_ENABLED } from "./screeningReview";
 import {
   lockScreenerSession,
   mergeCandidateInputs,
@@ -140,7 +141,7 @@ async function runImport(date: string): Promise<void> {
     mapped.map(async (c) => {
       try {
         const isSignalDay = date === stockholmClock(new Date()).date && signalDate === date;
-        if (isSignalDay) {
+        if (AUTOMATIC_EARNINGS_CHECK_ENABLED && isSignalDay) {
           const q = (await withRetry(() => yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false }))) as any;
           const earningsInDays = daysUntil(q.earningsTimestamp);
           if (earningsInDays != null) {

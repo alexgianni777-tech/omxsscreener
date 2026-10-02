@@ -17,7 +17,7 @@ export function describeTop3Snapshot(session: SessionSnapshotState, now = new Da
   const available = session.top3SnapshotAt != null;
   const today = STOCKHOLM_DATE.format(now);
   const requiredSources = (
-    [TOP3_POLICY_VERSION, "official-top3-v5", "official-top3-v4", "official-top3-v3", "official-top3-v2"].includes(session.top3PolicyVersion ?? "") ||
+    [TOP3_POLICY_VERSION, "official-top3-v6", "official-top3-v5", "official-top3-v4", "official-top3-v3", "official-top3-v2"].includes(session.top3PolicyVersion ?? "") ||
     session.date === today
   )
     ? [...TOP3_REQUIRED_SOURCES]
