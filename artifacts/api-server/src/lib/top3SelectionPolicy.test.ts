@@ -84,7 +84,7 @@ test("official Top 3 includes only tradeable rows and caps each market/direction
   assert.equal(selected.filter((row) => row.market === "US" && row.direction === "LONG").length, 1);
   assert.equal(rows.find((row) => row.candidateId === 10)?.decision.status, "INVALID");
   assert.equal(rows.find((row) => row.candidateId === 10)?.selected, false);
-  assert.ok(rows.every((row) => row.policyVersion === "official-top3-v5"));
+  assert.ok(rows.every((row) => row.policyVersion === "official-top3-v6"));
 });
 
 test("opposing directions for the same canonical underlying are neither auto-selected and carry CONFLICT", () => {
@@ -109,7 +109,7 @@ test("opposing directions for the same canonical underlying are neither auto-sel
   assert.equal(sameTicker.filter((row) => row.selected).length, 0);
   assert.equal(sameTicker.find((row) => row.candidateId === 1)?.decision.status, "CONFLICT");
   assert.equal(sameTicker.find((row) => row.candidateId === 2)?.decision.status, "CONFLICT");
-  assert.equal(sameTicker.find((row) => row.candidateId === 4)?.decision.status, "STALE");
+  assert.equal(sameTicker.find((row) => row.candidateId === 4)?.decision.status, "CONFLICT");
   assert.equal(sameTicker.find((row) => row.candidateId === 5)?.decision.status, "BLOCKED");
   assert.ok(sameTicker.filter((row) => row.candidateId <= 2).every((row) =>
     row.decision.reasons.some((reason) => reason.startsWith("CONFLICT:")),

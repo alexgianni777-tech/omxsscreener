@@ -129,7 +129,7 @@ test("both sources seal immediately before the old 16:30 cutoff", async () => {
   );
   assert.equal(tx.session.top3SnapshotAt?.getTime(), cutoff.getTime() - 1);
   assert.equal(tx.session.top3CutoffAt?.getTime(), cutoff.getTime() - 1);
-  assert.equal(tx.session.top3PolicyVersion, "official-top3-v5");
+  assert.equal(tx.session.top3PolicyVersion, "official-top3-v6");
   assert.equal(tx.inserted.length, 2);
 });
 

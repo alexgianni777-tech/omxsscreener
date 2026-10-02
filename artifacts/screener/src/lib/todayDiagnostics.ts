@@ -26,8 +26,8 @@ export type DiagnosticLiveSelection = {
   cutoffAt: string | null;
   previewAvailable: boolean;
   sourceReceipts?: {
-    edgeai?: { received: boolean; candidateCount?: number };
-    telegram?: { received: boolean; candidateCount?: number };
+    edgeai?: { received: boolean; candidateCount?: number; signalDates?: string[] };
+    telegram?: { received: boolean; candidateCount?: number; signalDates?: string[] };
   };
   picks: Array<{
     candidateId: number;
@@ -91,7 +91,7 @@ export type TodayDiagnostics = {
     preliminary: number | null;
     official: number | null;
   }>;
-  sourceReceipts: Array<{ source: string; received: boolean; candidateCount: number | null }>;
+  sourceReceipts: Array<{ source: string; received: boolean; candidateCount: number | null; signalDates: string[] }>;
   sourceState: "none" | "partial" | "received" | "unavailable";
   shortImported: number;
   tradeableShort: number;
@@ -140,6 +140,14 @@ function selectionKey(source: string, market: string, direction: string): string
 
 function normalizeTicker(ticker: string): string {
   return ticker.trim().toUpperCase().replace(/\.ST$/, "");
+}
+
+function receivedSignalDate(candidate: TodayDiagnosticCandidate, input: { sessionDate: string; live?: DiagnosticLiveSelection | null }): boolean {
+  if (!candidate.signalDate) return false;
+  if (candidate.signalDate === input.sessionDate) return true;
+  const source = candidate.signalSource;
+  if (source !== "edgeai" && source !== "telegram") return false;
+  return input.live?.sourceReceipts?.[source]?.signalDates?.includes(candidate.signalDate) === true;
 }
 
 function withoutOpposingTickerConflicts<T extends { ticker: string; direction: string }>(candidates: T[]): T[] {
@@ -231,7 +239,7 @@ export function deriveTodayDiagnostics(input: {
       if (candidate.decision?.status === "TRADEABLE") tradeableShort++;
     }
 
-    if (candidate.direction === "SHORT" && candidate.signalDate === input.sessionDate &&
+    if (candidate.direction === "SHORT" && receivedSignalDate(candidate, input) &&
       (source === "edgeai" || source === "telegram") &&
       (market === "SE" || market === "US") &&
       ["BLOCKED", "INVALID", "CONFLICT"].includes(candidate.decision?.status ?? "")) {
@@ -284,7 +292,7 @@ export function deriveTodayDiagnostics(input: {
   const issues: ShortSelectionIssue[] = [];
   if (preliminaryAvailable && live) {
     const observedCandidates = input.candidates.filter((candidate) =>
-      candidate.signalDate === input.sessionDate &&
+      receivedSignalDate(candidate, input) &&
       (candidate.direction === "LONG" || candidate.direction === "SHORT") &&
       (candidate.signalSource === "edgeai" || candidate.signalSource === "telegram") &&
       (candidate.market === "SE" || candidate.market === "US") &&
@@ -316,7 +324,7 @@ export function deriveTodayDiagnostics(input: {
         (selection.source === "edgeai" || selection.source === "telegram") &&
         (selection.market === "SE" || selection.market === "US") &&
         (selection.direction === "LONG" || selection.direction === "SHORT") &&
-        candidate.signalDate === input.sessionDate &&
+        receivedSignalDate(candidate, input) &&
         selection.decision?.status === "TRADEABLE" &&
         arrivedByOfficialCutoff(candidate);
     }).map((candidate) => ({
@@ -351,6 +359,7 @@ export function deriveTodayDiagnostics(input: {
   const sourceReceipts = SOURCES.map((source) => ({
     source,
     received: receipts?.[source]?.received === true,
+    signalDates: receipts?.[source]?.signalDates ?? [],
     candidateCount: typeof receipts?.[source]?.candidateCount === "number"
       ? receipts[source].candidateCount!
       : null,

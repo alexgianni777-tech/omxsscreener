@@ -34,6 +34,7 @@ import {
 } from "../lib/candidateSynchronization";
 import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
 import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
+import { isAcceptedSignalDate, stockholmSignalDate } from "../lib/signalDatePolicy";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
@@ -172,7 +173,9 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
     throw err;
   }
 
-  const { date, marketWeather, candidates } = session;
+  const { date: reportDate, marketWeather, candidates } = session;
+  const today = stockholmSignalDate();
+  const date = isAcceptedSignalDate(reportDate, today) ? today : reportDate;
   const [existingSessionForDate] = await db
     .select({ id: screenerSessionsTable.id })
     .from(screenerSessionsTable)
@@ -183,16 +186,16 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
       .from(candidatesTable)
       .where(eq(candidatesTable.sessionId, existingSessionForDate.id));
     const incomingIdentities = new Set(candidates.map((candidate) =>
-      candidateIdentity({ ...candidate, market: "SE", signalSource: "telegram" }),
+      candidateIdentity({ ...candidate, market: "SE", signalSource: "telegram", signalDate: reportDate }),
     ));
     const mismatch = priorCandidates.find((candidate) =>
       candidate.signalDate != null &&
       incomingIdentities.has(candidateIdentity(candidate)) &&
-      candidate.signalDate !== date,
+      candidate.signalDate !== reportDate,
     );
     if (mismatch) {
       res.status(409).json({
-        error: `Signal date mismatch for ${mismatch.ticker}: stored ${mismatch.signalDate}, incoming ${date}`,
+        error: `Signal date mismatch for ${mismatch.ticker}: stored ${mismatch.signalDate}, incoming ${reportDate}`,
       });
       return;
     }
@@ -207,8 +210,8 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
   }
 
   // The report date, not import time, is the provenance of its daily signal.
-  const verifiedVolumes = await enrichVolMultiplier(candidates, date);
-  const earningsBatch = await fetchEarningsBatch(candidates.map((candidate) => candidate.ticker), date);
+  const verifiedVolumes = await enrichVolMultiplier(candidates, reportDate);
+  const earningsBatch = await fetchEarningsBatch(candidates.map((candidate) => candidate.ticker), reportDate);
 
   const buildRow = (
     sessionId: number,
@@ -222,7 +225,7 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
     },
   ) => ({
     sessionId,
-    signalDate: date,
+    signalDate: reportDate,
     market: "SE" as const,   // Telegram screener always imports SE stocks
     signalSource: "telegram" as const,
     origin: "legacy" as const,

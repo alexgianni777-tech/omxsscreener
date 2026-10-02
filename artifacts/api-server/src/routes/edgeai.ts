@@ -37,6 +37,7 @@ import {
 import { mapEdgeAiSetup } from "../lib/edgeAiMapping";
 import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
 import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
+import { stockholmSignalDate } from "../lib/signalDatePolicy";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
@@ -52,10 +53,8 @@ router.post(
     // 1. Fetch latest EdgeAI data
     let edgeData: any;
     try {
-      // A manual click should use the latest valid EdgeAI snapshot even when it
-      // is from yesterday or a weekend. The freshness is returned to the UI as
-      // a warning; the strict scheduler still uses the default behavior.
-      edgeData = await fetchFreshEdgeAiData(10_000, { allowStale: true });
+      // Manual and scheduled imports share the same one-previous-close limit.
+      edgeData = await fetchFreshEdgeAiData(10_000);
     } catch (err: any) {
       if (err instanceof EdgeAiDataFreshnessError) {
         res.status(422).json({ error: err.message, generatedAt: err.generatedAt });
@@ -85,7 +84,8 @@ router.post(
 
     // The stored session date is the EdgeAI signal day, never the browser/server
     // clock. A manual import may intentionally use the latest prior trading day.
-    const sessionDate = edgeAiSessionDate(edgeData);
+    const signalDate = edgeAiSessionDate(edgeData);
+    const sessionDate = stockholmSignalDate();
     const freshness = edgeAiDataFreshness(edgeData);
 
     // EdgeAI generated today can still use yesterday's completed market bars.
@@ -114,7 +114,7 @@ router.post(
     ];
     const { candidates: uniqueMappedSetups, skipped } = deduplicateCandidates(mappedSetups);
     uniqueMappedSetups.forEach((candidate) => {
-      Object.assign(candidate, { signalSource: "edgeai" as const, origin: "edgeai" as const, signalDate: sessionDate });
+      Object.assign(candidate, { signalSource: "edgeai" as const, origin: "edgeai" as const, signalDate });
     });
     if (skipped.length > 0) {
       logger.warn({ skipped }, "EdgeAI import skipped duplicate candidate identities");
@@ -184,7 +184,7 @@ router.post(
         .from(candidatesTable)
         .where(eq(candidatesTable.sessionId, existing[0].id));
       const incomingByIdentity = new Map(
-        uniqueMappedSetups.map((candidate) => [candidateIdentity(candidate), sessionDate] as const),
+        uniqueMappedSetups.map((candidate) => [candidateIdentity(candidate), signalDate] as const),
       );
       const mismatch = existingRows.find((candidate) =>
         candidate.signalDate != null &&
@@ -193,7 +193,7 @@ router.post(
       );
       if (mismatch) {
         res.status(409).json({
-          error: `Signal date mismatch for ${mismatch.ticker}: stored ${mismatch.signalDate}, incoming ${sessionDate}`,
+          error: `Signal date mismatch for ${mismatch.ticker}: stored ${mismatch.signalDate}, incoming ${signalDate}`,
         });
         return;
       }
@@ -209,7 +209,7 @@ router.post(
     const volumeMap = await fetchCompletedVolumeBatch(yf, volumeRequests);
     uniqueMappedSetups.forEach((c, index) => {
       const request = volumeRequests[index];
-      const value = request.asOfDate <= sessionDate ? volumeMap.get(completedVolumeKey(request)) : null;
+      const value = request.asOfDate <= signalDate ? volumeMap.get(completedVolumeKey(request)) : null;
       if (value) {
         c.volMultiplier = value.multiplier;
         c.volumeAsOf = value.asOf;
@@ -220,7 +220,7 @@ router.post(
     await Promise.allSettled(
       uniqueMappedSetups.map(async (c) => {
         try {
-          const isSignalDay = sessionDate === stockholmCalendarDate();
+          const isSignalDay = signalDate === stockholmCalendarDate();
           if (isSignalDay) {
             const q = (await withRetry(() => yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false }))) as any;
             const earningsInDays = daysUntil(q.earningsTimestamp);

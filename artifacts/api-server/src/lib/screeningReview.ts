@@ -1,3 +1,5 @@
+import { isAcceptedSignalDate } from "./signalDatePolicy";
+
 export type ReviewStatus = "APPROVED" | "WARN" | "BLOCKED";
 
 export type CandidateReviewInput = {
@@ -146,10 +148,10 @@ export function decideCandidate(
       reasons: ["Signalen saknar verifierat källdatum — kontrollera en ny snapshot före trade.", ...review.reasons],
     };
   }
-  if (sessionDate > candidate.signalDate) {
+  if (!isAcceptedSignalDate(candidate.signalDate, sessionDate)) {
     return {
       status: "STALE",
-      reasons: [`Sessionen ${sessionDate} ligger efter källsignalen ${candidate.signalDate}; ny signal krävs före trade.`, ...review.reasons],
+      reasons: [`Källsignalen ${candidate.signalDate} ligger utanför tillåten fördröjning för ${sessionDate}; endast dagens eller föregående handelsdags rapport accepteras.`, ...review.reasons],
     };
   }
   if (
@@ -200,7 +202,7 @@ export function decideCandidate(
   if (invalid.length > 0) return { status: "INVALID", reasons: [...invalid, ...review.reasons] };
 
   const today = STOCKHOLM_DATE.format(now);
-  if (candidate.signalDate < today || sessionDate < today) {
+  if (!isAcceptedSignalDate(candidate.signalDate, today) || sessionDate !== today) {
     return {
       status: "STALE",
       reasons: [`Signalen är från ${candidate.signalDate}; kontrollera en ny snapshot och live-pris före trade.`, ...review.reasons],
@@ -210,7 +212,12 @@ export function decideCandidate(
   if (review.status === "WARN") return { status: "WAIT", reasons: review.reasons };
   return {
     status: "TRADEABLE",
-    reasons: ["Screeningsreglerna är godkända för dagens signal.", ...review.reasons],
+    reasons: [
+      candidate.signalDate === sessionDate
+        ? "Screeningsreglerna är godkända för dagens signal."
+        : `Rapport från ${candidate.signalDate} accepteras med en handelsdags fördröjning. Kontrollera aktuell kurs före trade.`,
+      ...review.reasons,
+    ],
   };
 }
 

@@ -1,5 +1,29 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+
+test("server-accepted prior-close receipts show the real dates and current short counts", () => {
+  const day = "2026-10-02";
+  const now = new Date(`${day}T10:00:00Z`).getTime();
+  const diagnostics = deriveTodayDiagnostics({
+    sessionDate: day, today: day, now,
+    candidates: [{
+      id: 991, ticker: "PRIOR", signalDate: "2026-10-01", signalSource: "telegram",
+      market: "SE", direction: "SHORT", decision: { status: "TRADEABLE", reasons: [] },
+      createdAt: new Date(now).toISOString(),
+    }],
+    live: {
+      evaluatedAt: new Date(now).toISOString(), cutoffAt: null, previewAvailable: true,
+      sourceReceipts: {
+        telegram: { received: true, candidateCount: 1, signalDates: ["2026-10-01"] },
+        edgeai: { received: false, candidateCount: 0, signalDates: [] },
+      },
+      picks: [{ candidateId: 991, rank: 1, score: 1, market: "SE", direction: "SHORT", signalSource: "telegram" }],
+    },
+  } as any)!;
+  assert.equal(diagnostics.sourceState, "partial");
+  assert.equal(diagnostics.tradeableShort, 1);
+  assert.deepEqual(diagnostics.sourceReceipts.find((row) => row.source === "telegram")?.signalDates, ["2026-10-01"]);
+});
 import {
   deriveTodayDiagnostics,
   type DiagnosticLiveSelection,

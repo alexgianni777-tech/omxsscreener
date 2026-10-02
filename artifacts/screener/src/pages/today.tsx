@@ -604,7 +604,7 @@ export function Today() {
               <div>
                 <h3 className="text-sm font-semibold">Importerade EdgeAI-signaler · {edgeAiCandidates.length} st</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Signalernas datum: {session.date}. Inte officiellt Top 3.
+                  Rapportdatum: {[...new Set(edgeAiCandidates.map((candidate) => candidate.signalDate).filter(Boolean))].join(", ") || "okänt"}. Inte officiellt Top 3.
                   {!isToday && " Äldre signaler – inte nya förslag för i dag."}
                 </p>
               </div>

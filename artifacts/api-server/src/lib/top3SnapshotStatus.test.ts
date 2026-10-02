@@ -16,7 +16,7 @@ test("today's official selection waits for both sources without a timed cutoff",
   const status = describeTop3Snapshot(base, new Date("2026-09-28T12:00:00Z"));
   assert.equal(status.state, "WAITING_FOR_SOURCES");
   assert.deepEqual(status.requiredSources, ["telegram", "edgeai"]);
-  assert.match(status.unavailableReason ?? "", /låses direkt/);
+  assert.match(status.unavailableReason ?? "", /Föregående|föregående/);
   assert.equal(status.cutoffAt, null);
 });
 

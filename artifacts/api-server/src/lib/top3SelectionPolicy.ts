@@ -7,6 +7,7 @@ import {
   type PolicyCandidate,
 } from "./top3SelectionPolicyCore";
 import { appendTop3Revision } from "./top3SelectionRevisions";
+import { isAcceptedSignalDate } from "./signalDatePolicy";
 
 export { buildTop3SelectionSnapshot, TOP3_POLICY_VERSION, TOP3_SELECTION_TYPE } from "./top3SelectionPolicyCore";
 
@@ -53,7 +54,7 @@ export async function snapshotNewSessionTop3(
   const cohort = arrivals.filter((candidate: any) =>
     candidate.createdAt instanceof Date &&
     candidate.createdAt.getTime() <= cutoff.getTime() &&
-    candidate.signalDate === session.date &&
+    isAcceptedSignalDate(candidate.signalDate, session.date) &&
     (candidate.signalSource === "telegram" || candidate.signalSource === "edgeai"),
   );
   const participatingSources = [...new Set(

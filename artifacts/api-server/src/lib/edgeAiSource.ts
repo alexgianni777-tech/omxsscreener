@@ -1,10 +1,9 @@
+import { isAcceptedSignalDate, stockholmSignalDate } from "./signalDatePolicy";
+
 const EDGEAI_CONTENTS_API_URL =
   "https://api.github.com/repos/alexgianni777-tech/edgeai/contents/public/data.json?ref=main";
 const EDGEAI_RAW_URL =
   "https://raw.githubusercontent.com/alexgianni777-tech/edgeai/main/public/data.json";
-
-const WARN_EDGEAI_DATA_AGE_MS = 30 * 60 * 60 * 1_000;
-const MAX_EDGEAI_IMPORT_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 
 export class EdgeAiDataFreshnessError extends Error {
   public readonly generatedAt: string | null;
@@ -22,13 +21,12 @@ export class EdgeAiDataFreshnessError extends Error {
 /**
  * raw.githubusercontent.com can keep serving yesterday's file after EdgeAI has
  * committed fresh data. Fetch the canonical repository content through GitHub's
- * API instead. The manual button may import the latest valid signal file when
- * it is older than today (for example after a weekend), while the scheduler
- * keeps the strict default and waits for today's file.
+ * API instead. Manual and scheduled imports both accept the previous weekday
+ * close, retain its actual date, and reject older or future-dated reports.
  */
 export async function fetchFreshEdgeAiData(
   timeoutMs: number,
-  options: { allowStale?: boolean } = {},
+  options: { now?: Date } = {},
 ): Promise<any> {
   let response = await fetch(EDGEAI_CONTENTS_API_URL, {
     headers: {
@@ -68,18 +66,16 @@ export async function fetchFreshEdgeAiData(
     );
   }
 
-  const freshness = edgeAiDataFreshness(data);
+  const now = options.now ?? new Date();
+  const freshness = edgeAiDataFreshness(data, now);
   const tooFarInFuture = freshness.ageMs < -5 * 60 * 1_000;
-  const tooOld = freshness.ageMs > MAX_EDGEAI_IMPORT_AGE_MS;
-  const staleForStrictImport = freshness.ageMs > WARN_EDGEAI_DATA_AGE_MS || freshness.isDifferentUtcDate;
-  if (tooFarInFuture || tooOld || (staleForStrictImport && !options.allowStale)) {
+  const accepted = isAcceptedSignalDate(edgeAiSessionDate(data), stockholmSignalDate(now));
+  if (tooFarInFuture || !accepted) {
     const ageDescription = freshness.ageDescription;
     throw new EdgeAiDataFreshnessError(
       tooFarInFuture
         ? `EdgeAI-data har en framtida tidsstämpel (${generatedDateLabel(generatedAtMs)})`
-        : tooOld
-          ? `EdgeAI-data är ${ageDescription} (${generatedDateLabel(generatedAtMs)}) och för gammal för import`
-          : `EdgeAI-data är ${ageDescription} (${generatedDateLabel(generatedAtMs)}) och importeras inte som dagens session`,
+        : `EdgeAI-data är ${ageDescription} (${generatedDateLabel(generatedAtMs)}). Endast dagens eller föregående handelsdags rapport accepteras.`,
       generatedAt,
     );
   }
@@ -88,10 +84,10 @@ export async function fetchFreshEdgeAiData(
 }
 
 function generatedDateLabel(timestamp: number): string {
-  return new Date(timestamp).toISOString().slice(0, 10);
+  return stockholmSignalDate(new Date(timestamp));
 }
 
-export function edgeAiDataFreshness(data: { generatedAt?: unknown }): {
+export function edgeAiDataFreshness(data: { generatedAt?: unknown }, now = new Date()): {
   ageMs: number;
   isDifferentUtcDate: boolean;
   calendarDaysOld: number;
@@ -106,9 +102,9 @@ export function edgeAiDataFreshness(data: { generatedAt?: unknown }): {
     );
   }
 
-  const ageMs = Date.now() - generatedAtMs;
+  const ageMs = now.getTime() - generatedAtMs;
   const generatedDate = generatedDateLabel(generatedAtMs);
-  const currentDate = new Date().toISOString().slice(0, 10);
+  const currentDate = stockholmSignalDate(now);
   const generatedDayMs = Date.parse(`${generatedDate}T00:00:00.000Z`);
   const currentDayMs = Date.parse(`${currentDate}T00:00:00.000Z`);
   const calendarDaysOld = Math.round((currentDayMs - generatedDayMs) / 86_400_000);
@@ -135,7 +131,7 @@ export function edgeAiSessionDate(data: { generatedAt?: unknown }): string {
   if (!Number.isFinite(timestamp)) {
     throw new EdgeAiDataFreshnessError("EdgeAI response has no valid generatedAt timestamp", generatedAt || null);
   }
-  return new Date(timestamp).toISOString().slice(0, 10);
+  return stockholmSignalDate(new Date(timestamp));
 }
 
 export function edgeAiDirection(value: unknown): "LONG" | "SHORT" {

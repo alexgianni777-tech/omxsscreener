@@ -9,5 +9,7 @@
 export interface Top3LiveSourceReceipt {
   received: boolean;
   candidateCount: number;
+  /** Original accepted report dates; today or the previous trading day. */
+  signalDates?: string[];
   receivedBeforeCutoff: boolean;
 }

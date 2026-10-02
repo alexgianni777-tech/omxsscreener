@@ -305,7 +305,8 @@ MARKNADSVÄDER  OMXS30 3305.0 | 5d  2.7% | 1m  1.8% | 3m  8.9% | RSI  79
             <span className="block text-xs text-muted-foreground mt-0.5">
               Den här importen registreras som Telegram-källa, med manuellt ursprung.
               Rapportens signaldatum behålls. Dagens Top 3 räknas om direkt
-              vid återimport när båda dagens källor finns. Tidigare urval och trades bevaras.
+              vid återimport när båda källorna finns. Föregående handelsdags rapporter
+              accepteras med sitt riktiga datum. Tidigare urval och trades bevaras.
               Tidigare manuella rader märks inte om och kan finnas kvar separat.
             </span>
           </span>
@@ -318,10 +319,10 @@ MARKNADSVÄDER  OMXS30 3305.0 | 5d  2.7% | 1m  1.8% | 3m  8.9% | RSI  79
             className="mt-0.5 h-4 w-4 accent-primary"
           />
           <span>
-            <span className="block text-sm font-medium">Visa i dagens session (äldre signal förblir inaktuell)</span>
+            <span className="block text-sm font-medium">Visa i dagens session (en handelsdags fördröjning accepteras)</span>
             <span className="block text-xs text-muted-foreground mt-0.5">
               Visar kandidaterna under {stockholmToday()}, men deras ursprungliga signaldatum ändras inte.
-              En äldre signal kan inte bli handelsbar utan en ny, färsk screening.
+              Föregående handelsdags rapport accepteras; äldre rapporter förblir inaktuella. Övriga handelsregler gäller fortfarande.
             </span>
           </span>
         </label>

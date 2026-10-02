@@ -83,6 +83,7 @@ async function sessionHasEdgeAiForDate(date: string): Promise<boolean> {
     .where(and(
       eq(candidatesTable.sessionId, session.id),
       eq(candidatesTable.signalSource, "edgeai"),
+      eq(candidatesTable.signalDate, date),
     ))
     .limit(1);
   return Boolean(edgeAiCandidate);

@@ -17,7 +17,7 @@ export function describeTop3Snapshot(session: SessionSnapshotState, now = new Da
   const available = session.top3SnapshotAt != null;
   const today = STOCKHOLM_DATE.format(now);
   const requiredSources = (
-    [TOP3_POLICY_VERSION, "official-top3-v4", "official-top3-v3", "official-top3-v2"].includes(session.top3PolicyVersion ?? "") ||
+    [TOP3_POLICY_VERSION, "official-top3-v5", "official-top3-v4", "official-top3-v3", "official-top3-v2"].includes(session.top3PolicyVersion ?? "") ||
     session.date === today
   )
     ? [...TOP3_REQUIRED_SOURCES]
@@ -36,7 +36,7 @@ export function describeTop3Snapshot(session: SessionSnapshotState, now = new Da
     unavailableReason = `Vid 16:30 saknades dagens ${missing.join(" och ") || "verifierade källor"}; inget officiellt urval för sessionen.`;
   } else if (session.date === today) {
     state = "WAITING_FOR_SOURCES";
-    unavailableReason = "Officiellt Top 3 låses direkt när både dagens Telegram-lista och EdgeAI-import finns. Senare importer ändrar inte urvalet.";
+    unavailableReason = "Inväntar Telegram och EdgeAI för dagens session. Rapporter från föregående handelsdag accepteras; aktuella förslag uppdateras vid återimport.";
   } else {
     state = "LEGACY_UNAVAILABLE";
     unavailableReason = "Ingen verifierad samtida Top 3-snapshot finns för denna äldre session.";

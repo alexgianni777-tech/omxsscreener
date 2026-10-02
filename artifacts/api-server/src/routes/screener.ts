@@ -41,6 +41,7 @@ import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
 import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
 import { describeTop3Snapshot } from "../lib/top3SnapshotStatus";
 import { mapTop3Revision } from "../lib/top3SelectionRevisions";
+import { isAcceptedSignalDate, stockholmSignalDate } from "../lib/signalDatePolicy";
 import { buildTop3LiveSelection, type Top3LiveCandidate } from "../lib/top3LiveSelection";
 import { parseSessionImportResponse } from "../lib/sessionImportResponse";
 import { pastedSignalSource } from "../lib/pastedSignalSource";
@@ -75,6 +76,9 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     session = { ...session, date: targetDate };
   }
 
+  if (!parsed.data.targetDate && isAcceptedSignalDate(reportDate, stockholmSignalDate())) {
+    session = { ...session, date: stockholmSignalDate() };
+  }
   // Check for duplicate date
   const existing = await db
     .select({ id: screenerSessionsTable.id, source: screenerSessionsTable.source })
@@ -91,7 +95,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
       .where(eq(candidatesTable.sessionId, existing[0].id));
     const incomingByIdentity = new Map(
       session.candidates.map((candidate) => {
-        const row = { ...candidate, market: "SE", signalSource };
+        const row = { ...candidate, market: "SE", signalSource, signalDate: reportDate };
         return [candidateIdentity(row), reportDate] as const;
       }),
     );
@@ -370,7 +374,7 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
   }
 
   // Verify the date matches
-  if (parsedSession.date !== existingSession.date) {
+  if (!isAcceptedSignalDate(parsedSession.date, existingSession.date)) {
     res
       .status(400)
       .json({
@@ -384,7 +388,7 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
     .from(candidatesTable)
     .where(eq(candidatesTable.sessionId, existingSession.id));
   const reimportIdentitySet = new Set(parsedSession.candidates.map((candidate) =>
-    candidateIdentity({ ...candidate, market: "SE", signalSource }),
+    candidateIdentity({ ...candidate, market: "SE", signalSource, signalDate: parsedSession.date }),
   ));
   const sourceDateMismatch = existingCandidatesForDateCheck.find((candidate) =>
     candidate.signalDate != null &&

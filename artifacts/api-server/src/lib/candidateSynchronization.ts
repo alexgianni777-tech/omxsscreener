@@ -13,6 +13,7 @@ import { top3CutoffForDate } from "./top3SelectionPolicyCore";
 
 type CandidateInput = Record<string, unknown> & {
   market?: string | null;
+  signalDate?: string | null;
   category: string;
   ticker: string;
   direction: string;

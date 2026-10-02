@@ -913,6 +913,8 @@ export interface Top3SelectionSnapshotStatus {
 export interface Top3LiveSourceReceipt {
   received: boolean;
   candidateCount: number;
+  /** Original accepted report dates; today or the previous trading day. */
+  signalDates?: string[];
   receivedBeforeCutoff: boolean;
 }
 
@@ -1135,6 +1137,8 @@ export const Top3RevisionPickSource = {
 export interface Top3RevisionPick {
   candidateId: number;
   ticker: string;
+  /** Original report date, never rewritten to the import/session day. */
+  signalDate?: string;
   category: string;
   rank: number;
   score: number;

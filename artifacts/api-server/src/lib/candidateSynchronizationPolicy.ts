@@ -1,6 +1,7 @@
 export type CandidatePolicyInput = {
   market?: string | null;
   signalSource?: string | null;
+  signalDate?: string | null;
   category: string;
   ticker: string;
   direction: string;
@@ -12,6 +13,7 @@ export function candidateIdentity(candidate: CandidatePolicyInput): string {
     candidate.category,
     candidate.ticker.trim().toUpperCase(),
     candidate.direction,
+    ...(candidate.signalDate ? [candidate.signalDate] : []),
     candidate.signalSource ?? "<unknown>",
   ].join("|");
 }

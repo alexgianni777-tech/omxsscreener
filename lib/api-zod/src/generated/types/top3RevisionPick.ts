@@ -13,6 +13,8 @@ import type { Top3RevisionPickSource } from './top3RevisionPickSource';
 export interface Top3RevisionPick {
   candidateId: number;
   ticker: string;
+  /** Original report date, never rewritten to the import/session day. */
+  signalDate?: string;
   category: string;
   rank: number;
   score: number;

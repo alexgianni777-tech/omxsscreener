@@ -1,7 +1,8 @@
 import { candidateSelectionScore, selectSourceBalancedCandidates } from "./candidateRanking.ts";
 import { decideCandidate, reviewCandidate } from "./screeningReview.ts";
+import { isAcceptedSignalDate } from "./signalDatePolicy";
 
-export const TOP3_POLICY_VERSION = "official-top3-v5";
+export const TOP3_POLICY_VERSION = "official-top3-v6";
 export const TOP3_SELECTION_TYPE = "AUTO";
 export const TOP3_CUTOFF_HOUR = 16;
 export const TOP3_CUTOFF_MINUTE = 30;
@@ -118,7 +119,7 @@ export function buildTop3SelectionSnapshot(
 
   const eligible = evaluated.filter(({ decision, candidate }) =>
     decision.status === "TRADEABLE" &&
-    candidate.signalDate === sessionDate &&
+    isAcceptedSignalDate(candidate.signalDate, sessionDate) &&
     Boolean(candidate.signalSource) &&
     (candidate.market === "SE" || candidate.market === "US"),
   );

@@ -63,11 +63,13 @@ test("one exact-source receipt can produce a read-only preliminary pick", () => 
   assert.deepEqual(result.sourceReceipts.telegram, {
     received: true,
     candidateCount: 1,
+    signalDates: ["2026-09-30"],
     receivedBeforeCutoff: true,
   });
   assert.deepEqual(result.sourceReceipts.edgeai, {
     received: false,
     candidateCount: 0,
+    signalDates: [],
     receivedBeforeCutoff: false,
   });
   assert.equal(result.picks.length, 1);
@@ -92,9 +94,9 @@ test("confirmed Telegram paste participates without relabeling prior manual cand
   assert.equal(confirmedPaste.origin, "manual");
 });
 
-test("Telegram confirmation cannot make yesterday's signal into today's receipt", () => {
+test("Telegram confirmation cannot make signals older than the previous close into today's receipt", () => {
   const result = buildTop3LiveSelection(session(), [
-    candidate(1, { signalSource: pastedSignalSource(true), signalDate: "2026-09-29" }),
+    candidate(1, { signalSource: pastedSignalSource(true), signalDate: "2026-09-28" }),
   ], beforeCutoff)!;
   assert.equal(result.sourceReceipts.telegram.received, false);
   assert.equal(result.previewAvailable, false);
@@ -132,7 +134,7 @@ test("missing source does not block preliminary status but is never represented 
 test("manual and stale signal rows do not count as today's Telegram or EdgeAI receipts", () => {
   const result = buildTop3LiveSelection(session(), [
     candidate(1, { signalSource: "manual" }),
-    candidate(2, { signalSource: "telegram", signalDate: "2026-09-29" }),
+    candidate(2, { signalSource: "telegram", signalDate: "2026-09-28" }),
     candidate(3, {
       signalSource: "edgeai",
       createdAt: new Date(beforeCutoff.getTime() + 1),

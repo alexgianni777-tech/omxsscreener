@@ -3,6 +3,7 @@ import {
   TOP3_POLICY_VERSION,
   type PolicyCandidate,
 } from "./top3SelectionPolicyCore";
+import { isAcceptedSignalDate } from "./signalDatePolicy";
 
 export type Top3LiveCandidate = PolicyCandidate & {
   createdAt: Date | null;
@@ -39,7 +40,7 @@ export function buildTop3LiveSelection(
   const cutoff = session.top3CutoffAt ?? null;
   const observed = candidates.filter((candidate) =>
     (candidate.signalSource === "telegram" || candidate.signalSource === "edgeai") &&
-    candidate.signalDate === session.date &&
+    isAcceptedSignalDate(candidate.signalDate, session.date) &&
     candidate.createdAt instanceof Date &&
     candidate.createdAt.getTime() <= now.getTime(),
   );
@@ -49,9 +50,10 @@ export function buildTop3LiveSelection(
     return [source, {
       received: sourceCandidates.length > 0,
       candidateCount: sourceCandidates.length,
+      signalDates: [...new Set(sourceCandidates.map((candidate) => candidate.signalDate!))].sort(),
       receivedBeforeCutoff: sourceCandidates.some(
         (candidate) => cutoff == null ||
-          ([TOP3_POLICY_VERSION, "official-top3-v4"].includes(session.top3PolicyVersion ?? "")
+          ([TOP3_POLICY_VERSION, "official-top3-v5", "official-top3-v4"].includes(session.top3PolicyVersion ?? "")
             ? candidate.createdAt!.getTime() <= cutoff.getTime()
             : candidate.createdAt!.getTime() < cutoff.getTime()),
       ),
@@ -59,6 +61,7 @@ export function buildTop3LiveSelection(
   })) as Record<(typeof LIVE_SOURCES)[number], {
     received: boolean;
     candidateCount: number;
+    signalDates: string[];
     receivedBeforeCutoff: boolean;
   }>;
 

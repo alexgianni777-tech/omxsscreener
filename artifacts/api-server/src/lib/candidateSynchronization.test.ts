@@ -191,6 +191,23 @@ test("resolved and linked pending trades retain their original complete plan on 
   }
 });
 
+test("a new report date creates a separate signal without rewriting the registered prior-close trade", async () => {
+  const original = {
+    ...row("REGISTERED", "SE", "WIN"), id: 991, signalDate: "2026-10-01",
+    entryPrice: 100, stopPrice: 95, targetPrice: 110, rr: 2,
+    exitPrice: 110, realizedR: 2,
+  };
+  const before = structuredClone(original);
+  const fresh = {
+    ...row("REGISTERED"), signalDate: "2026-10-02",
+    entryPrice: 120, stopPrice: 114, targetPrice: 132, rr: 2,
+  };
+  const result = await synchronizeCandidates(synchronizationTx([original], [], [fresh]), 77, [fresh]);
+  assert.deepEqual(original, before);
+  assert.equal(result.candidates.length, 2);
+  assert.equal(result.candidates.find((row) => row.signalDate === "2026-10-02")?.entryPrice, 120);
+});
+
 test("selected snapshot and Today retain the same candidate identity", async () => {
   const original = syncCandidate(201, "TODAY-PICK");
   const snapshot = { candidateId: original.id, selected: true };

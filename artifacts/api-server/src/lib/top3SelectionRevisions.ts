@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { desc, eq } from "drizzle-orm";
 import { top3SelectionRevisionsTable } from "@workspace/db";
 import { candidateIdentity } from "./candidateSynchronizationPolicy";
+import { isAcceptedSignalDate } from "./signalDatePolicy";
 import { buildTop3SelectionSnapshot, TOP3_POLICY_VERSION, TOP3_REQUIRED_SOURCES, type PolicyCandidate, type SnapshotInput } from "./top3SelectionPolicyCore";
 
 const SIGNAL_FIELDS = [
@@ -47,7 +48,7 @@ export function buildRevisionInputs(
   const unique = new Map<string, any>();
   for (const row of updated) {
     const createdAt = row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt);
-    if (row.signalDate !== date || !TOP3_REQUIRED_SOURCES.includes(row.signalSource) ||
+    if (!isAcceptedSignalDate(row.signalDate, date) || !TOP3_REQUIRED_SOURCES.includes(row.signalSource) ||
       !Number.isFinite(createdAt.getTime()) || createdAt > now) continue;
     unique.set(candidateIdentity(row), Object.fromEntries(
       SIGNAL_FIELDS.map((field) => [field, field === "createdAt" ? createdAt.toISOString() : row[field] ?? null]),
@@ -93,6 +94,7 @@ export function mapTop3Revision(row: typeof top3SelectionRevisionsTable.$inferSe
         const input = inputs.get(selection.candidateId)!;
         return {
           candidateId: input.id, ticker: input.ticker, category: input.category,
+          signalDate: input.signalDate!,
           rank: selection.rank!, score: selection.score,
           market: selection.market!, direction: selection.direction, source: selection.source!,
           entryPrice: input.entryPrice, stopPrice: input.stopPrice,

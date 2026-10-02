@@ -64,14 +64,14 @@ export function TodayDiagnostics({
       <div>
         <h3 className="text-sm font-semibold">Dagens import- och urvalsdiagnostik</h3>
         <p className="mt-0.5 text-[11px] text-muted-foreground">
-          Endast dagens Stockholm-session. Beslutsstatus kommer från kandidatsvaret; urval räknas från serverns förhandsval och frysta snapshot.
+          Dagens Stockholm-session accepterar även föregående handelsdags rapporter. Rapportdatum behålls; övriga handelsregler gäller fortfarande.
         </p>
       </div>
 
       <div className="mt-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs">
         {diagnostics.sourceState === "none" ? (
           <p data-testid="status-diagnostics-no-source" className="font-medium">
-            Ingen EdgeAI- eller Telegram-källa mottagen idag.
+            Ingen verifierad EdgeAI- eller Telegram-rapport från idag eller föregående handelsdag finns i dagens session.
           </p>
         ) : diagnostics.sourceState === "unavailable" ? (
           <p>Källstatus ej tillgänglig.</p>
@@ -83,6 +83,9 @@ export function TodayDiagnostics({
                 {receipt.received
                   ? `mottagen${receipt.candidateCount == null ? "" : ` · ${receipt.candidateCount} kandidater`}`
                   : "ingen källa mottagen"}
+                {receipt.received && receipt.signalDates.length > 0 && (
+                  <span className="text-muted-foreground"> · rapport {receipt.signalDates.join(", ")}{receipt.signalDates.some((date) => date !== sessionDate) ? " · en handelsdags fördröjning accepterad" : ""}</span>
+                )}
               </span>
             ))}
           </div>

@@ -150,7 +150,7 @@ test("undated legacy volume cannot qualify a trade", () => {
   const review = reviewCandidate(undated, "edgeai");
   assert.equal(review.status, "BLOCKED");
   assert.match(review.reasons.join(" "), /kursdatum är inte verifierat/);
-  const decision = decideCandidate(undated, review, "2026-07-11", new Date("2026-07-11T10:00:00Z"));
+  const decision = decideCandidate(undated, review, edgeCandidate.signalDate, new Date(`${edgeCandidate.signalDate}T10:00:00Z`));
   assert.equal(decision.status, "INVALID");
   assert.match(decision.reasons.join(" "), /kursdatum saknas/);
 });
@@ -184,7 +184,7 @@ test("a later trading target date is stale relative to the immutable source date
   const targetDate = nextDay.toISOString().slice(0, 10);
   const decision = decideCandidate(edgeCandidate, approved, targetDate, new Date(`${edgeCandidate.signalDate}T10:00:00.000Z`));
   assert.equal(decision.status, "STALE");
-  assert.match(decision.reasons.join(" "), /ligger efter källsignalen/);
+  assert.match(decision.reasons.join(" "), /Signalen är från/);
 });
 
 test("missing source date is stale and cannot be tradeable", () => {

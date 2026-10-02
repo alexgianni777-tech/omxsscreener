@@ -185,11 +185,13 @@ export const ImportSessionResponse = zod.object({
   "telegram": zod.object({
   "received": zod.boolean(),
   "candidateCount": zod.number().multipleOf(importSessionResponseTop3LiveSelectionSourceReceiptsTelegramCandidateCountMultipleOf),
+  "signalDates": zod.array(zod.string()).optional().describe('Original accepted report dates; today or the previous trading day.'),
   "receivedBeforeCutoff": zod.boolean()
 }),
   "edgeai": zod.object({
   "received": zod.boolean(),
   "candidateCount": zod.number().multipleOf(importSessionResponseTop3LiveSelectionSourceReceiptsEdgeaiCandidateCountMultipleOf),
+  "signalDates": zod.array(zod.string()).optional().describe('Original accepted report dates; today or the previous trading day.'),
   "receivedBeforeCutoff": zod.boolean()
 })
 }),
@@ -211,6 +213,7 @@ export const ImportSessionResponse = zod.object({
   "picks": zod.array(zod.object({
   "candidateId": zod.number(),
   "ticker": zod.string(),
+  "signalDate": zod.string().optional().describe('Original report date, never rewritten to the import\/session day.'),
   "category": zod.string(),
   "rank": zod.number(),
   "score": zod.number(),
@@ -427,11 +430,13 @@ export const ReimportSessionResponse = zod.object({
   "telegram": zod.object({
   "received": zod.boolean(),
   "candidateCount": zod.number().multipleOf(reimportSessionResponseTop3LiveSelectionSourceReceiptsTelegramCandidateCountMultipleOf),
+  "signalDates": zod.array(zod.string()).optional().describe('Original accepted report dates; today or the previous trading day.'),
   "receivedBeforeCutoff": zod.boolean()
 }),
   "edgeai": zod.object({
   "received": zod.boolean(),
   "candidateCount": zod.number().multipleOf(reimportSessionResponseTop3LiveSelectionSourceReceiptsEdgeaiCandidateCountMultipleOf),
+  "signalDates": zod.array(zod.string()).optional().describe('Original accepted report dates; today or the previous trading day.'),
   "receivedBeforeCutoff": zod.boolean()
 })
 }),
@@ -453,6 +458,7 @@ export const ReimportSessionResponse = zod.object({
   "picks": zod.array(zod.object({
   "candidateId": zod.number(),
   "ticker": zod.string(),
+  "signalDate": zod.string().optional().describe('Original report date, never rewritten to the import\/session day.'),
   "category": zod.string(),
   "rank": zod.number(),
   "score": zod.number(),
@@ -636,11 +642,13 @@ export const GetSessionResponse = zod.object({
   "telegram": zod.object({
   "received": zod.boolean(),
   "candidateCount": zod.number().multipleOf(getSessionResponseTop3LiveSelectionSourceReceiptsTelegramCandidateCountMultipleOf),
+  "signalDates": zod.array(zod.string()).optional().describe('Original accepted report dates; today or the previous trading day.'),
   "receivedBeforeCutoff": zod.boolean()
 }),
   "edgeai": zod.object({
   "received": zod.boolean(),
   "candidateCount": zod.number().multipleOf(getSessionResponseTop3LiveSelectionSourceReceiptsEdgeaiCandidateCountMultipleOf),
+  "signalDates": zod.array(zod.string()).optional().describe('Original accepted report dates; today or the previous trading day.'),
   "receivedBeforeCutoff": zod.boolean()
 })
 }),
@@ -662,6 +670,7 @@ export const GetSessionResponse = zod.object({
   "picks": zod.array(zod.object({
   "candidateId": zod.number(),
   "ticker": zod.string(),
+  "signalDate": zod.string().optional().describe('Original report date, never rewritten to the import\/session day.'),
   "category": zod.string(),
   "rank": zod.number(),
   "score": zod.number(),

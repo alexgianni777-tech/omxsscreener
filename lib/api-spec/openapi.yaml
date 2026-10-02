@@ -1094,6 +1094,11 @@ components:
         candidateCount:
           type: number
           multipleOf: 1
+        signalDates:
+          type: array
+          description: Original accepted report dates; today or the previous trading day.
+          items:
+            type: string
         receivedBeforeCutoff:
           type: boolean
 
@@ -1328,6 +1333,9 @@ components:
           type: number
         ticker:
           type: string
+        signalDate:
+          type: string
+          description: Original report date, never rewritten to the import/session day.
         category:
           type: string
         rank:

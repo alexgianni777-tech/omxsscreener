@@ -23,6 +23,7 @@ function Picks({ revision }: { revision: Top3Revision }) {
                     <span className="font-mono text-xs">#{pick.rank}</span>
                     <strong>{pick.ticker.replace(/\.ST$/i, "")}</strong>
                     <span className="text-xs text-muted-foreground">{pick.source === "telegram" ? "Telegram" : "EdgeAI"}</span>
+                    {pick.signalDate && <span className="text-xs text-muted-foreground">Rapport {pick.signalDate}</span>}
                     <DecisionBadge decision={pick.decision} />
                   </div>
                   <p className="mt-1 font-mono text-xs">Entry {pick.entryPrice} · Stop {pick.stopPrice} · Mål {pick.targetPrice} · R/R {pick.rr}</p>
@@ -50,7 +51,7 @@ export function CurrentTop3Selection({ revisions, sessionId }: { revisions: Top3
       </p>
       <div className="mt-3">
         {!current.available
-          ? <p className="text-sm text-amber-600">Inväntar både dagens Telegram och EdgeAI. Inget komplett aktuellt urval ännu.</p>
+          ? <p className="text-sm text-amber-600">Inväntar Telegram och EdgeAI för dagens session. Föregående handelsdags rapporter accepteras.</p>
           : current.picks.length === 0
             ? <p className="text-sm text-muted-foreground">Inga kandidater klarar handelsreglerna i den senaste datan.</p>
             : <Picks revision={current} />}
