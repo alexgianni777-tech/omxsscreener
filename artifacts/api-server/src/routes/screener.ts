@@ -41,6 +41,7 @@ import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
 import { describeTop3Snapshot } from "../lib/top3SnapshotStatus";
 import { buildTop3LiveSelection, type Top3LiveCandidate } from "../lib/top3LiveSelection";
 import { parseSessionImportResponse } from "../lib/sessionImportResponse";
+import { pastedSignalSource } from "../lib/pastedSignalSource";
 
 const router: IRouter = Router();
 
@@ -64,6 +65,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
   }
 
   const reportDate = session.date;
+  const signalSource = pastedSignalSource(parsed.data.confirmedTelegram);
   if (parsed.data.targetDate) {
     const targetDate = parsed.data.targetDate instanceof Date
       ? parsed.data.targetDate.toISOString().slice(0, 10)
@@ -87,7 +89,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
       .where(eq(candidatesTable.sessionId, existing[0].id));
     const incomingByIdentity = new Map(
       session.candidates.map((candidate) => {
-        const row = { ...candidate, market: "SE", signalSource: "manual" };
+        const row = { ...candidate, market: "SE", signalSource };
         return [candidateIdentity(row), reportDate] as const;
       }),
     );
@@ -143,7 +145,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
 
     const wouldRemove = pendingCandidatesToRemove(
       existingRows as Array<typeof existingRows[number] & { category: string }>,
-      session.candidates.map((c) => ({ ...c, market: "SE" })),
+      session.candidates.map((c) => ({ ...c, market: "SE", signalSource })),
       new Set(selectedSnapshotRows.map((row) => row.candidateId)),
     );
 
@@ -176,7 +178,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
     sessionId,
     signalDate: reportDate,
     market: "SE" as const,   // screener text is always SE stocks
-    signalSource: "manual" as const,
+    signalSource,
     origin: "manual" as const,
     category: c.category,
     rank: c.rank,
@@ -333,6 +335,7 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
     res.status(400).json({ error: bodyParsed.error.message });
     return;
   }
+  const signalSource = pastedSignalSource(bodyParsed.data.confirmedTelegram);
 
   // Load the existing session
   const [existingSession] = await db
@@ -372,7 +375,7 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
     .from(candidatesTable)
     .where(eq(candidatesTable.sessionId, existingSession.id));
   const reimportIdentitySet = new Set(parsedSession.candidates.map((candidate) =>
-    candidateIdentity({ ...candidate, market: "SE", signalSource: "manual" }),
+    candidateIdentity({ ...candidate, market: "SE", signalSource }),
   ));
   const sourceDateMismatch = existingCandidatesForDateCheck.find((candidate) =>
     candidate.signalDate != null &&
@@ -389,6 +392,10 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
   const reimportVolumes = await enrichVolMultiplier(
     parsedSession.candidates.map((candidate) => candidate.ticker),
     _yf,
+    parsedSession.date,
+  );
+  const reimportEarnings = await fetchEarningsBatch(
+    parsedSession.candidates.map((candidate) => candidate.ticker),
     parsedSession.date,
   );
   let response: ReturnType<typeof parseSessionImportResponse>;
@@ -416,7 +423,7 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
         sessionId: updatedSession.id,
         signalDate: parsedSession.date,
         market: "SE" as const,
-        signalSource: "manual" as const,
+        signalSource,
         origin: "manual" as const,
         category: candidate.category,
         rank: candidate.rank,
@@ -431,6 +438,10 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
         volumeAsOf: reimportVolumes.get(candidate.ticker)?.asOf ?? null,
         signalRsi: candidate.rsi,
         signalGapPct: candidate.gapWarning ?? null,
+        earningsInDays: reimportEarnings.get(candidate.ticker)?.earningsInDays ?? null,
+        earningsKnowledge: reimportEarnings.get(candidate.ticker)?.knowledge ?? "UNKNOWN",
+        earningsObservedAt: reimportEarnings.get(candidate.ticker)?.observedAt ?? null,
+        maxHoldDays: candidate.category === "SQUEEZE" ? 15 : candidate.category === "STUDS" ? 5 : 10,
         distFrom20dH: candidate.distFrom20dH,
         gapWarning: candidate.gapWarning ?? null,
         direction: candidate.direction,

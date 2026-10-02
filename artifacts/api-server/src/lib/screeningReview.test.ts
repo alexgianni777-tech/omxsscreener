@@ -39,6 +39,52 @@ test("negative EdgeAI expectancy blocks independently of conventional RSI", () =
   assert.doesNotMatch(decision.reasons.join(" "), /RSI-data saknas/);
 });
 
+test("negative EdgeAI SHORT expectancy is informative, not a BLOCKED or WAIT gate", () => {
+  const short = {
+    ...edgeCandidate, category: "WEAKEST", direction: "SHORT",
+    stopPrice: 105, targetPrice: 90,
+  };
+  const review = reviewCandidate(short, "edgeai");
+  assert.equal(review.status, "APPROVED");
+  assert.match(review.reasons.join(" "), /SHORT tillåten trots negativ historisk förväntan/);
+  const decision = decideCandidate(short, review, short.signalDate);
+  assert.equal(decision.status, "TRADEABLE");
+  assert.match(decision.reasons.join(" "), /-0.20R/);
+});
+
+test("allowing negative SHORT expectancy retains all other risk and data gates", () => {
+  const base = {
+    ...edgeCandidate, category: "WEAKEST", direction: "SHORT",
+    stopPrice: 105, targetPrice: 90,
+  };
+  for (const changes of [
+    { signalRsi: 34 }, { signalGapPct: 2.5 }, { volMultiplier: 0 },
+    { earningsInDays: 3 }, { rr: 1.1 }, { stopPrice: 95 },
+  ]) {
+    const short = { ...base, ...changes };
+    const review = reviewCandidate(short, "edgeai");
+    assert.equal(review.status, "BLOCKED", JSON.stringify(changes));
+    assert.ok(
+      ["BLOCKED", "INVALID"].includes(decideCandidate(short, review, short.signalDate).status),
+      JSON.stringify(changes),
+    );
+  }
+  const unknownEarnings = { ...base, earningsKnowledge: "UNKNOWN" as const };
+  assert.equal(decideCandidate(
+    unknownEarnings, reviewCandidate(unknownEarnings, "edgeai"), base.signalDate,
+  ).status, "WAIT");
+  const stale = { ...base, signalDate: "2020-01-01" };
+  assert.equal(decideCandidate(stale, reviewCandidate(stale, "edgeai"), base.signalDate).status, "STALE");
+});
+
+test("legacy EdgeAI SHORT expectancy compatibility also permits negative values", () => {
+  const { edgeExpectancyR: _expectancy, ...legacy } = edgeCandidate;
+  const short = { ...legacy, rsi: -20, direction: "SHORT", stopPrice: 105, targetPrice: 90 };
+  const review = reviewCandidate(short, "edgeai");
+  assert.equal(review.status, "APPROVED");
+  assert.equal(decideCandidate(short, review, short.signalDate).status, "TRADEABLE");
+});
+
 test("EdgeAI review prefers dedicated expectancy over legacy RSI compatibility", () => {
   const candidate = { ...edgeCandidate, edgeExpectancyR: 0.1, rsi: -50 };
   const review = reviewCandidate(candidate, "edgeai");

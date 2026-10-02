@@ -19,8 +19,11 @@ export const HealthCheckResponse = zod.object({
 /**
  * @summary Import raw screener text and parse into a session
  */
+export const importSessionBodyConfirmedTelegramDefault = false;
+
 export const ImportSessionBody = zod.object({
   "rawText": zod.string().describe('The raw text output from the screener'),
+  "confirmedTelegram": zod.boolean().default(importSessionBodyConfirmedTelegramDefault).describe('Explicit confirmation by the authenticated user that this pasted report comes from Telegram. Sets signalSource to telegram for this import only; origin remains manual and the report\'s original signal date is unchanged.'),
   "targetDate": zod.coerce.date().optional().describe('Optional trading-session date. The date inside rawText remains the source-data date.'),
   "force": zod.boolean().optional().describe('If true, replace the existing session for this date while preserving logged outcomes')
 })
@@ -233,8 +236,11 @@ export const ReimportSessionParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const reimportSessionBodyConfirmedTelegramDefault = false;
+
 export const ReimportSessionBody = zod.object({
   "rawText": zod.string().describe('The raw text output from the screener'),
+  "confirmedTelegram": zod.boolean().default(reimportSessionBodyConfirmedTelegramDefault).describe('Explicit confirmation by the authenticated user that this pasted report comes from Telegram. Sets signalSource to telegram for this import only; origin remains manual and the report\'s original signal date is unchanged.'),
   "targetDate": zod.coerce.date().optional().describe('Optional trading-session date. The date inside rawText remains the source-data date.'),
   "force": zod.boolean().optional().describe('If true, replace the existing session for this date while preserving logged outcomes')
 })

@@ -439,6 +439,8 @@ export interface SessionConflictError {
 export interface SessionImport {
   /** The raw text output from the screener */
   rawText: string;
+  /** Explicit confirmation by the authenticated user that this pasted report comes from Telegram. Sets signalSource to telegram for this import only; origin remains manual and the report's original signal date is unchanged. */
+  confirmedTelegram?: boolean;
   /** Optional trading-session date. The date inside rawText remains the source-data date. */
   targetDate?: string;
   /** If true, replace the existing session for this date while preserving logged outcomes */

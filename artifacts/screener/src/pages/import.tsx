@@ -28,6 +28,7 @@ type ConflictInfo = {
   wouldRemove: RemovedCandidatePreview[];
   rawText: string;
   targetDate?: string;
+  confirmedTelegram?: boolean;
 };
 
 const OUTCOME_COLORS: Record<string, string> = {
@@ -53,6 +54,7 @@ type EdgeAIStatus =
 export function Import() {
   const [rawText, setRawText] = useState("");
   const [useTodayAsTradingDate, setUseTodayAsTradingDate] = useState(false);
+  const [confirmedTelegram, setConfirmedTelegram] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<ConflictInfo | null>(null);
   const [edgeStatus, setEdgeStatus] = useState<EdgeAIStatus>({ kind: "idle" });
@@ -69,10 +71,10 @@ export function Import() {
       day: "2-digit",
     }).format(new Date());
 
-  const runImport = (text: string, force: boolean, targetDate?: string) => {
+  const runImport = (text: string, force: boolean, targetDate?: string, telegramConfirmed = false) => {
     setError(null);
     importSession.mutate(
-      { data: { rawText: text, force, targetDate } },
+      { data: { rawText: text, force, targetDate, confirmedTelegram: telegramConfirmed } },
       {
         onSuccess: (data) => {
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
@@ -99,6 +101,7 @@ export function Import() {
               wouldRemove: body.wouldRemove ?? [],
               rawText: text,
               targetDate,
+              confirmedTelegram: telegramConfirmed,
             });
           } else {
             setError(body?.error || err?.message || "Failed to parse and import session. Check format.");
@@ -113,13 +116,13 @@ export function Import() {
       setError("Please paste screener output first.");
       return;
     }
-    runImport(rawText, false, useTodayAsTradingDate ? stockholmToday() : undefined);
+    runImport(rawText, false, useTodayAsTradingDate ? stockholmToday() : undefined, confirmedTelegram);
   };
 
   const handleForceReimport = () => {
     if (!conflict) return;
     setConflict(null);
-    runImport(conflict.rawText, true, conflict.targetDate);
+    runImport(conflict.rawText, true, conflict.targetDate, conflict.confirmedTelegram);
   };
 
   const handleEdgeAIImport = async (force = false) => {
@@ -290,6 +293,24 @@ MARKNADSVÄDER  OMXS30 3305.0 | 5d  2.7% | 1m  1.8% | 3m  8.9% | RSI  79
         <label className="flex items-start gap-3 border-t border-border bg-muted/30 px-4 py-3 cursor-pointer">
           <input
             type="checkbox"
+            checked={confirmedTelegram}
+            onChange={(event) => setConfirmedTelegram(event.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-primary"
+            data-testid="input-confirm-telegram"
+          />
+          <span>
+            <span className="block text-sm font-medium">Jag bekräftar att den inklistrade listan kommer från Telegram</span>
+            <span className="block text-xs text-muted-foreground mt-0.5">
+              Den här importen registreras som Telegram-källa, med manuellt ursprung.
+              Rapportens signaldatum behålls. Bara dagens signaler mottagna före 16:30
+              kan räknas i det officiella urvalet; EdgeAI krävs också.
+              Tidigare manuella rader märks inte om och kan finnas kvar separat.
+            </span>
+          </span>
+        </label>
+        <label className="flex items-start gap-3 border-t border-border bg-muted/30 px-4 py-3 cursor-pointer">
+          <input
+            type="checkbox"
             checked={useTodayAsTradingDate}
             onChange={(event) => setUseTodayAsTradingDate(event.target.checked)}
             className="mt-0.5 h-4 w-4 accent-primary"
@@ -347,6 +368,12 @@ MARKNADSVÄDER  OMXS30 3305.0 | 5d  2.7% | 1m  1.8% | 3m  8.9% | RSI  79
 
             {/* Body */}
             <div className="p-5 space-y-4">
+              {conflict.rawText !== "__edgeai__" && (
+                <p className="text-sm font-medium" data-testid="text-conflict-import-source">
+                  Källa för denna import: {conflict.confirmedTelegram ? "bekräftad Telegram" : "manuell (ej bekräftad Telegram)"}.
+                  {" "}Tidigare källmärkning och frysta urval ändras inte.
+                </p>
+              )}
               {conflict.affectedOutcomes.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No outcomes have been logged yet. The new import will be merged

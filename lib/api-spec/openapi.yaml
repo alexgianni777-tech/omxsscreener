@@ -765,6 +765,10 @@ components:
         rawText:
           type: string
           description: The raw text output from the screener
+        confirmedTelegram:
+          type: boolean
+          default: false
+          description: Explicit confirmation by the authenticated user that this pasted report comes from Telegram. Sets signalSource to telegram for this import only; origin remains manual and the report's original signal date is unchanged.
         targetDate:
           type: string
           format: date

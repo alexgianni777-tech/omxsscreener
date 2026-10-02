@@ -46,6 +46,21 @@ or force a daily sell suggestion.
 **How to apply:** Distinguish generated setups, imported candidates, and
 TRADEABLE selections when investigating missing shorts.
 
+## User-chosen application eligibility exception
+
+**Rule:** In the screener app, negative historical expectancy alone must not
+block SHORT candidates. Keep the negative value visible as risk information,
+not a warning that alone changes the candidate to WAIT. The negative-expectancy
+block still applies to LONG; all other data, freshness, conflict, earnings,
+trade-plan, RSI, gap and risk rules remain active.
+
+**Why:** The user explicitly chose “Tillåt även shorts med negativ expectancy”
+after being told this permits historically unprofitable shorts to qualify.
+
+**How to apply:** Apply this exception only to application eligibility. It is
+not permission to rewrite old frozen cohorts or change upstream strategy
+generation and walk-forward validation.
+
 ## Why a database can show zero shorts
 
 Separate databases can contain different daily snapshots. Re-importing after

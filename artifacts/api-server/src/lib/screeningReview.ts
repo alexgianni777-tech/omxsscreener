@@ -87,7 +87,7 @@ export function reviewCandidate(
   }
 
   if (candidate.rr < 1.2) blockers.push(`R:R ${candidate.rr.toFixed(2)} är under miniminivån 1,2.`);
-  if (isEdgeAi && edgeExpectancyR < 0) {
+  if (isEdgeAi && edgeExpectancyR < 0 && !isShort) {
     blockers.push(`Negativ historisk förväntan (${edgeExpectancyR.toFixed(2)}R).`);
   }
   if (candidate.earningsKnowledge !== "SIGNAL_TIME") {
@@ -120,6 +120,11 @@ export function reviewCandidate(
   }
 
   const reasons = [...blockers, ...warnings];
+  // Explicit user policy: negative expectancy alone may not block SHORT.
+  // This is information, not a warning that would turn approval into WAIT.
+  if (isEdgeAi && isShort && edgeExpectancyR < 0) {
+    reasons.push(`SHORT tillåten trots negativ historisk förväntan (${edgeExpectancyR.toFixed(2)}R).`);
+  }
   return { status: statusFor(warnings, blockers), reasons };
 }
 
@@ -205,7 +210,7 @@ export function decideCandidate(
   if (review.status === "WARN") return { status: "WAIT", reasons: review.reasons };
   return {
     status: "TRADEABLE",
-    reasons: ["Screeningsreglerna är godkända för dagens signal."],
+    reasons: ["Screeningsreglerna är godkända för dagens signal.", ...review.reasons],
   };
 }
 

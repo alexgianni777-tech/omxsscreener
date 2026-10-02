@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildTop3LiveSelection } from "./top3LiveSelection.ts";
 import { top3CutoffForDate } from "./top3SelectionPolicyCore.ts";
+import { pastedSignalSource } from "./pastedSignalSource.ts";
 
 const sessionDate = "2026-09-30";
 const beforeCutoff = new Date("2026-09-30T10:00:00.000Z");
@@ -79,6 +80,33 @@ test("one exact-source receipt can produce a read-only preliminary pick", () => 
     signalSource: "telegram",
   });
   assert.equal(Number.isFinite(result.picks[0].score), true);
+});
+
+test("confirmed Telegram paste participates without relabeling prior manual candidates", () => {
+  const historicalManual = candidate(1, { signalSource: pastedSignalSource(false) });
+  const confirmedPaste = candidate(2, { signalSource: pastedSignalSource(true), origin: "manual" });
+  const result = buildTop3LiveSelection(session(), [historicalManual, confirmedPaste], beforeCutoff)!;
+  assert.equal(result.sourceReceipts.telegram.candidateCount, 1);
+  assert.deepEqual(result.picks.map((pick) => pick.candidateId), [2]);
+  assert.equal(historicalManual.signalSource, "manual");
+  assert.equal(confirmedPaste.origin, "manual");
+});
+
+test("Telegram confirmation cannot make yesterday's signal into today's receipt", () => {
+  const result = buildTop3LiveSelection(session(), [
+    candidate(1, { signalSource: pastedSignalSource(true), signalDate: "2026-09-29" }),
+  ], beforeCutoff)!;
+  assert.equal(result.sourceReceipts.telegram.received, false);
+  assert.equal(result.previewAvailable, false);
+});
+
+test("negative-expectancy SHORT may be selected under the new policy", () => {
+  const result = buildTop3LiveSelection(session(), [candidate(1, {
+    signalSource: "edgeai", direction: "SHORT", category: "WEAKEST",
+    edgeExpectancyR: -0.32, signalRsi: 50, stopPrice: 105, targetPrice: 94,
+  })], beforeCutoff)!;
+  assert.equal(result.picks.length, 1);
+  assert.equal(result.picks[0].direction, "SHORT");
 });
 
 test("both required-source receipts are reported independently and both may contribute picks", () => {

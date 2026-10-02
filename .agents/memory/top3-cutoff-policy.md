@@ -20,3 +20,15 @@ description: User-chosen fixed Stockholm cutoff and truthful volume provenance.
 **Why:** The attached proposal included single-source fallback, but the user's explicit selection rejected that part. Useful live suggestions must not change the meaning of the official out-of-sample cohort.
 
 **How to apply:** Keep preliminary suggestions out of official performance statistics and historical snapshots. Preserve ranking and eligibility, and expose source completeness rather than treating yesterday's Telegram candidates as today's receipt.
+
+**Confirmed paste rule:** An authenticated user may explicitly confirm that
+a newly pasted report is from Telegram. Treat its source as Telegram while
+retaining its manual transport origin and original report date. Unconfirmed
+pastes remain manual; prior manual rows are not retrospectively relabeled.
+
+**Why:** The user asked to make confirmed Telegram pastes satisfy source
+participation without treating every pasted report as verified Telegram.
+
+**How to apply:** Carry explicit confirmation through initial import and
+reimport. Confirmation cannot make yesterday's signals current or late arrivals
+eligible for an earlier cutoff. Preserve existing outcomes and frozen cohorts.
