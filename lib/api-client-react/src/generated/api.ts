@@ -31,6 +31,8 @@ import type {
   ErrorEnvelope,
   ErrorResponse,
   GetQuotesParams,
+  GroundZeroSnapshotInput,
+  GroundZeroState,
   HandleBrowserLoginCallbackParams,
   HealthStatus,
   ImportConflict,
@@ -78,6 +80,154 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetGroundZeroUrl = () => {
+
+
+
+
+  return `/api/ground-zero`
+}
+
+/**
+ * @summary Optional manual AG Invest Ground Zero reconciliation
+ */
+export const getGroundZero = async ( options?: Parameters<typeof customFetch>[1]): Promise<GroundZeroState> => {
+
+  return customFetch<GroundZeroState>(getGetGroundZeroUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGroundZeroQueryKey = () => {
+    return [
+    `/api/ground-zero`
+    ] as const;
+    }
+
+
+export const getGetGroundZeroQueryOptions = <TData = Awaited<ReturnType<typeof getGroundZero>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGroundZero>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGroundZeroQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGroundZero>>> = ({ signal }) => getGroundZero({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGroundZero>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGroundZeroQueryResult = NonNullable<Awaited<ReturnType<typeof getGroundZero>>>
+export type GetGroundZeroQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Optional manual AG Invest Ground Zero reconciliation
+ */
+
+export function useGetGroundZero<TData = Awaited<ReturnType<typeof getGroundZero>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGroundZero>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGroundZeroQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateGroundZeroSnapshotUrl = () => {
+
+
+
+
+  return `/api/ground-zero`
+}
+
+/**
+ * @summary Append a manual valuation without altering trading history
+ */
+export const createGroundZeroSnapshot = async (groundZeroSnapshotInput: GroundZeroSnapshotInput, options?: Parameters<typeof customFetch>[1]): Promise<GroundZeroState> => {
+
+  return customFetch<GroundZeroState>(getCreateGroundZeroSnapshotUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(groundZeroSnapshotInput)
+  }
+);}
+
+
+
+
+
+export const getCreateGroundZeroSnapshotMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createGroundZeroSnapshot>>, TError,{data: BodyType<GroundZeroSnapshotInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createGroundZeroSnapshot>>, TError,{data: BodyType<GroundZeroSnapshotInput>}, TContext> => {
+
+const mutationKey = ['createGroundZeroSnapshot'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createGroundZeroSnapshot>>, {data: BodyType<GroundZeroSnapshotInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createGroundZeroSnapshot(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateGroundZeroSnapshotMutationResult = NonNullable<Awaited<ReturnType<typeof createGroundZeroSnapshot>>>
+    export type CreateGroundZeroSnapshotMutationBody = BodyType<GroundZeroSnapshotInput>
+    export type CreateGroundZeroSnapshotMutationError = ErrorType<void>
+
+    /**
+ * @summary Append a manual valuation without altering trading history
+ */
+export const useCreateGroundZeroSnapshot = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createGroundZeroSnapshot>>, TError,{data: BodyType<GroundZeroSnapshotInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createGroundZeroSnapshot>>,
+        TError,
+        {data: BodyType<GroundZeroSnapshotInput>},
+        TContext
+      > => {
+      return useMutation(getCreateGroundZeroSnapshotMutationOptions(options));
+    }
 
 export const getListJournalRecordsUrl = () => {
 

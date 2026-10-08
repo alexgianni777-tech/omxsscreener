@@ -15,6 +15,7 @@ import telegramImportRouter from "./telegramImport";
 import marketIntelRouter from "./marketIntel";
 import portfolioRouter from "./portfolio";
 import journalRouter from "./journal";
+import groundZeroRouter from "./groundZero";
 import { ImportDataError } from "../lib/importReport";
 import { recordImportFailure } from "../lib/importFailure";
 import { isAcceptedSignalDate, stockholmSignalDate } from "../lib/signalDatePolicy";
@@ -27,6 +28,7 @@ router.use(authRouter);
 router.use(telegramImportRouter); // unauthenticated — uses its own bearer-token check
 router.use(requireAuthentication);
 router.use(requireAdministrator);
+router.use(groundZeroRouter);
 router.use(screenerRouter);
 router.use(candidatesRouter);
 router.use(dashboardRouter);

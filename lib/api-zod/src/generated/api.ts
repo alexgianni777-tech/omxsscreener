@@ -9,6 +9,109 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Optional manual AG Invest Ground Zero reconciliation
+ */
+export const getGroundZeroResponseLatestOneOneTotalValueSekMin = 0;
+export const getGroundZeroResponseLatestOneOneTotalValueSekMax = 1000000000;
+
+export const getGroundZeroResponseHistoryItemOneTotalValueSekMin = 0;
+export const getGroundZeroResponseHistoryItemOneTotalValueSekMax = 1000000000;
+
+
+
+export const GetGroundZeroResponse = zod.object({
+  "label": zod.string(),
+  "baseDate": zod.string(),
+  "baselineSek": zod.number(),
+  "observedStartSek": zod.number(),
+  "reconciliationDifferenceSek": zod.number(),
+  "goalSek": zod.number(),
+  "targetDate": zod.string(),
+  "latest": zod.union([zod.object({
+  "asOfDate": zod.string(),
+  "totalValueSek": zod.number().min(getGroundZeroResponseLatestOneOneTotalValueSekMin).max(getGroundZeroResponseLatestOneOneTotalValueSekMax),
+  "netExternalFlowsSek": zod.number().nullable()
+}).and(zod.object({
+  "id": zod.number(),
+  "createdAt": zod.string(),
+  "rawChangeSek": zod.number(),
+  "adjustedChangeSek": zod.number().nullable(),
+  "adjustedChangePct": zod.number().nullable(),
+  "remainingToGoalSek": zod.number()
+})),zod.null()]),
+  "history": zod.array(zod.object({
+  "asOfDate": zod.string(),
+  "totalValueSek": zod.number().min(getGroundZeroResponseHistoryItemOneTotalValueSekMin).max(getGroundZeroResponseHistoryItemOneTotalValueSekMax),
+  "netExternalFlowsSek": zod.number().nullable()
+}).and(zod.object({
+  "id": zod.number(),
+  "createdAt": zod.string(),
+  "rawChangeSek": zod.number(),
+  "adjustedChangeSek": zod.number().nullable(),
+  "adjustedChangePct": zod.number().nullable(),
+  "remainingToGoalSek": zod.number()
+})))
+})
+
+
+/**
+ * @summary Append a manual valuation without altering trading history
+ */
+export const createGroundZeroSnapshotBodyTotalValueSekMin = 0;
+export const createGroundZeroSnapshotBodyTotalValueSekMax = 1000000000;
+
+
+
+export const CreateGroundZeroSnapshotBody = zod.object({
+  "asOfDate": zod.string(),
+  "totalValueSek": zod.number().min(createGroundZeroSnapshotBodyTotalValueSekMin).max(createGroundZeroSnapshotBodyTotalValueSekMax),
+  "netExternalFlowsSek": zod.number().nullable()
+})
+
+export const createGroundZeroSnapshotResponseLatestOneOneTotalValueSekMin = 0;
+export const createGroundZeroSnapshotResponseLatestOneOneTotalValueSekMax = 1000000000;
+
+export const createGroundZeroSnapshotResponseHistoryItemOneTotalValueSekMin = 0;
+export const createGroundZeroSnapshotResponseHistoryItemOneTotalValueSekMax = 1000000000;
+
+
+
+export const CreateGroundZeroSnapshotResponse = zod.object({
+  "label": zod.string(),
+  "baseDate": zod.string(),
+  "baselineSek": zod.number(),
+  "observedStartSek": zod.number(),
+  "reconciliationDifferenceSek": zod.number(),
+  "goalSek": zod.number(),
+  "targetDate": zod.string(),
+  "latest": zod.union([zod.object({
+  "asOfDate": zod.string(),
+  "totalValueSek": zod.number().min(createGroundZeroSnapshotResponseLatestOneOneTotalValueSekMin).max(createGroundZeroSnapshotResponseLatestOneOneTotalValueSekMax),
+  "netExternalFlowsSek": zod.number().nullable()
+}).and(zod.object({
+  "id": zod.number(),
+  "createdAt": zod.string(),
+  "rawChangeSek": zod.number(),
+  "adjustedChangeSek": zod.number().nullable(),
+  "adjustedChangePct": zod.number().nullable(),
+  "remainingToGoalSek": zod.number()
+})),zod.null()]),
+  "history": zod.array(zod.object({
+  "asOfDate": zod.string(),
+  "totalValueSek": zod.number().min(createGroundZeroSnapshotResponseHistoryItemOneTotalValueSekMin).max(createGroundZeroSnapshotResponseHistoryItemOneTotalValueSekMax),
+  "netExternalFlowsSek": zod.number().nullable()
+}).and(zod.object({
+  "id": zod.number(),
+  "createdAt": zod.string(),
+  "rawChangeSek": zod.number(),
+  "adjustedChangeSek": zod.number().nullable(),
+  "adjustedChangePct": zod.number().nullable(),
+  "remainingToGoalSek": zod.number()
+})))
+})
+
+
+/**
  * @summary Separate real, simulated and missed-trade execution journal
  */
 export const listJournalRecordsResponseInputIdRegExp = new RegExp('^[a-fA-F0-9-]{36}$');

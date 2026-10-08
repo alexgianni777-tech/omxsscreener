@@ -2,7 +2,7 @@
  * Daily EdgeAI auto-import scheduler.
  *
  * Logic:
- *  - Every 5 minutes, check if today is a weekday AND EdgeAI is not yet in today's session.
+ *  - Every 5 minutes on weekdays, check the source version before enrichment/import.
  *  - If conditions met AND Nasdaq Stockholm is open, trigger EdgeAI import.
  *  - This gracefully handles server restarts: if the server came up after
  *    09:00 Stockholm time and no session exists, it imports immediately.
@@ -29,6 +29,7 @@ import { snapshotNewSessionTop3 } from "./top3SelectionPolicy";
 import { calendarDaysUntil } from "./marketCalendar";
 import { mapEdgeAiSetup } from "./edgeAiMapping";
 import { withRetry } from "./retry";
+import { alreadyAcceptedReport } from "./scheduledReportPolicy";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -75,31 +76,26 @@ export let schedulerStatus: {
   nextCheckAt: null,
 };
 
-async function sessionHasEdgeAiForDate(date: string): Promise<boolean> {
+async function sessionHasReport(date: string, report: ReturnType<typeof makeImportReport>): Promise<boolean> {
   const [session] = await db
-    .select({ id: screenerSessionsTable.id })
+    .select({ sourceReports: screenerSessionsTable.sourceReports })
     .from(screenerSessionsTable)
     .where(eq(screenerSessionsTable.date, date));
   if (!session) return false;
-  const [edgeAiCandidate] = await db
-    .select({ id: candidatesTable.id })
-    .from(candidatesTable)
-    .where(and(
-      eq(candidatesTable.sessionId, session.id),
-      eq(candidatesTable.signalSource, "edgeai"),
-      eq(candidatesTable.signalDate, date),
-    ))
-    .limit(1);
-  return Boolean(edgeAiCandidate);
+  return alreadyAcceptedReport(session.sourceReports, report, date);
 }
 
-async function runImport(date: string): Promise<void> {
+async function runImport(date: string): Promise<boolean> {
   logger.info({ date }, "[scheduler] Fetching EdgeAI data.json");
 
   const edgeData = await fetchFreshEdgeAiData(15_000);
   const signalDate = edgeAiSessionDate(edgeData);
   const importReport = makeImportReport("edgeai", signalDate, edgeData, edgeData.generatedAt ?? null,
     { SE: edgeData.markets?.SE?.dataAsOf ?? null, US: edgeData.markets?.US?.dataAsOf ?? null });
+  if (await sessionHasReport(date, importReport)) {
+    logger.debug({ date, signalDate }, "[scheduler] Accepted report unchanged — no enrichment or reimport");
+    return false;
+  }
 
   const se = edgeData?.markets?.SE;
   const seSetups: any[] = se?.setups ?? [];
@@ -108,7 +104,7 @@ async function runImport(date: string): Promise<void> {
 
   if (allSetups.length === 0) {
     logger.info({ date, generatedAt: edgeData.generatedAt }, "[scheduler] No setups today — skipping");
-    return;
+    return false;
   }
 
   // The SE data date may be yesterday even when EdgeAI was generated today.
@@ -255,6 +251,7 @@ async function runImport(date: string): Promise<void> {
         "[scheduler] Auto-import complete",
       );
     });
+    return true;
   } catch (err: any) {
     if (err instanceof ImportDataError && err.report) {
       try { await recordImportFailure(date, err.report, err.message); }
@@ -304,11 +301,10 @@ async function tick() {
     stockholm.hour > 9 || (stockholm.hour === 9 && stockholm.minute >= 0);
   if (marketIsOpen) {
     const today = stockholm.date;
-    if (!(await sessionHasEdgeAiForDate(today))) {
-      logger.info({ today }, "[scheduler] EdgeAI missing from today's session — importing");
+    {
       try {
-        await runImport(today);
-        schedulerStatus.lastImported = today;
+        const imported = await runImport(today);
+        if (imported) schedulerStatus.lastImported = today;
         schedulerStatus.lastError = null;
       } catch (err: any) {
         schedulerStatus.lastError = err.message ?? String(err);

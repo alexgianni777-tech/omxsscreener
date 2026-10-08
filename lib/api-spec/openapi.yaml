@@ -19,6 +19,37 @@ tags:
   - name: Auth
     description: Browser and mobile authentication endpoints.
 paths:
+  /ground-zero:
+    get:
+      operationId: getGroundZero
+      tags: [dashboard]
+      summary: Optional manual AG Invest Ground Zero reconciliation
+      responses:
+        "200":
+          description: Fixed benchmark and append-only manual valuation history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroundZeroState"
+    post:
+      operationId: createGroundZeroSnapshot
+      tags: [dashboard]
+      summary: Append a manual valuation without altering trading history
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroundZeroSnapshotInput"
+      responses:
+        "201":
+          description: Saved reconciliation and current state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroundZeroState"
+        "400":
+          description: Invalid manual value or date
   /journal:
     get:
       operationId: listJournalRecords
@@ -569,6 +600,62 @@ components:
       schema:
         type: string
   schemas:
+    GroundZeroSnapshotInput:
+      type: object
+      required: [asOfDate, totalValueSek, netExternalFlowsSek]
+      properties:
+        asOfDate:
+          type: string
+        totalValueSek:
+          type: number
+          minimum: 0
+          maximum: 1000000000
+        netExternalFlowsSek:
+          type: [number, "null"]
+    GroundZeroSnapshot:
+      allOf:
+        - $ref: "#/components/schemas/GroundZeroSnapshotInput"
+        - type: object
+          required: [id, createdAt, rawChangeSek, adjustedChangeSek, adjustedChangePct, remainingToGoalSek]
+          properties:
+            id:
+              type: number
+            createdAt:
+              type: string
+            rawChangeSek:
+              type: number
+            adjustedChangeSek:
+              type: [number, "null"]
+            adjustedChangePct:
+              type: [number, "null"]
+            remainingToGoalSek:
+              type: number
+    GroundZeroState:
+      type: object
+      required: [label, baseDate, baselineSek, observedStartSek, reconciliationDifferenceSek, goalSek, targetDate, latest, history]
+      properties:
+        label:
+          type: string
+        baseDate:
+          type: string
+        baselineSek:
+          type: number
+        observedStartSek:
+          type: number
+        reconciliationDifferenceSek:
+          type: number
+        goalSek:
+          type: number
+        targetDate:
+          type: string
+        latest:
+          oneOf:
+            - $ref: "#/components/schemas/GroundZeroSnapshot"
+            - type: "null"
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroundZeroSnapshot"
     AuthUser:
       type: object
       required: [id, email, firstName, lastName, profileImageUrl]

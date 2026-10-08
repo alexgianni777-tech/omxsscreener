@@ -5,6 +5,40 @@
  * OMXS30 Screener API
  * OpenAPI spec version: 0.1.0
  */
+export interface GroundZeroSnapshotInput {
+  asOfDate: string;
+  /**
+     * @minimum 0
+     * @maximum 1000000000
+     */
+  totalValueSek: number;
+  /** @nullable */
+  netExternalFlowsSek: number | null;
+}
+
+export type GroundZeroSnapshot = GroundZeroSnapshotInput & ({
+  id: number;
+  createdAt: string;
+  rawChangeSek: number;
+  /** @nullable */
+  adjustedChangeSek: number | null;
+  /** @nullable */
+  adjustedChangePct: number | null;
+  remainingToGoalSek: number;
+});
+
+export interface GroundZeroState {
+  label: string;
+  baseDate: string;
+  baselineSek: number;
+  observedStartSek: number;
+  reconciliationDifferenceSek: number;
+  goalSek: number;
+  targetDate: string;
+  latest: GroundZeroSnapshot | null;
+  history: GroundZeroSnapshot[];
+}
+
 export interface AuthUser {
   id: string;
   /** @nullable */

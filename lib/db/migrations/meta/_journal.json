@@ -120,6 +120,13 @@
       "when": 1791446400001,
       "tag": "0016_source_report_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791446400002,
+      "tag": "0017_ground_zero_snapshots",
+      "breakpoints": true
     }
   ]
 }

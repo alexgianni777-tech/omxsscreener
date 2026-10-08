@@ -1,3 +1,4 @@
+import { GroundZero } from "../components/GroundZero";
 import { useGetDashboardSummary, useListSessions } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import {
@@ -88,6 +89,7 @@ export function Dashboard() {
 
       {/* Today's Session */}
       <TodaySessionPanel />
+      <GroundZero />
 
       {/* Weekly Summary */}
       <WeekSummarySection equityCurve={summary.equityCurve} />
