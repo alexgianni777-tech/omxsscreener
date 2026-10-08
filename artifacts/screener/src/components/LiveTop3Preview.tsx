@@ -1,6 +1,8 @@
 import { Link } from "wouter";
 import type { Top3LiveSelection } from "@workspace/api-client-react";
 import { CheckCircle2, AlertTriangle, ChevronRight } from "lucide-react";
+import { LiveEntryGuard } from "./LiveEntryGuard";
+import type { EntryQuote } from "../lib/liveEntryGuard";
 
 export type LiveSelection = Top3LiveSelection;
 type Cand = {
@@ -10,6 +12,9 @@ type Cand = {
   stopPrice: number;
   targetPrice: number;
   rr: number;
+  signalDate?: string | null;
+  signalSource?: string | null;
+  signalAgeBars?: number | null;
   decision?: { status: string; reasons: string[] };
   officialSelection?: {
     selected: boolean;
@@ -51,11 +56,11 @@ export function DecisionBadge({ decision }: { decision?: { status: string; reaso
   return (
     <span
       data-testid="status-decision"
-      title={`${decision.status}${decision.reasons.length ? ": " + decision.reasons.join(" ") : ""}`}
-      aria-label={`${decision.status}. ${decision.reasons.join(" ")}`}
+      title={`Screeningstatus, inte live-entrybesked: ${decision.status}${decision.reasons.length ? ": " + decision.reasons.join(" ") : ""}`}
+      aria-label={`Screeningstatus ${decision.status}, inte live-entrybesked. ${decision.reasons.join(" ")}`}
       className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${DECISION_CLS[decision.status] ?? ""}`}
     >
-      {DECISION_TXT[decision.status] ?? decision.status}
+      Screening · {DECISION_TXT[decision.status] ?? decision.status}
     </span>
   );
 }
@@ -63,13 +68,14 @@ export function DecisionBadge({ decision }: { decision?: { status: string; reaso
 const NAMES = { telegram: "Telegram", edgeai: "EdgeAI" } as const;
 
 export function LiveTop3Preview({
-  live, candidates, frozen, sessionId,
+  live, candidates, frozen, sessionId, quotes,
 }: {
   live: LiveSelection;
   candidates: Cand[];
   frozen: Frozen;
   sessionId: number;
   onCutoff: () => void;
+  quotes?: Record<string, EntryQuote>;
 }) {
   const official = frozen?.available === true;
   const show = live.previewAvailable || official;
@@ -190,6 +196,8 @@ export function LiveTop3Preview({
                       Entry {c.entryPrice} · Stop {c.stopPrice} · Mål {c.targetPrice} · R/R {c.rr}
                     </div>
                   )}
+                  {c && <LiveEntryGuard plan={{ ...c, direction: p.direction }}
+                    quote={quotes?.[c.ticker]} signal={c} />}
                   {decision && decision.reasons.length > 0 && (
                     <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{decision.reasons.join(" ")}</p>
                   )}

@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { useListCandidates, useGetQuotes, getGetQuotesQueryKey } from "@workspace/api-client-react";
+import { useListCandidates, useGetQuotes, getGetQuotesQueryKey, type QuoteResult } from "@workspace/api-client-react";
 import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
 import { Link } from "wouter";
 import { Filter, ChevronRight } from "lucide-react";
+import { LiveEntryGuard } from "../components/LiveEntryGuard";
 
 export function Candidates() {
   const [category, setCategory] = useState<string>("");
@@ -19,12 +20,14 @@ export function Candidates() {
   // Deduplicated tickers for live price lookup
   const tickers = [...new Set(candidates?.map((c) => c.ticker) ?? [])];
   const quoteParams = { tickers: tickers.join(",") };
-  const { data: quotes } = useGetQuotes(
+  const { data: quotes, isError: quoteError } = useGetQuotes(
     quoteParams,
     { query: { queryKey: getGetQuotesQueryKey(quoteParams), enabled: tickers.length > 0, refetchInterval: 60_000 } }
   );
   const quoteMap: Record<string, number | null> = {};
   quotes?.forEach((q) => { quoteMap[q.ticker] = q.livePrice ?? null; });
+  const entryQuotes: Record<string, QuoteResult> = {};
+  quotes?.forEach((q) => { entryQuotes[q.ticker] = quoteError ? { ...q, error: "Kurshämtningen misslyckades." } : q; });
   const changePctMap: Record<string, number | null> = {};
   quotes?.forEach((q) => { changePctMap[q.ticker] = q.changePct ?? null; });
 
@@ -115,7 +118,10 @@ export function Candidates() {
                           {formatDate(c.sessionDate)}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 font-bold">{c.ticker}</td>
+                      <td className="px-4 py-3 min-w-[320px]">
+                        <strong>{c.ticker}</strong>
+                        <LiveEntryGuard plan={c} quote={entryQuotes[c.ticker]} signal={c} />
+                      </td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 rounded text-xs font-bold ${c.direction === 'LONG' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
                           {c.direction}

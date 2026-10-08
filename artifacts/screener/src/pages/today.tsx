@@ -17,6 +17,7 @@ import {
 import { LiveTop3Preview, DecisionBadge, EdgeAiStatusTotals, type LiveSelection } from "../components/LiveTop3Preview";
 import { TodayDiagnostics } from "../components/TodayDiagnostics";
 import { CurrentTop3Selection } from "../components/CurrentTop3Selection";
+import { LiveEntryGuard } from "../components/LiveEntryGuard";
 import type { Top3Revision } from "@workspace/api-client-react";
 import { edgeAiMetrics } from "../lib/edgeAiMetrics";
 import { createLatestRequestGuard } from "../lib/latestRequestGuard";
@@ -144,6 +145,7 @@ type LiveQuote = {
   asOf: string | null;
   fetchedAt: string | null;
   error: string | null;
+  marketState: string | null;
 };
 
 /** Human-readable "how long ago" for a timestamp, in Swedish. */
@@ -294,19 +296,31 @@ export function Today() {
 
   // ── Yahoo Finance price check ─────────────────────────────────────────────
 
+  const currentRevision = [...(session?.top3Revisions ?? [])].sort((a, b) => b.revision - a.revision)[0];
+  const entryTickers = [...new Set([
+    ...picks.map(p => p.ticker),
+    ...(currentRevision?.picks ?? []).map(p => p.ticker),
+    ...(session?.top3LiveSelection?.picks ?? []).flatMap(p => {
+      const candidate = session?.candidates.find(c => c.id === p.candidateId);
+      return candidate ? [candidate.ticker] : [];
+    }),
+  ])];
   const fetchLivePrices = async () => {
-    if (picks.length === 0 || checkingPrices) return;
+    if (entryTickers.length === 0 || checkingPrices) return;
     setCheckingPrices(true);
     try {
-      const tickers = picks.map(p => p.ticker).join(",");
+      const tickers = entryTickers.join(",");
       const res = await fetch(api(`/screener/quotes?tickers=${encodeURIComponent(tickers)}`));
-      if (!res.ok) return;
+      if (!res.ok) { setQuotes({}); return; }
       const data = await res.json();
       const map: Record<string, LiveQuote> = {};
       for (const q of data) {
-        map[q.ticker] = { livePrice: q.livePrice, changePct: q.changePct, asOf: q.asOf ?? null, fetchedAt: q.fetchedAt ?? null, error: q.error };
+        map[q.ticker] = { livePrice: q.livePrice, changePct: q.changePct, asOf: q.asOf ?? null, fetchedAt: q.fetchedAt ?? null, error: q.error, marketState: q.marketState ?? null };
       }
       setQuotes(map);
+    } catch {
+      // Never let an unsuccessful refresh leave a cached READY indication.
+      setQuotes({});
     } finally {
       setCheckingPrices(false);
     }
@@ -526,7 +540,7 @@ export function Today() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            {picks.length > 0 && picks.some(p => p.outcome === "PENDING" || !p.outcome) && (
+            {entryTickers.length > 0 && (
               <button
                 onClick={fetchLivePrices}
                 disabled={checkingPrices}
@@ -549,7 +563,7 @@ export function Today() {
         </div>
 
         {!!session?.top3Revisions?.length && (
-          <CurrentTop3Selection revisions={session.top3Revisions} sessionId={session.id} />
+          <CurrentTop3Selection revisions={session.top3Revisions} sessionId={session.id} quotes={quotes} candidates={session.candidates} />
         )}
         {session?.top3Revisions?.length && picks.length > 0 ? (
           <p className="mb-3 text-xs text-muted-foreground">Ursprungliga statistik-picks och registrerade trades visas nedan. Deras nivåer ändras inte av den aktuella listan ovan.</p>
@@ -595,6 +609,7 @@ export function Today() {
             candidates={allCandidates}
             frozen={session.top3SelectionSnapshot}
             sessionId={session.id}
+            quotes={quotes}
             onCutoff={load}
           />
         )}
@@ -782,6 +797,7 @@ export function Today() {
                         </span>
                       )}
                     </div>
+                    <LiveEntryGuard plan={candidate} quote={quote} signal={candidate} />
                     <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-x-2">
                       <span>Pick #{i + 1} · R:R {candidate.rr.toFixed(1)}</span>
                       {edgeMetrics.isEdgeAI && (

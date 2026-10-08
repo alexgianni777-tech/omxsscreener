@@ -1,12 +1,17 @@
 import { Link } from "wouter";
 import type { Top3Revision } from "@workspace/api-client-react";
 import { DecisionBadge } from "./LiveTop3Preview";
+import { LiveEntryGuard, type SignalMetadata } from "./LiveEntryGuard";
+import type { EntryQuote, EntryPlan } from "../lib/liveEntryGuard";
+
+type GuardCandidate = SignalMetadata & EntryPlan & { id: number };
+type GuardProps = { quotes?: Record<string, EntryQuote>; candidates?: readonly GuardCandidate[] };
 
 function timestamp(value: string) {
   return new Date(value).toLocaleString("sv-SE", { timeZone: "Europe/Stockholm" });
 }
 
-function Picks({ revision }: { revision: Top3Revision }) {
+function Picks({ revision, quotes, candidates }: { revision: Top3Revision } & GuardProps) {
   return (
     <div className="space-y-3">
       {(["SE", "US"] as const).flatMap((market) => (["LONG", "SHORT"] as const).map((direction) => {
@@ -27,6 +32,14 @@ function Picks({ revision }: { revision: Top3Revision }) {
                     <DecisionBadge decision={pick.decision} />
                   </div>
                   <p className="mt-1 font-mono text-xs">Entry {pick.entryPrice} · Stop {pick.stopPrice} · Mål {pick.targetPrice} · R/R {pick.rr}</p>
+                  {quotes && <LiveEntryGuard plan={pick} quote={quotes[pick.ticker]} signal={{
+                    signalDate: pick.signalDate, signalSource: pick.source,
+                    // Do not attach newer or trade-frozen metadata to a different revision plan.
+                    signalAgeBars: candidates?.find((c) => c.id === pick.candidateId &&
+                      c.signalDate === pick.signalDate && c.signalSource === pick.source &&
+                      c.entryPrice === pick.entryPrice && c.stopPrice === pick.stopPrice &&
+                      c.targetPrice === pick.targetPrice)?.signalAgeBars,
+                  }} />}
                   {pick.decision.reasons.length > 0 && <p className="mt-1 text-xs text-muted-foreground">{pick.decision.reasons.join(" ")}</p>}
                 </li>
               ))}
@@ -39,7 +52,7 @@ function Picks({ revision }: { revision: Top3Revision }) {
 }
 
 /** Uses revision prices, not the older candidate plan belonging to a logged trade. */
-export function CurrentTop3Selection({ revisions, sessionId }: { revisions: Top3Revision[]; sessionId: number }) {
+export function CurrentTop3Selection({ revisions, sessionId, quotes, candidates }: { revisions: Top3Revision[]; sessionId: number } & GuardProps) {
   if (!revisions.length) return null;
   const [current, ...history] = [...revisions].sort((a, b) => b.revision - a.revision);
   return (
@@ -59,7 +72,7 @@ export function CurrentTop3Selection({ revisions, sessionId }: { revisions: Top3
           ? <p className="text-sm text-amber-600">Inväntar Telegram och EdgeAI för dagens session. Föregående handelsdags rapporter accepteras.</p>
           : current.picks.length === 0
             ? <p className="text-sm text-muted-foreground">Inga kandidater klarar handelsreglerna i den senaste datan.</p>
-            : <Picks revision={current} />}
+            : <Picks revision={current} quotes={quotes} candidates={candidates} />}
       </div>
       {history.length > 0 && (
         <details data-testid="revision-history" className="mt-4 border-t border-border pt-3">

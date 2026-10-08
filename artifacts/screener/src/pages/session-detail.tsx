@@ -9,6 +9,7 @@ import { AddToPortfolioModal } from "../components/AddToPortfolioModal";
 import { edgeAiMetrics, edgeAiScore } from "../lib/edgeAiMetrics";
 import { LiveTop3Preview } from "../components/LiveTop3Preview";
 import { CurrentTop3Selection } from "../components/CurrentTop3Selection";
+import { LiveEntryGuard } from "../components/LiveEntryGuard";
 
 type Candidate = ApiCandidate & {
   volumeAsOf?: string | null;
@@ -153,12 +154,12 @@ export function SessionDetail() {
   const tickers = session?.candidates.map((c) => c.ticker) ?? [];
   const tickersParam = tickers.join(",");
   const quoteParams = { tickers: tickersParam };
-  const { data: quotes } = useGetQuotes(
+  const { data: quotes, isError: quoteError } = useGetQuotes(
     quoteParams,
     { query: { queryKey: getGetQuotesQueryKey(quoteParams), enabled: tickers.length > 0, refetchInterval: 60_000 } }
   );
   const quoteMap: Record<string, QuoteResult> = {};
-  quotes?.forEach((q) => { quoteMap[q.ticker] = q; });
+  quotes?.forEach((q) => { quoteMap[q.ticker] = quoteError ? { ...q, error: "Kurshämtningen misslyckades." } : q; });
 
   // Star selections are annotations, capped per market/direction. They are
   // never used to rewrite the immutable official signal-time snapshot.
@@ -280,7 +281,7 @@ export function SessionDetail() {
         <ImportDiffBanner diff={session.importDiff} importedAt={session.lastImportAt} />
       )}
       {!!session.top3Revisions?.length && (
-        <CurrentTop3Selection revisions={session.top3Revisions} sessionId={session.id} />
+        <CurrentTop3Selection revisions={session.top3Revisions} sessionId={session.id} quotes={quoteMap} candidates={session.candidates} />
       )}
       {!session.top3Revisions?.length && session.top3LiveSelection && (
         <LiveTop3Preview
@@ -288,6 +289,7 @@ export function SessionDetail() {
           candidates={candidates}
           frozen={session.top3SelectionSnapshot}
           sessionId={session.id}
+          quotes={quoteMap}
           onCutoff={() => { void refetch(); }}
         />
       )}
@@ -830,12 +832,13 @@ function CandidateRow({
             <div className={`rounded border px-2.5 py-2 text-xs ${DECISION_STYLE[decision.status]}`}>
               <div className="flex items-center gap-1 font-bold">
                 <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                Beslut: {DECISION_LABEL[decision.status] ?? decision.status}
+                Screeningstatus: {decision.status} · {DECISION_LABEL[decision.status] ?? decision.status}
               </div>
               <p className="mt-1 leading-relaxed opacity-90">{decision.reasons.join(" ")}</p>
             </div>
           )}
         
+        <LiveEntryGuard plan={candidate} quote={quote} signal={candidate} />
         {/* Metrics grid — labels adapt to EdgeAI vs manual */}
         <div className="grid grid-cols-3 gap-y-2 gap-x-4 text-xs">
           <div>
