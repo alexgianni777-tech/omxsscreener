@@ -211,6 +211,8 @@ export type SessionSourceReportDataDates = {
 };
 
 export interface SessionSourceReport {
+  warnings?: string[];
+  quarantinedIdentities?: string[];
   status?: SessionSourceReportStatus;
   /** @nullable */
   error?: string | null;
@@ -896,6 +898,8 @@ export interface OfficialCandidateSelection {
 }
 
 export interface Candidate {
+  /** @nullable */
+  importWarning?: string | null;
   id: number;
   sessionId: number;
   /**

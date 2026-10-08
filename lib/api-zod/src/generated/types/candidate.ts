@@ -20,6 +20,8 @@ import type { OfficialCandidateSelection } from './officialCandidateSelection';
 import type { SignalReview } from './signalReview';
 
 export interface Candidate {
+  /** @nullable */
+  importWarning?: string | null;
   id: number;
   sessionId: number;
   /**

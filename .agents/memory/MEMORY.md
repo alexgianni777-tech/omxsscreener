@@ -18,3 +18,4 @@
 - [GitHub sync caution](github-sync-caution.md) — upstream fixes may be based on older trading code; port compatible changes instead of overwriting local selection policy.
 - [Live entry guard](live-entry-guard-policy.md) — separate live price checks from immutable screening; reuse quotes without faster polling or paid services; SSR tests may need explicit React.
 - [Manuellt köpflöde](manual-review-workflow.md) — GitHub/EdgeAI hittar kandidater; Avanza och ChatGPT kontrolleras före eget köpbeslut; inga automatiska positioner/order eller krav på journal.
+- [Ambiguous source plans](signal-isolation-policy.md) — isolate conflicting identities, not entire reports; no guessed plan or historical identity migration.

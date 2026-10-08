@@ -1,4 +1,5 @@
 import { makeImportReport } from "../lib/importReport";
+import { isolateEdgeAiPlans } from "../lib/edgeAiPlanIsolation";
 /**
  * POST /screener/sessions/import-from-edgeai
  *
@@ -116,10 +117,11 @@ router.post(
       ...setups.map((s: any) => mapEdgeAiSetup(s, "SE", rankCounter)),
       ...usRaw.map((s: any) => mapEdgeAiSetup(s, "US", rankCounter)),
     ];
-    const { candidates: uniqueMappedSetups, skipped } = deduplicateCandidates(mappedSetups, importReport);
-    uniqueMappedSetups.forEach((candidate) => {
+    mappedSetups.forEach((candidate) => {
       Object.assign(candidate, { signalSource: "edgeai" as const, origin: "edgeai" as const, signalDate });
     });
+    const safeSetups = isolateEdgeAiPlans(mappedSetups, [...setups, ...usRaw].map(s => `${s.setup} (${s.signalT ?? "signaltid okänd"})`), importReport);
+    const { candidates: uniqueMappedSetups, skipped } = deduplicateCandidates(safeSetups, importReport);
     if (skipped.length > 0) {
       logger.warn({ skipped }, "EdgeAI import skipped duplicate candidate identities");
     }

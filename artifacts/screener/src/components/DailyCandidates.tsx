@@ -1,6 +1,6 @@
 import React from "react";
 import type { SessionSourceReport } from "@workspace/api-client-react";
-import { swedishDailyPicks, oldSignalWarning, previousWeekday, dailySymbol, type DailyPick } from "../lib/dailyCandidates";
+import { swedishDailyPicks, oldSignalWarning, previousWeekday, dailySymbol, isolatedDailyPick, type DailyPick } from "../lib/dailyCandidates";
 
 type Signal = {
   id: number; ticker: string; market?: string | null; direction: string; signalDate?: string | null;
@@ -19,13 +19,20 @@ export function DailyCandidates({ picks, signals, reports = [], sessionDate, pre
   return <div data-testid="daily-candidates" className="space-y-3">
     <h3 className="text-lg font-semibold">Dagens kandidater · Sverige</h3>
     {["edgeai", "telegram"].map(source => {
+      const latest = [...reports].reverse().find(r => r.source === source && r.status !== "FAILED");
+      return latest?.warnings?.length ? <details key={`warning-${source}`} className="text-xs text-amber-600 dark:text-amber-400">
+        <summary>{latest.quarantinedIdentities?.length ?? latest.warnings.length} signalidentiteter isolerade ({source}). Övriga giltiga kandidater behålls.</summary>
+        {latest.warnings.map(w => <p key={w} className="mt-1">{w}</p>)}
+      </details> : null;
+    })}
+    {["edgeai", "telegram"].map(source => {
       const latest = [...reports].reverse().find(r => r.source === source);
       return latest?.status === "FAILED" ? <p key={source} role="alert" className="text-xs text-red-600 dark:text-red-400">
         Import avvisad ({source}): {latest.error}. Tidigare signaler behålls; inget nytt urval är verifierat från rapporten.</p> : null;
     })}
     <p className="text-xs text-muted-foreground">Högst 3 long och 3 short från befintliga Top 3-förslag. {preliminary && "Preliminärt urval; inte officiell statistik. "}
       Underlag {sessionDate}. Kontrollera aktuell Avanza-kurs och rapportkalender och diskutera med ChatGPT före eget köpbeslut. Ingen position eller order väljs automatiskt.</p>
-    <div className="grid gap-3 md:grid-cols-2">{swedishDailyPicks(picks).map(group => <section key={group.direction} data-testid={`daily-${group.direction}`}>
+    <div className="grid gap-3 md:grid-cols-2">{swedishDailyPicks(picks.filter(p => !isolatedDailyPick(p, reports))).map(group => <section key={group.direction} data-testid={`daily-${group.direction}`}>
       <h4 className="mb-2 text-sm font-semibold">{group.direction === "LONG" ? "Long" : "Short"} · {group.picks.length}/3</h4>
       {!group.picks.length && <p className="text-xs text-muted-foreground">Inga förslag i befintligt urval. Inga extra signaler skapas.</p>}
       <ul className="space-y-2">{group.picks.map(p => {

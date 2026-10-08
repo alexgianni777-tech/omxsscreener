@@ -752,6 +752,14 @@ components:
       type: object
       required: [source, fingerprint, signalDate, reportDate, generatedAt, dataDates, importedAt]
       properties:
+        warnings:
+          type: array
+          items:
+            type: string
+        quarantinedIdentities:
+          type: array
+          items:
+            type: string
         status:
           type: string
           enum: [SUCCESS, FAILED]
@@ -1028,6 +1036,8 @@ components:
       type: object
       required: [id, sessionId, signalDate, category, rank, ticker, price, rs3m, perf1m, rsi, pctB, atr, volMultiplier, distFrom20dH, direction, entryPrice, stopPrice, targetPrice, rr, oneR, outcome]
       properties:
+        importWarning:
+          type: [string, "null"]
         id:
           type: number
         sessionId:

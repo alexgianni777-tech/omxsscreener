@@ -377,6 +377,7 @@ export async function synchronizeCandidates(
       !selectedCandidateIds.has(candidate.id) &&
       !registeredCandidateIds.has(candidate.id) &&
       !protectedCandidateIds.has(candidate.id) &&
+      !report?.quarantinedIdentities?.includes(candidateIdentity(candidate)) &&
       !incomingIdentities.has(candidateIdentity(candidate)),
   );
   const stalePendingIds = stalePending.map((candidate: any) => candidate.id);

@@ -9,6 +9,7 @@ const STYLES: Record<EntryStatus, string> = {
   UNKNOWN: "border-border bg-muted/30 text-muted-foreground",
 };
 export type SignalMetadata = {
+  importWarning?: string | null;
   signalDate?: string | null;
   signalSource?: string | null;
   signalAgeBars?: number | null;
@@ -35,7 +36,9 @@ export function LiveEntryGuard({ plan, quote, signal, now }: {
     const timer = setTimeout(expirePrice, remaining + 1);
     return () => clearTimeout(timer);
   }, [quote?.asOf, now]);
-  const assessment = assessLiveEntry(plan, quote, now);
+  const assessment = signal?.importWarning
+    ? { ...assessLiveEntry(plan, null, now), status: "UNKNOWN" as const, reason: signal.importWarning }
+    : assessLiveEntry(plan, quote, now);
   const age = signal?.signalAgeBars;
   return (
     <div data-testid="live-entry-guard" data-entry-status={assessment.status}

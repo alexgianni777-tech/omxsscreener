@@ -4,6 +4,8 @@ description: Användarens bekräftade arbetsflöde för kandidater och egna hand
 ---
 GitHub/EdgeAI hittar kandidater. Användaren kontrollerar aktuell Avanza-kurs och diskuterar med ChatGPT före köp. Appen ska inte automatiskt välja positioner, lägga order eller kräva journalföring.
 
+Behåll 5–6 positionsmodellen med mänskliga beslut.
+
 **Why:** Användaren bekräftade uttryckligen detta arbetsflöde och bad att befintliga funktioner bevaras utan mer rapporteringskomplexitet.
 
 **How to apply:** Kandidatvyer ska ge ett kompakt beslutsunderlag med tydlig källa, datum, originalplan och varningar. Journalen förblir frivillig. Lägg inte till automatisk exekvering eller fler godtyckliga signaler.

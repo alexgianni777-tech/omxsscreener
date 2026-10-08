@@ -11,6 +11,7 @@ import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { makeImportReport, ImportDataError } from "./importReport";
 import { recordImportFailure } from "./importFailure";
+import { isolateEdgeAiPlans } from "./edgeAiPlanIsolation";
 import { logger } from "./logger";
 import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "./omxs30TickerMap";
@@ -120,10 +121,11 @@ async function runImport(date: string): Promise<void> {
   const rankCounterUS: Record<string, number> = {};
   const seMapped = seSetups.map((s) => mapEdgeAiSetup(s, "SE", rankCounterSE));
   const usMapped = usSetups.map((s) => mapEdgeAiSetup(s, "US", rankCounterUS));
-  const mapped = [...seMapped, ...usMapped];
-  mapped.forEach((candidate) => {
+  const allMapped = [...seMapped, ...usMapped];
+  allMapped.forEach((candidate) => {
     Object.assign(candidate, { signalSource: "edgeai" as const, origin: "edgeai" as const, signalDate });
   });
+  const mapped = isolateEdgeAiPlans(allMapped, [...seSetups, ...usSetups].map(s => `${s.setup} (${s.signalT ?? "signaltid okänd"})`), importReport);
 
   const volumeRequests = mapped.map((c) => ({
     ticker: c.ticker,

@@ -33,6 +33,7 @@ function Picks({ revision, quotes, candidates }: { revision: Top3Revision } & Gu
                   </div>
                   <p className="mt-1 font-mono text-xs">Entry {pick.entryPrice} · Stop {pick.stopPrice} · Mål {pick.targetPrice} · R/R {pick.rr}</p>
                   {quotes && <LiveEntryGuard plan={pick} quote={quotes[pick.ticker]} signal={{
+                    importWarning: candidates?.find(c => c.id === pick.candidateId)?.importWarning,
                     signalDate: pick.signalDate, signalSource: pick.source,
                     // Do not attach newer or trade-frozen metadata to a different revision plan.
                     signalAgeBars: candidates?.find((c) => c.id === pick.candidateId &&

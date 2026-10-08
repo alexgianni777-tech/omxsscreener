@@ -4,6 +4,31 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { DailyCandidates } from "../components/DailyCandidates";
 import { swedishDailyPicks, oldSignalWarning, type DailyPick } from "./dailyCandidates";
+import { isolatedDailyPick } from "./dailyCandidates";
+import { LiveEntryGuard } from "../components/LiveEntryGuard";
+test("quarantined historical picks are never daily entry candidates and a fresh quote cannot make their guard READY", () => {
+  const p = pick(1);
+  const report = { source: "edgeai", signalDate: p.signalDate!, reportDate: "2026-10-12", generatedAt: null,
+    importedAt: "2026-10-12T08:00:00Z", fingerprint: "v2:q", status: "SUCCESS" as const,
+    dataDates: { SE: "2026-10-09", US: null }, warnings: ["GETI-B: stop 244.48 / 234.8"],
+    quarantinedIdentities: ["SE|MOMENTUM|TEST1|LONG|2026-10-09|edgeai"] };
+  assert.ok(isolatedDailyPick(p, [report]));
+  assert.ok(isolatedDailyPick(p, [report, { ...report, signalDate: "2026-10-12", quarantinedIdentities: [] }]));
+  assert.ok(!isolatedDailyPick(p, [report, { ...report, quarantinedIdentities: [] }]));
+  const html = renderToStaticMarkup(createElement(DailyCandidates, {
+    picks: [p, pick(2)], signals: [], reports: [report], sessionDate: "2026-10-12", now: new Date("2026-10-12T08:00:00Z"),
+  }));
+  assert.ok(!html.includes('data-testid="daily-pick-1"'));
+  assert.ok(html.includes('data-testid="daily-pick-2"'));
+  assert.ok(html.includes("244.48 / 234.8"));
+  const guard = renderToStaticMarkup(createElement(LiveEntryGuard, {
+    plan: p, quote: { livePrice: 100, asOf: "2026-10-12T08:00:00Z", marketState: "REGULAR" },
+    signal: { importWarning: "Isolerad signal" }, now: Date.parse("2026-10-12T08:00:00Z"),
+  }));
+  assert.ok(guard.includes('data-entry-status="UNKNOWN"'));
+  assert.ok(guard.includes("Ingen genomförbar live-entry"));
+  assert.ok(guard.includes("Isolerad signal"));
+});
 
 const pick = (id: number, direction = "LONG", market = "SE"): DailyPick => ({
   candidateId: id, ticker: `TEST${id}`, rank: id, market, direction, source: "edgeai",

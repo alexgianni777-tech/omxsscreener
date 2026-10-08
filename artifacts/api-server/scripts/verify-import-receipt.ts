@@ -3,6 +3,7 @@ import { db, screenerSessionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { synchronizeCandidates } from "../src/lib/candidateSynchronization";
 import { makeImportReport } from "../src/lib/importReport";
+import { candidateIdentity } from "../src/lib/candidateSynchronizationPolicy";
 
 // Development verification only. Every test write is deliberately rolled back.
 const rollback = new Error("Intentional verification rollback");
@@ -33,6 +34,19 @@ async function main() {
       const [stored] = await tx.select().from(screenerSessionsTable).where(eq(screenerSessionsTable.id, session.id));
       assert.ok(Array.isArray(stored.sourceReports));
       assert.equal(stored.sourceReports.length, 1);
+      // A quarantined pending original must survive while unrelated new plans import.
+      const changedReport = makeImportReport("edgeai", date, { revision: "isolation-test" });
+      changedReport.quarantinedIdentities = [candidateIdentity(first.candidates[0])];
+      changedReport.warnings = ["TEST-IMPORT has conflicting source plans"];
+      const next = await synchronizeCandidates(tx, session.id, [{ ...input, ticker: "TEST-VALID" }], testClock, changedReport);
+      assert.equal(next.candidates.length, 2);
+      const original = next.candidates.find(c => c.id === first.candidates[0].id);
+      assert.equal(original.entryPrice, 100);
+      assert.equal(original.stopPrice, 95);
+      assert.equal(original.targetPrice, 110);
+      assert.equal(original.outcome, first.candidates[0].outcome);
+      assert.equal(original.outcome, "PENDING");
+      assert.ok(next.candidates.some(c => c.ticker === "TEST-VALID"));
       verified = true;
       throw rollback;
     });

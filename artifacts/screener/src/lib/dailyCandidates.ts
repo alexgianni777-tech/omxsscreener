@@ -1,3 +1,4 @@
+import type { SessionSourceReport } from "@workspace/api-client-react";
 export type DailyPick = {
   candidateId: number; ticker: string; market: string; direction: string; rank: number;
   source: string; signalDate?: string | null; category: string;
@@ -6,6 +7,12 @@ export type DailyPick = {
 export function dailySymbol(ticker: string, market = "SE") {
   const symbol = ticker.trim().toUpperCase();
   return market === "SE" ? symbol.replace(/\.ST$/, "").replace(/[\s_]+([AB])$/, "-$1") : symbol;
+}
+export function isolatedDailyPick(p: DailyPick, reports: readonly SessionSourceReport[]) {
+  const latest = [...reports].reverse().find(r => r.status !== "FAILED" && r.source === p.source && r.signalDate === p.signalDate);
+  const identity = [p.market, p.category, dailySymbol(p.ticker, p.market), p.direction,
+    ...(p.signalDate ? [p.signalDate] : []), p.source].join("|");
+  return latest?.quarantinedIdentities?.includes(identity) ?? false;
 }
 /** Only trim the existing recommendation list; no new ranking, scoring or position selection. */
 export function swedishDailyPicks(picks: readonly DailyPick[]) {

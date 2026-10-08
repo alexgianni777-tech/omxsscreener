@@ -190,6 +190,8 @@ export const ImportSessionResponse = zod.object({
   "createdAt": zod.coerce.date().nullable(),
   "lastImportAt": zod.coerce.date().nullable(),
   "sourceReports": zod.array(zod.object({
+  "warnings": zod.array(zod.string()).optional(),
+  "quarantinedIdentities": zod.array(zod.string()).optional(),
   "status": zod.enum(['SUCCESS', 'FAILED']).optional(),
   "error": zod.string().nullish(),
   "source": zod.string(),
@@ -217,6 +219,7 @@ export const ImportSessionResponse = zod.object({
   "trendLabel": zod.string()
 }),
   "candidates": zod.array(zod.object({
+  "importWarning": zod.string().nullish(),
   "id": zod.number(),
   "sessionId": zod.number(),
   "signalDate": zod.string().nullable().describe('YYYY-MM-DD immutable date supplied by the signal source; null for legacy rows where source date is unknown'),
@@ -449,6 +452,8 @@ export const ReimportSessionResponse = zod.object({
   "createdAt": zod.coerce.date().nullable(),
   "lastImportAt": zod.coerce.date().nullable(),
   "sourceReports": zod.array(zod.object({
+  "warnings": zod.array(zod.string()).optional(),
+  "quarantinedIdentities": zod.array(zod.string()).optional(),
   "status": zod.enum(['SUCCESS', 'FAILED']).optional(),
   "error": zod.string().nullish(),
   "source": zod.string(),
@@ -476,6 +481,7 @@ export const ReimportSessionResponse = zod.object({
   "trendLabel": zod.string()
 }),
   "candidates": zod.array(zod.object({
+  "importWarning": zod.string().nullish(),
   "id": zod.number(),
   "sessionId": zod.number(),
   "signalDate": zod.string().nullable().describe('YYYY-MM-DD immutable date supplied by the signal source; null for legacy rows where source date is unknown'),
@@ -675,6 +681,8 @@ export const GetSessionResponse = zod.object({
   "createdAt": zod.coerce.date().nullable(),
   "lastImportAt": zod.coerce.date().nullable(),
   "sourceReports": zod.array(zod.object({
+  "warnings": zod.array(zod.string()).optional(),
+  "quarantinedIdentities": zod.array(zod.string()).optional(),
   "status": zod.enum(['SUCCESS', 'FAILED']).optional(),
   "error": zod.string().nullish(),
   "source": zod.string(),
@@ -702,6 +710,7 @@ export const GetSessionResponse = zod.object({
   "trendLabel": zod.string()
 }),
   "candidates": zod.array(zod.object({
+  "importWarning": zod.string().nullish(),
   "id": zod.number(),
   "sessionId": zod.number(),
   "signalDate": zod.string().nullable().describe('YYYY-MM-DD immutable date supplied by the signal source; null for legacy rows where source date is unknown'),
@@ -1038,6 +1047,7 @@ export const ListCandidatesQueryParams = zod.object({
 })
 
 export const ListCandidatesResponseItem = zod.object({
+  "importWarning": zod.string().nullish(),
   "id": zod.number(),
   "sessionId": zod.number(),
   "signalDate": zod.string().nullable().describe('YYYY-MM-DD immutable date supplied by the signal source; null for legacy rows where source date is unknown'),
@@ -1152,6 +1162,7 @@ export const UpdateCandidateOutcomeBody = zod.object({
 })
 
 export const UpdateCandidateOutcomeResponse = zod.object({
+  "importWarning": zod.string().nullish(),
   "id": zod.number(),
   "sessionId": zod.number(),
   "signalDate": zod.string().nullable().describe('YYYY-MM-DD immutable date supplied by the signal source; null for legacy rows where source date is unknown'),

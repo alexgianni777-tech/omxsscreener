@@ -636,9 +636,14 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
 
   const linkedIds = await fetchLinkedTradeIds(candidates.map((c) => c.id));
   const candidatesWithReview = candidates.map((candidate) => {
+    const receipts = Array.isArray(session.sourceReports) ? session.sourceReports : [];
+    const latest = [...receipts].reverse().find((r: any) => r.status !== "FAILED" && r.source === candidate.signalSource && r.signalDate === candidate.signalDate) as any;
+    const importWarning = latest?.quarantinedIdentities?.includes(candidateIdentity(candidate))
+      ? "Isolerad: källrapporten innehåller tvetydiga eller ogiltiga planer för denna signal. Originalscreening och historik är oförändrade." : null;
     const review = reviewCandidate(candidate, session.source ?? null);
     const officialSelection = selectionByCandidate.get(candidate.id);
     return {
+      importWarning,
       ...mapCandidate(candidate, linkedIds.has(candidate.id)),
       review,
       decision: decideCandidate(candidate, review, session.date),
@@ -661,6 +666,9 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     candidatesWithReview.map((candidate) => candidate.review),
     session.marketRsi,
   );
+  // Only live recommendations are filtered. Immutable cohorts/revisions and
+  // stored candidate screening statuses remain available as historical evidence.
+  if (liveSelection) liveSelection.picks = liveSelection.picks.filter(p => !candidatesWithReview.find(c => c.id === p.candidateId)?.importWarning);
   const snapshotStatus = describeTop3Snapshot(session, now);
 
   const parsed = GetSessionResponse.parse({

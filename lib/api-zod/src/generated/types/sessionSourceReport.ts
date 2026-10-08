@@ -9,6 +9,8 @@ import type { SessionSourceReportDataDates } from './sessionSourceReportDataDate
 import type { SessionSourceReportStatus } from './sessionSourceReportStatus';
 
 export interface SessionSourceReport {
+  warnings?: string[];
+  quarantinedIdentities?: string[];
   status?: SessionSourceReportStatus;
   /** @nullable */
   error?: string | null;
