@@ -14,6 +14,7 @@ import priceChartRouter from "./priceChart";
 import telegramImportRouter from "./telegramImport";
 import marketIntelRouter from "./marketIntel";
 import portfolioRouter from "./portfolio";
+import journalRouter from "./journal";
 import { requireAdministrator, requireAuthentication } from "../middlewares/authMiddleware";
 
 const router: IRouter = Router();
@@ -35,5 +36,6 @@ router.use(earningsScreenerRouter);
 router.use(priceChartRouter);
 router.use(marketIntelRouter);
 router.use(portfolioRouter);
+router.use(journalRouter);
 
 export default router;

@@ -19,6 +19,43 @@ tags:
   - name: Auth
     description: Browser and mobile authentication endpoints.
 paths:
+  /journal:
+    get:
+      operationId: listJournalRecords
+      tags: [candidates]
+      summary: Separate real, simulated and missed-trade execution journal
+      responses:
+        "200":
+          description: Immutable journal records, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/JournalRecord"
+    post:
+      operationId: createJournalRecord
+      tags: [candidates]
+      summary: Record an execution without changing the original signal or Challenge Tracker
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JournalEntryInput"
+      responses:
+        "201":
+          description: Recorded, or original immutable record returned for an identical retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalRecord"
+        "400":
+          description: Invalid execution or missing data
+        "404":
+          description: Source signal not found
+        "409":
+          description: Retry key already belongs to different execution data
   /healthz:
     get:
       operationId: healthCheck
@@ -592,6 +629,118 @@ components:
       properties:
         error:
           type: string
+    JournalEntryInput:
+      type: object
+      required: [id, candidateId, mode, notes]
+      properties:
+        id:
+          type: string
+          pattern: "^[a-fA-F0-9-]{36}$"
+        candidateId:
+          type: number
+          minimum: 1
+        mode:
+          type: string
+          enum: [REAL, SIMULATED, NOT_TAKEN]
+        instrumentKind:
+          type: [string, "null"]
+          enum: [SHARE, PRODUCT, null]
+        side:
+          type: [string, "null"]
+          enum: [LONG, SHORT, null]
+          description: Owned instrument side, not the underlying signal direction
+        entryTime:
+          type: [string, "null"]
+        fillPrice:
+          type: [number, "null"]
+        stopPrice:
+          type: [number, "null"]
+        targetPrice:
+          type: [number, "null"]
+        exitTime:
+          type: [string, "null"]
+        exitPrice:
+          type: [number, "null"]
+        quantity:
+          type: [number, "null"]
+        priceCurrency:
+          type: [string, "null"]
+          enum: [SEK, USD, null]
+        entryFxSek:
+          type: [number, "null"]
+          description: SEK per price currency at entry; required for USD
+        exitFxSek:
+          type: [number, "null"]
+          description: SEK per price currency at exit; required for USD
+        leverage:
+          type: [number, "null"]
+          description: Informational only; never multiplied into instrument P&L
+        spreadCostKr:
+          type: [number, "null"]
+          description: Observed cost already reflected in fills; not deducted twice
+        slippageCostKr:
+          type: [number, "null"]
+          description: Observed cost already reflected in fills; not deducted twice
+        financingCostKr:
+          type: [number, "null"]
+        commissionKr:
+          type: [number, "null"]
+        notes:
+          type: string
+          maxLength: 2000
+    JournalSignal:
+      type: object
+      required: [ticker, source, signalDate, dataDate, bucket, direction, sessionId, entryPrice, stopPrice, targetPrice, rr]
+      properties:
+        ticker:
+          type: string
+        source:
+          type: [string, "null"]
+        signalDate:
+          type: [string, "null"]
+        dataDate:
+          type: [string, "null"]
+          description: Verified completed-volume date available on the source candidate, not an invented GitHub timestamp
+        bucket:
+          type: string
+        direction:
+          type: string
+        sessionId:
+          type: number
+        entryPrice:
+          type: number
+        stopPrice:
+          type: number
+        targetPrice:
+          type: number
+        rr:
+          type: number
+    JournalMetrics:
+      type: object
+      required: [grossR, netR, riskCashKr, netPnlKr]
+      properties:
+        grossR:
+          type: [number, "null"]
+        netR:
+          type: [number, "null"]
+        riskCashKr:
+          type: [number, "null"]
+        netPnlKr:
+          type: [number, "null"]
+    JournalRecord:
+      type: object
+      required: [id, createdAt, input, signal, metrics]
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+        input:
+          $ref: "#/components/schemas/JournalEntryInput"
+        signal:
+          $ref: "#/components/schemas/JournalSignal"
+        metrics:
+          $ref: "#/components/schemas/JournalMetrics"
     HealthStatus:
       type: object
       required: [status]

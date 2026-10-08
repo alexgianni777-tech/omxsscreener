@@ -58,3 +58,10 @@ description: Methodology rules that keep historical outcomes, earnings context, 
 **Why:** a manual target-date override once combined old screener and volume data with a newer earnings calendar while making the candidate appear tradeable.
 
 **How to apply:** keep candidate signal-date provenance immutable, evaluate eligibility against that date, and leave unknown legacy dates unknown. A same-day official selection must be based on known same-day signal inputs.
+
+## Execution journal and legacy outcomes
+**Rule:** Keep execution evidence separate from the legacy signal-outcome and Challenge accounting until an explicit reconciliation identifies the same financial event. Do not retroactively label old target/stop outcomes REAL or SIMULATED.
+
+**Why:** The user wants a credible, measurable screener, not an apparent edge inferred from signals without confirmed fills, execution times and costs. Separately entered journal evidence must not double-count an existing Challenge event.
+
+**How to apply:** Preserve unknown execution provenance and costs as unknown. Future reconciliation must link records rather than copy their P&L into a second event. Actual late or plan-broken executions remain evidence even when their R cannot be meaningfully established; disclose missing-R counts in later analysis instead of silently excluding those trades.

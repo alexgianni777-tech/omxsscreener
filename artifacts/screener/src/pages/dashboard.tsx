@@ -15,6 +15,8 @@ import { useTop3Analytics, type Top3Session } from "../lib/useTop3Analytics";
 import { top3SessionsForSource } from "../lib/top3SourceViews";
 import { useMarketIntel, type MarketIntelData } from "../lib/useMarketIntel";
 import { useState, useMemo } from "react";
+import { DashboardLiveTop3 } from "../components/DashboardLiveTop3";
+import { TradeJournal } from "../components/TradeJournal";
 
 export function Dashboard() {
   const { data: summary, isLoading, isError } = useGetDashboardSummary();
@@ -249,7 +251,9 @@ export function Dashboard() {
       <RollingExpectancySection equityCurve={summary.equityCurve} />
 
       {/* Top 3 Strategy */}
+      <DashboardLiveTop3 />
       <Top3Section />
+      <TradeJournal />
 
       {/* Category Breakdown */}
       <div>
@@ -923,6 +927,7 @@ function Top3Section() {
       </div>
       <p className="text-xs text-muted-foreground -mt-4">
         Frysta urval från första signal-time-importen, endast TRADEABLE och högst tre per market/riktning. Äldre sessioner utan sparad snapshot markeras som otillgängliga och ingår inte i resultatet.
+        {" "}Detta är historiska signalutfall, inte bekräftad netto-edge från verkliga affärer. Verkliga och simulerade fills följs separat i journalen.
       </p>
       {(data?.sessions.filter((s) => s.selectionStatus === "UNAVAILABLE").length ?? 0) > 0 && (
         <p className="text-xs text-muted-foreground">

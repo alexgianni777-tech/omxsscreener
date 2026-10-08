@@ -47,6 +47,150 @@ export interface ErrorEnvelope {
   error: string;
 }
 
+export type JournalEntryInputMode = typeof JournalEntryInputMode[keyof typeof JournalEntryInputMode];
+
+
+export const JournalEntryInputMode = {
+  REAL: 'REAL',
+  SIMULATED: 'SIMULATED',
+  NOT_TAKEN: 'NOT_TAKEN',
+} as const;
+
+/**
+ * @nullable
+ */
+export type JournalEntryInputInstrumentKind = typeof JournalEntryInputInstrumentKind[keyof typeof JournalEntryInputInstrumentKind] | null;
+
+
+export const JournalEntryInputInstrumentKind = {
+  SHARE: 'SHARE',
+  PRODUCT: 'PRODUCT',
+} as const;
+
+/**
+ * Owned instrument side, not the underlying signal direction
+ * @nullable
+ */
+export type JournalEntryInputSide = typeof JournalEntryInputSide[keyof typeof JournalEntryInputSide] | null;
+
+
+export const JournalEntryInputSide = {
+  LONG: 'LONG',
+  SHORT: 'SHORT',
+} as const;
+
+/**
+ * @nullable
+ */
+export type JournalEntryInputPriceCurrency = typeof JournalEntryInputPriceCurrency[keyof typeof JournalEntryInputPriceCurrency] | null;
+
+
+export const JournalEntryInputPriceCurrency = {
+  SEK: 'SEK',
+  USD: 'USD',
+} as const;
+
+export interface JournalEntryInput {
+  /** @pattern ^[a-fA-F0-9-]{36}$ */
+  id: string;
+  /** @minimum 1 */
+  candidateId: number;
+  mode: JournalEntryInputMode;
+  /** @nullable */
+  instrumentKind?: JournalEntryInputInstrumentKind;
+  /**
+     * Owned instrument side, not the underlying signal direction
+     * @nullable
+     */
+  side?: JournalEntryInputSide;
+  /** @nullable */
+  entryTime?: string | null;
+  /** @nullable */
+  fillPrice?: number | null;
+  /** @nullable */
+  stopPrice?: number | null;
+  /** @nullable */
+  targetPrice?: number | null;
+  /** @nullable */
+  exitTime?: string | null;
+  /** @nullable */
+  exitPrice?: number | null;
+  /** @nullable */
+  quantity?: number | null;
+  /** @nullable */
+  priceCurrency?: JournalEntryInputPriceCurrency;
+  /**
+     * SEK per price currency at entry; required for USD
+     * @nullable
+     */
+  entryFxSek?: number | null;
+  /**
+     * SEK per price currency at exit; required for USD
+     * @nullable
+     */
+  exitFxSek?: number | null;
+  /**
+     * Informational only; never multiplied into instrument P&L
+     * @nullable
+     */
+  leverage?: number | null;
+  /**
+     * Observed cost already reflected in fills; not deducted twice
+     * @nullable
+     */
+  spreadCostKr?: number | null;
+  /**
+     * Observed cost already reflected in fills; not deducted twice
+     * @nullable
+     */
+  slippageCostKr?: number | null;
+  /** @nullable */
+  financingCostKr?: number | null;
+  /** @nullable */
+  commissionKr?: number | null;
+  /** @maxLength 2000 */
+  notes: string;
+}
+
+export interface JournalSignal {
+  ticker: string;
+  /** @nullable */
+  source: string | null;
+  /** @nullable */
+  signalDate: string | null;
+  /**
+     * Verified completed-volume date available on the source candidate, not an invented GitHub timestamp
+     * @nullable
+     */
+  dataDate: string | null;
+  bucket: string;
+  direction: string;
+  sessionId: number;
+  entryPrice: number;
+  stopPrice: number;
+  targetPrice: number;
+  rr: number;
+}
+
+export interface JournalMetrics {
+  /** @nullable */
+  grossR: number | null;
+  /** @nullable */
+  netR: number | null;
+  /** @nullable */
+  riskCashKr: number | null;
+  /** @nullable */
+  netPnlKr: number | null;
+}
+
+export interface JournalRecord {
+  id: string;
+  createdAt: string;
+  input: JournalEntryInput;
+  signal: JournalSignal;
+  metrics: JournalMetrics;
+}
+
 export interface HealthStatus {
   status: string;
 }

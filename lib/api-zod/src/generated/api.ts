@@ -9,6 +9,151 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Separate real, simulated and missed-trade execution journal
+ */
+export const listJournalRecordsResponseInputIdRegExp = new RegExp('^[a-fA-F0-9-]{36}$');
+
+export const listJournalRecordsResponseInputNotesMax = 2000;
+
+
+
+export const ListJournalRecordsResponseItem = zod.object({
+  "id": zod.string(),
+  "createdAt": zod.string(),
+  "input": zod.object({
+  "id": zod.string().regex(listJournalRecordsResponseInputIdRegExp),
+  "candidateId": zod.number().min(1),
+  "mode": zod.enum(['REAL', 'SIMULATED', 'NOT_TAKEN']),
+  "instrumentKind": zod.union([zod.literal('SHARE'),zod.literal('PRODUCT'),zod.literal(null)]).nullish(),
+  "side": zod.union([zod.literal('LONG'),zod.literal('SHORT'),zod.literal(null)]).nullish().describe('Owned instrument side, not the underlying signal direction'),
+  "entryTime": zod.string().nullish(),
+  "fillPrice": zod.number().nullish(),
+  "stopPrice": zod.number().nullish(),
+  "targetPrice": zod.number().nullish(),
+  "exitTime": zod.string().nullish(),
+  "exitPrice": zod.number().nullish(),
+  "quantity": zod.number().nullish(),
+  "priceCurrency": zod.union([zod.literal('SEK'),zod.literal('USD'),zod.literal(null)]).nullish(),
+  "entryFxSek": zod.number().nullish().describe('SEK per price currency at entry; required for USD'),
+  "exitFxSek": zod.number().nullish().describe('SEK per price currency at exit; required for USD'),
+  "leverage": zod.number().nullish().describe('Informational only; never multiplied into instrument P&L'),
+  "spreadCostKr": zod.number().nullish().describe('Observed cost already reflected in fills; not deducted twice'),
+  "slippageCostKr": zod.number().nullish().describe('Observed cost already reflected in fills; not deducted twice'),
+  "financingCostKr": zod.number().nullish(),
+  "commissionKr": zod.number().nullish(),
+  "notes": zod.string().max(listJournalRecordsResponseInputNotesMax)
+}),
+  "signal": zod.object({
+  "ticker": zod.string(),
+  "source": zod.string().nullable(),
+  "signalDate": zod.string().nullable(),
+  "dataDate": zod.string().nullable().describe('Verified completed-volume date available on the source candidate, not an invented GitHub timestamp'),
+  "bucket": zod.string(),
+  "direction": zod.string(),
+  "sessionId": zod.number(),
+  "entryPrice": zod.number(),
+  "stopPrice": zod.number(),
+  "targetPrice": zod.number(),
+  "rr": zod.number()
+}),
+  "metrics": zod.object({
+  "grossR": zod.number().nullable(),
+  "netR": zod.number().nullable(),
+  "riskCashKr": zod.number().nullable(),
+  "netPnlKr": zod.number().nullable()
+})
+})
+export const ListJournalRecordsResponse = zod.array(ListJournalRecordsResponseItem)
+
+
+/**
+ * @summary Record an execution without changing the original signal or Challenge Tracker
+ */
+export const createJournalRecordBodyIdRegExp = new RegExp('^[a-fA-F0-9-]{36}$');
+
+export const createJournalRecordBodyNotesMax = 2000;
+
+
+
+export const CreateJournalRecordBody = zod.object({
+  "id": zod.string().regex(createJournalRecordBodyIdRegExp),
+  "candidateId": zod.number().min(1),
+  "mode": zod.enum(['REAL', 'SIMULATED', 'NOT_TAKEN']),
+  "instrumentKind": zod.union([zod.literal('SHARE'),zod.literal('PRODUCT'),zod.literal(null)]).nullish(),
+  "side": zod.union([zod.literal('LONG'),zod.literal('SHORT'),zod.literal(null)]).nullish().describe('Owned instrument side, not the underlying signal direction'),
+  "entryTime": zod.string().nullish(),
+  "fillPrice": zod.number().nullish(),
+  "stopPrice": zod.number().nullish(),
+  "targetPrice": zod.number().nullish(),
+  "exitTime": zod.string().nullish(),
+  "exitPrice": zod.number().nullish(),
+  "quantity": zod.number().nullish(),
+  "priceCurrency": zod.union([zod.literal('SEK'),zod.literal('USD'),zod.literal(null)]).nullish(),
+  "entryFxSek": zod.number().nullish().describe('SEK per price currency at entry; required for USD'),
+  "exitFxSek": zod.number().nullish().describe('SEK per price currency at exit; required for USD'),
+  "leverage": zod.number().nullish().describe('Informational only; never multiplied into instrument P&L'),
+  "spreadCostKr": zod.number().nullish().describe('Observed cost already reflected in fills; not deducted twice'),
+  "slippageCostKr": zod.number().nullish().describe('Observed cost already reflected in fills; not deducted twice'),
+  "financingCostKr": zod.number().nullish(),
+  "commissionKr": zod.number().nullish(),
+  "notes": zod.string().max(createJournalRecordBodyNotesMax)
+})
+
+export const createJournalRecordResponseInputIdRegExp = new RegExp('^[a-fA-F0-9-]{36}$');
+
+export const createJournalRecordResponseInputNotesMax = 2000;
+
+
+
+export const CreateJournalRecordResponse = zod.object({
+  "id": zod.string(),
+  "createdAt": zod.string(),
+  "input": zod.object({
+  "id": zod.string().regex(createJournalRecordResponseInputIdRegExp),
+  "candidateId": zod.number().min(1),
+  "mode": zod.enum(['REAL', 'SIMULATED', 'NOT_TAKEN']),
+  "instrumentKind": zod.union([zod.literal('SHARE'),zod.literal('PRODUCT'),zod.literal(null)]).nullish(),
+  "side": zod.union([zod.literal('LONG'),zod.literal('SHORT'),zod.literal(null)]).nullish().describe('Owned instrument side, not the underlying signal direction'),
+  "entryTime": zod.string().nullish(),
+  "fillPrice": zod.number().nullish(),
+  "stopPrice": zod.number().nullish(),
+  "targetPrice": zod.number().nullish(),
+  "exitTime": zod.string().nullish(),
+  "exitPrice": zod.number().nullish(),
+  "quantity": zod.number().nullish(),
+  "priceCurrency": zod.union([zod.literal('SEK'),zod.literal('USD'),zod.literal(null)]).nullish(),
+  "entryFxSek": zod.number().nullish().describe('SEK per price currency at entry; required for USD'),
+  "exitFxSek": zod.number().nullish().describe('SEK per price currency at exit; required for USD'),
+  "leverage": zod.number().nullish().describe('Informational only; never multiplied into instrument P&L'),
+  "spreadCostKr": zod.number().nullish().describe('Observed cost already reflected in fills; not deducted twice'),
+  "slippageCostKr": zod.number().nullish().describe('Observed cost already reflected in fills; not deducted twice'),
+  "financingCostKr": zod.number().nullish(),
+  "commissionKr": zod.number().nullish(),
+  "notes": zod.string().max(createJournalRecordResponseInputNotesMax)
+}),
+  "signal": zod.object({
+  "ticker": zod.string(),
+  "source": zod.string().nullable(),
+  "signalDate": zod.string().nullable(),
+  "dataDate": zod.string().nullable().describe('Verified completed-volume date available on the source candidate, not an invented GitHub timestamp'),
+  "bucket": zod.string(),
+  "direction": zod.string(),
+  "sessionId": zod.number(),
+  "entryPrice": zod.number(),
+  "stopPrice": zod.number(),
+  "targetPrice": zod.number(),
+  "rr": zod.number()
+}),
+  "metrics": zod.object({
+  "grossR": zod.number().nullable(),
+  "netR": zod.number().nullable(),
+  "riskCashKr": zod.number().nullable(),
+  "netPnlKr": zod.number().nullable()
+})
+})
+
+
+/**
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({

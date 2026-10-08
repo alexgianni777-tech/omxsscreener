@@ -26,6 +26,16 @@ test("closed or unverified price shows unknown current R/R, not a cached entry a
     const html = renderToStaticMarkup(createElement(LiveEntryGuard, { plan, quote, now }));
     assert.ok(html.includes("aktuellt: okänt"));
     assert.ok(!html.includes('data-entry-status="READY"'));
+    assert.ok(html.includes("Ingen genomförbar live-entry."));
     assert.ok(html.includes("Setupålder okänd"));
+  }
+});
+test("missed entry and broken plans are explicitly not presented as executable", () => {
+  for (const price of [98, 90, 105]) {
+    const html = renderToStaticMarkup(createElement(LiveEntryGuard, {
+      plan, now, quote: { livePrice: price, asOf: "2026-10-02T11:59:00Z", marketState: "REGULAR" },
+    }));
+    assert.ok(html.includes("Ingen genomförbar live-entry."));
+    assert.ok(!html.includes('data-entry-status="READY"'));
   }
 });

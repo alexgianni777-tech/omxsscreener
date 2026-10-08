@@ -34,6 +34,8 @@ import type {
   HandleBrowserLoginCallbackParams,
   HealthStatus,
   ImportConflict,
+  JournalEntryInput,
+  JournalRecord,
   ListCandidatesParams,
   LogoutBrowserSessionParams,
   LogoutSuccess,
@@ -76,6 +78,154 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getListJournalRecordsUrl = () => {
+
+
+
+
+  return `/api/journal`
+}
+
+/**
+ * @summary Separate real, simulated and missed-trade execution journal
+ */
+export const listJournalRecords = async ( options?: Parameters<typeof customFetch>[1]): Promise<JournalRecord[]> => {
+
+  return customFetch<JournalRecord[]>(getListJournalRecordsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListJournalRecordsQueryKey = () => {
+    return [
+    `/api/journal`
+    ] as const;
+    }
+
+
+export const getListJournalRecordsQueryOptions = <TData = Awaited<ReturnType<typeof listJournalRecords>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listJournalRecords>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListJournalRecordsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listJournalRecords>>> = ({ signal }) => listJournalRecords({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listJournalRecords>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListJournalRecordsQueryResult = NonNullable<Awaited<ReturnType<typeof listJournalRecords>>>
+export type ListJournalRecordsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Separate real, simulated and missed-trade execution journal
+ */
+
+export function useListJournalRecords<TData = Awaited<ReturnType<typeof listJournalRecords>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listJournalRecords>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListJournalRecordsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateJournalRecordUrl = () => {
+
+
+
+
+  return `/api/journal`
+}
+
+/**
+ * @summary Record an execution without changing the original signal or Challenge Tracker
+ */
+export const createJournalRecord = async (journalEntryInput: JournalEntryInput, options?: Parameters<typeof customFetch>[1]): Promise<JournalRecord> => {
+
+  return customFetch<JournalRecord>(getCreateJournalRecordUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(journalEntryInput)
+  }
+);}
+
+
+
+
+
+export const getCreateJournalRecordMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createJournalRecord>>, TError,{data: BodyType<JournalEntryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createJournalRecord>>, TError,{data: BodyType<JournalEntryInput>}, TContext> => {
+
+const mutationKey = ['createJournalRecord'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createJournalRecord>>, {data: BodyType<JournalEntryInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createJournalRecord(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateJournalRecordMutationResult = NonNullable<Awaited<ReturnType<typeof createJournalRecord>>>
+    export type CreateJournalRecordMutationBody = BodyType<JournalEntryInput>
+    export type CreateJournalRecordMutationError = ErrorType<void>
+
+    /**
+ * @summary Record an execution without changing the original signal or Challenge Tracker
+ */
+export const useCreateJournalRecord = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createJournalRecord>>, TError,{data: BodyType<JournalEntryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createJournalRecord>>,
+        TError,
+        {data: BodyType<JournalEntryInput>},
+        TContext
+      > => {
+      return useMutation(getCreateJournalRecordMutationOptions(options));
+    }
 
 export const getHealthCheckUrl = () => {
 

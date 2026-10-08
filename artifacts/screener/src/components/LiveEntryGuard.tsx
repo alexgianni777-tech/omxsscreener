@@ -1,5 +1,5 @@
-import React from "react";
-import { assessLiveEntry, type EntryPlan, type EntryQuote, type EntryStatus } from "../lib/liveEntryGuard";
+import React, { useEffect, useReducer } from "react";
+import { assessLiveEntry, LIVE_ENTRY_MAX_PRICE_AGE_MS, type EntryPlan, type EntryQuote, type EntryStatus } from "../lib/liveEntryGuard";
 
 const STYLES: Record<EntryStatus, string> = {
   READY: "border-success/30 bg-success/5 text-success",
@@ -26,6 +26,15 @@ export function LiveEntryGuard({ plan, quote, signal, now }: {
   signal?: SignalMetadata;
   now?: number;
 }) {
+  const [, expirePrice] = useReducer((value: number) => value + 1, 0);
+  useEffect(() => {
+    if (now != null || !quote?.asOf) return;
+    const remaining = Date.parse(quote.asOf) + LIVE_ENTRY_MAX_PRICE_AGE_MS - Date.now();
+    if (!Number.isFinite(remaining) || remaining < 0 || remaining > LIVE_ENTRY_MAX_PRICE_AGE_MS + 60_000) return;
+    // One local expiry, not network polling. A manual quote cannot stay READY indefinitely.
+    const timer = setTimeout(expirePrice, remaining + 1);
+    return () => clearTimeout(timer);
+  }, [quote?.asOf, now]);
   const assessment = assessLiveEntry(plan, quote, now);
   const age = signal?.signalAgeBars;
   return (
@@ -37,6 +46,7 @@ export function LiveEntryGuard({ plan, quote, signal, now }: {
           R/R original: {assessment.originalRr?.toFixed(2) ?? "okänt"} · aktuellt: {assessment.liveRr?.toFixed(2) ?? "okänt"}
         </span>
       </p>
+      {assessment.status !== "READY" && <p className="mt-1 font-semibold">Ingen genomförbar live-entry.</p>}
       <p className="mt-1">{assessment.reason}</p>
       <p className="mt-1 text-muted-foreground">
         Kurs {quote?.livePrice != null && Number.isFinite(quote.livePrice) ? quote.livePrice.toFixed(2) : "okänd"}
