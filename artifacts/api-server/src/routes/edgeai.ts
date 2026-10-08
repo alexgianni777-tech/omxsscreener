@@ -1,3 +1,4 @@
+import { makeImportReport } from "../lib/importReport";
 /**
  * POST /screener/sessions/import-from-edgeai
  *
@@ -86,6 +87,8 @@ router.post(
     // The stored session date is the EdgeAI signal day, never the browser/server
     // clock. A manual import may intentionally use the latest prior trading day.
     const signalDate = edgeAiSessionDate(edgeData);
+    const importReport = makeImportReport("edgeai", signalDate, edgeData, edgeData.generatedAt ?? null,
+      { SE: se.dataAsOf ?? null, US: us.dataAsOf ?? null });
     const sessionDate = stockholmSignalDate();
     const freshness = edgeAiDataFreshness(edgeData);
 
@@ -113,7 +116,7 @@ router.post(
       ...setups.map((s: any) => mapEdgeAiSetup(s, "SE", rankCounter)),
       ...usRaw.map((s: any) => mapEdgeAiSetup(s, "US", rankCounter)),
     ];
-    const { candidates: uniqueMappedSetups, skipped } = deduplicateCandidates(mappedSetups);
+    const { candidates: uniqueMappedSetups, skipped } = deduplicateCandidates(mappedSetups, importReport);
     uniqueMappedSetups.forEach((candidate) => {
       Object.assign(candidate, { signalSource: "edgeai" as const, origin: "edgeai" as const, signalDate });
     });
@@ -261,13 +264,14 @@ router.post(
           })
           .where(eq(screenerSessionsTable.id, existingId))
           .returning();
-        const { candidates: synchronizedCandidates, diff } = await synchronizeCandidates(
+        const { candidates: synchronizedCandidates, diff, duplicateReport } = await synchronizeCandidates(
           tx,
           updated.id,
           mergeCandidateInputs(
             uniqueMappedSetups,
             existingCandidates.map(({ id, createdAt, ...candidate }) => candidate),
           ),
+          new Date(), importReport,
         );
         const aggregateSource = aggregateSessionSource(
           existing[0].source,
@@ -277,7 +281,7 @@ router.post(
           .update(screenerSessionsTable)
           .set({ lastImportDiff: diff, lastImportAt: new Date(), source: aggregateSource })
           .where(eq(screenerSessionsTable.id, updated.id));
-        await snapshotNewSessionTop3(
+        if (!duplicateReport) await snapshotNewSessionTop3(
           tx,
           { id: updated.id, date: sessionDate, source: aggregateSource },
           uniqueMappedSetups,
@@ -317,7 +321,7 @@ router.post(
             edgeN: se.edge?.n ?? null,
           })
           .returning();
-        const { candidates: insertedCandidates } = await synchronizeCandidates(tx, inserted.id, uniqueMappedSetups);
+        const { candidates: insertedCandidates } = await synchronizeCandidates(tx, inserted.id, uniqueMappedSetups, new Date(), importReport);
         await snapshotNewSessionTop3(
           tx,
           { id: inserted.id, date: sessionDate, source: "edgeai" },

@@ -1,3 +1,5 @@
+import { DailyCandidates } from "../components/DailyCandidates";
+import type { SessionSourceReport } from "@workspace/api-client-react";
 /**
  * Idag — daglig briefing + challenge-tracker i ett
  *
@@ -120,6 +122,7 @@ type Session = {
   candidates: Candidate[];
   top3LiveSelection?: LiveSelection | null;
   top3Revisions?: Top3Revision[];
+  sourceReports?: SessionSourceReport[];
   top3SelectionSnapshot?: {
     available: boolean;
     state: "AVAILABLE" | "WAITING_FOR_CUTOFF" | "WAITING_FOR_SOURCES" | "EVALUATING" | "MISSING_SOURCES" | "LEGACY_UNAVAILABLE";
@@ -562,6 +565,10 @@ export function Today() {
           </div>
         </div>
 
+        {session && <DailyCandidates
+          picks={currentRevision?.picks ?? session.top3LiveSelection?.picks ?? []}
+          signals={session.candidates} reports={session.sourceReports}
+          sessionDate={session.date} preliminary={!currentRevision} />}
         {!!session?.top3Revisions?.length && (
           <CurrentTop3Selection revisions={session.top3Revisions} sessionId={session.id} quotes={quotes} candidates={session.candidates} />
         )}

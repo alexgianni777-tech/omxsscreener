@@ -1,3 +1,4 @@
+import { makeImportReport } from "../lib/importReport";
 import { Router, type IRouter } from "express";
 import { eq, ne, sql, and, inArray } from "drizzle-orm";
 import {
@@ -69,6 +70,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
 
   const reportDate = session.date;
   const signalSource = pastedSignalSource(parsed.data.confirmedTelegram);
+  const importReport = makeImportReport(signalSource, reportDate, session);
   if (parsed.data.targetDate) {
     const targetDate = parsed.data.targetDate instanceof Date
       ? parsed.data.targetDate.toISOString().slice(0, 10)
@@ -261,7 +263,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
         ),
         existingCandidates.map(({ id, ...candidate }) => candidate as any),
       );
-      const { candidates: updatedCandidates, diff } = await synchronizeCandidates(tx, updatedSession.id, incomingRows);
+      const { candidates: updatedCandidates, diff, duplicateReport } = await synchronizeCandidates(tx, updatedSession.id, incomingRows, new Date(), importReport);
       const aggregateSource = aggregateSessionSource(
         updatedSession.source,
         updatedCandidates.map((candidate) => candidate.signalSource),
@@ -270,7 +272,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
         .update(screenerSessionsTable)
         .set({ lastImportDiff: diff, lastImportAt: new Date(), source: aggregateSource })
         .where(eq(screenerSessionsTable.id, updatedSession.id));
-      await snapshotNewSessionTop3(
+      if (!duplicateReport) await snapshotNewSessionTop3(
         tx,
         { id: updatedSession.id, date: updatedSession.date, source: aggregateSource },
         session.candidates.map((candidate) =>
@@ -313,6 +315,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
       session.candidates.map((c) =>
         buildCandidateRow(insertedSession.id, c, earningsBatch.get(c.ticker) ?? UNKNOWN_EARNINGS),
       ),
+      new Date(), importReport,
     );
     const aggregateSource = aggregateSessionSource(
       insertedSession.source,
@@ -465,13 +468,14 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
         oneR: candidate.oneR,
         outcome: "PENDING" as const,
       }));
-      const { candidates: resultCandidates, diff } = await synchronizeCandidates(
+      const { candidates: resultCandidates, diff, duplicateReport } = await synchronizeCandidates(
         tx,
         updatedSession.id,
         mergeCandidateInputs(
           rows,
           existingCandidates.map(({ id, ...candidate }) => candidate),
         ),
+        new Date(), makeImportReport(String(rows[0]?.signalSource ?? "manual"), parsedSession.date, parsedSession),
       );
       const aggregateSource = aggregateSessionSource(
         updatedSession.source,
@@ -481,7 +485,7 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
         .update(screenerSessionsTable)
         .set({ lastImportDiff: diff, lastImportAt: new Date(), source: aggregateSource })
         .where(eq(screenerSessionsTable.id, updatedSession.id));
-      await snapshotNewSessionTop3(
+      if (!duplicateReport) await snapshotNewSessionTop3(
         tx,
         { id: updatedSession.id, date: updatedSession.date, source: aggregateSource },
         rows,
@@ -665,6 +669,7 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     source: session.source ?? null,
     createdAt: session.createdAt ?? null,
     lastImportAt: session.lastImportAt ?? null,
+    sourceReports: Array.isArray(session.sourceReports) ? session.sourceReports : [],
     marketWeather: {
       omxsValue: session.omxsValue,
       perf5d: session.perf5d,

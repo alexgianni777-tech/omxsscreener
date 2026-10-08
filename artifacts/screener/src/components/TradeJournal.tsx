@@ -151,7 +151,7 @@ export function TradeJournal() {
   return (
     <div className="font-mono border border-border rounded-lg bg-card overflow-hidden" data-testid="trade-journal">
       <div className="px-4 py-2.5 border-b border-border text-xs uppercase tracking-widest text-muted-foreground">
-        === EXEKVERINGSJOURNAL ===
+        === FRIVILLIG EXEKVERINGSJOURNAL ===
       </div>
       <div className="p-4 space-y-3 text-xs">
         <p className="text-muted-foreground leading-relaxed">

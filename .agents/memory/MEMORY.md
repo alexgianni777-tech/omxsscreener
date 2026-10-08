@@ -17,3 +17,4 @@
 - [Top 3 reimport policy](top3-cutoff-policy.md) — version refreshed recommendations; accept one previous close with real dates; preserve trades and original cohort; require both sources, no 16:30 wait.
 - [GitHub sync caution](github-sync-caution.md) — upstream fixes may be based on older trading code; port compatible changes instead of overwriting local selection policy.
 - [Live entry guard](live-entry-guard-policy.md) — separate live price checks from immutable screening; reuse quotes without faster polling or paid services; SSR tests may need explicit React.
+- [Manuellt köpflöde](manual-review-workflow.md) — GitHub/EdgeAI hittar kandidater; Avanza och ChatGPT kontrolleras före eget köpbeslut; inga automatiska positioner/order eller krav på journal.

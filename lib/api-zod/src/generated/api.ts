@@ -189,6 +189,20 @@ export const ImportSessionResponse = zod.object({
   "source": zod.string().nullable().describe('Import provenance, such as edgeai, telegram, or mixed.'),
   "createdAt": zod.coerce.date().nullable(),
   "lastImportAt": zod.coerce.date().nullable(),
+  "sourceReports": zod.array(zod.object({
+  "status": zod.enum(['SUCCESS', 'FAILED']).optional(),
+  "error": zod.string().nullish(),
+  "source": zod.string(),
+  "fingerprint": zod.string(),
+  "signalDate": zod.string(),
+  "reportDate": zod.string(),
+  "generatedAt": zod.string().nullable(),
+  "importedAt": zod.string(),
+  "dataDates": zod.object({
+  "SE": zod.string().nullable(),
+  "US": zod.string().nullable()
+})
+})).optional(),
   "edgeRegime": zod.record(zod.string(), zod.unknown()).nullish(),
   "edgeExpectancy": zod.number().nullish(),
   "edgeWinRate": zod.number().nullish(),
@@ -434,6 +448,20 @@ export const ReimportSessionResponse = zod.object({
   "source": zod.string().nullable().describe('Import provenance, such as edgeai, telegram, or mixed.'),
   "createdAt": zod.coerce.date().nullable(),
   "lastImportAt": zod.coerce.date().nullable(),
+  "sourceReports": zod.array(zod.object({
+  "status": zod.enum(['SUCCESS', 'FAILED']).optional(),
+  "error": zod.string().nullish(),
+  "source": zod.string(),
+  "fingerprint": zod.string(),
+  "signalDate": zod.string(),
+  "reportDate": zod.string(),
+  "generatedAt": zod.string().nullable(),
+  "importedAt": zod.string(),
+  "dataDates": zod.object({
+  "SE": zod.string().nullable(),
+  "US": zod.string().nullable()
+})
+})).optional(),
   "edgeRegime": zod.record(zod.string(), zod.unknown()).nullish(),
   "edgeExpectancy": zod.number().nullish(),
   "edgeWinRate": zod.number().nullish(),
@@ -646,6 +674,20 @@ export const GetSessionResponse = zod.object({
   "source": zod.string().nullable().describe('Import provenance, such as edgeai, telegram, or mixed.'),
   "createdAt": zod.coerce.date().nullable(),
   "lastImportAt": zod.coerce.date().nullable(),
+  "sourceReports": zod.array(zod.object({
+  "status": zod.enum(['SUCCESS', 'FAILED']).optional(),
+  "error": zod.string().nullish(),
+  "source": zod.string(),
+  "fingerprint": zod.string(),
+  "signalDate": zod.string(),
+  "reportDate": zod.string(),
+  "generatedAt": zod.string().nullable(),
+  "importedAt": zod.string(),
+  "dataDates": zod.object({
+  "SE": zod.string().nullable(),
+  "US": zod.string().nullable()
+})
+})).optional(),
   "edgeRegime": zod.record(zod.string(), zod.unknown()).nullish(),
   "edgeExpectancy": zod.number().nullish(),
   "edgeWinRate": zod.number().nullish(),

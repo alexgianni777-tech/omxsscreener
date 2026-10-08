@@ -113,6 +113,13 @@
       "when": 1791446400000,
       "tag": "0015_trade_journal",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791446400001,
+      "tag": "0016_source_report_receipts",
+      "breakpoints": true
     }
   ]
 }

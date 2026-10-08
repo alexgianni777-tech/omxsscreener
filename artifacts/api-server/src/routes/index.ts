@@ -15,6 +15,9 @@ import telegramImportRouter from "./telegramImport";
 import marketIntelRouter from "./marketIntel";
 import portfolioRouter from "./portfolio";
 import journalRouter from "./journal";
+import { ImportDataError } from "../lib/importReport";
+import { recordImportFailure } from "../lib/importFailure";
+import { isAcceptedSignalDate, stockholmSignalDate } from "../lib/signalDatePolicy";
 import { requireAdministrator, requireAuthentication } from "../middlewares/authMiddleware";
 
 const router: IRouter = Router();
@@ -37,5 +40,16 @@ router.use(priceChartRouter);
 router.use(marketIntelRouter);
 router.use(portfolioRouter);
 router.use(journalRouter);
+router.use(async (error: unknown, req: import("express").Request, res: import("express").Response, next: import("express").NextFunction) => {
+  if (error instanceof ImportDataError) {
+    if (error.report) {
+      const today = stockholmSignalDate();
+      const date = req.body?.targetDate ?? (isAcceptedSignalDate(error.report.signalDate, today) ? today : error.report.signalDate);
+      try { await recordImportFailure(date, error.report, error.message); } catch { /* Keep the original error visible even if diagnostic storage fails. */ }
+    }
+    res.status(422).json({ error: error.message }); return;
+  }
+  next(error);
+});
 
 export default router;

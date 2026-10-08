@@ -1,3 +1,4 @@
+import { makeImportReport } from "../lib/importReport";
 /**
  * POST /api/telegram-import
  *
@@ -175,6 +176,7 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
   }
 
   const { date: reportDate, marketWeather, candidates } = session;
+  const importReport = makeImportReport("telegram", reportDate, session);
   const today = stockholmSignalDate();
   const date = isAcceptedSignalDate(reportDate, today) ? today : reportDate;
   const [existingSessionForDate] = await db
@@ -287,7 +289,7 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
           .from(candidatesTable)
           .where(eq(candidatesTable.sessionId, stored.id))
       : [];
-    const { candidates: storedCandidates, diff } = await synchronizeCandidates(
+    const { candidates: storedCandidates, diff, duplicateReport } = await synchronizeCandidates(
       tx,
       stored.id,
        preserveCandidateInputs(
@@ -296,6 +298,7 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
         ),
         existingCandidates.map(({ id, ...candidate }) => candidate),
       ),
+      new Date(), importReport,
     );
     const aggregateSource = aggregateSessionSource(
       existing?.source,
@@ -306,7 +309,7 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
         .update(screenerSessionsTable)
         .set({ lastImportDiff: diff, lastImportAt: new Date(), source: aggregateSource })
         .where(eq(screenerSessionsTable.id, stored.id));
-      await snapshotNewSessionTop3(
+    if (!duplicateReport) await snapshotNewSessionTop3(
         tx,
         { id: stored.id, date, source: aggregateSource },
         candidates.map((candidate) =>

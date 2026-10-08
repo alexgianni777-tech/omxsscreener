@@ -195,6 +195,35 @@ export interface HealthStatus {
   status: string;
 }
 
+export type SessionSourceReportStatus = typeof SessionSourceReportStatus[keyof typeof SessionSourceReportStatus];
+
+
+export const SessionSourceReportStatus = {
+  SUCCESS: 'SUCCESS',
+  FAILED: 'FAILED',
+} as const;
+
+export type SessionSourceReportDataDates = {
+  /** @nullable */
+  SE: string | null;
+  /** @nullable */
+  US: string | null;
+};
+
+export interface SessionSourceReport {
+  status?: SessionSourceReportStatus;
+  /** @nullable */
+  error?: string | null;
+  source: string;
+  fingerprint: string;
+  signalDate: string;
+  reportDate: string;
+  /** @nullable */
+  generatedAt: string | null;
+  importedAt: string;
+  dataDates: SessionSourceReportDataDates;
+}
+
 export interface ErrorResponse {
   error: string;
 }
@@ -1318,6 +1347,7 @@ export interface SessionDetail {
   createdAt: string | null;
   /** @nullable */
   lastImportAt: string | null;
+  sourceReports?: SessionSourceReport[];
   /** @nullable */
   edgeRegime?: SessionDetailEdgeRegime;
   /** @nullable */

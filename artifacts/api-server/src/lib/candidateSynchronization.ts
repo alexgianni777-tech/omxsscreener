@@ -9,6 +9,8 @@ import {
   pendingRemovalIdentities,
   synchronizedSignalSource,
 } from "./candidateSynchronizationPolicy";
+import { ImportDataError, normalizeImportSymbol, type ImportReport } from "./importReport";
+import { isAcceptedSignalDate } from "./signalDatePolicy";
 import { top3CutoffForDate } from "./top3SelectionPolicyCore";
 
 type CandidateInput = Record<string, unknown> & {
@@ -41,6 +43,7 @@ export function assertUniqueCandidateIdentities(_candidates: CandidateInput[]) {
  */
 export function deduplicateCandidates<T extends CandidateInput>(
   candidates: T[],
+  report?: ImportReport,
 ): { candidates: T[]; skipped: string[] } {
   const seen = new Set<string>();
   const result: T[] = [];
@@ -48,6 +51,18 @@ export function deduplicateCandidates<T extends CandidateInput>(
   for (const candidate of candidates) {
     const identity = candidateIdentity(candidate);
     if (seen.has(identity)) {
+      const first = result.find(row => candidateIdentity(row) === identity)!;
+      for (const field of ["price", "entryPrice", "stopPrice", "targetPrice", "rr", "signalDate"] as const) {
+        const before = first[field] ?? null;
+        const after = candidate[field] ?? null;
+        // Match the existing diff policy: PostgreSQL real is float32, while
+        // source calculations are doubles. Sub-cent noise is not a new plan.
+        const equal = before === after || (typeof before === "number" && typeof after === "number" &&
+          Number.isFinite(before) && Number.isFinite(after) && Math.abs(before - after) <= 0.005);
+        if (!equal) {
+          throw new ImportDataError(`Motstridiga rader för ${candidate.ticker}: ${field} (${before} / ${after}) skiljer sig inom samma signal. Ingen import har sparats.`, report);
+        }
+      }
       skipped.push(identity);
     } else {
       seen.add(identity);
@@ -198,8 +213,9 @@ export async function synchronizeCandidates(
   sessionId: number,
   incoming: CandidateInput[],
   now = new Date(),
-): Promise<{ candidates: any[]; diff: CandidateSyncDiff }> {
-  const { candidates: deduped, skipped } = deduplicateCandidates(incoming);
+  report?: ImportReport,
+): Promise<{ candidates: any[]; diff: CandidateSyncDiff; duplicateReport?: boolean }> {
+  const { candidates: deduped, skipped } = deduplicateCandidates(incoming, report);
   if (skipped.length > 0) logger.warn({ skipped }, "Candidate synchronization skipped duplicate identities");
   incoming = deduped;
 
@@ -219,6 +235,7 @@ export async function synchronizeCandidates(
       date: screenerSessionsTable.date,
       top3SnapshotAt: screenerSessionsTable.top3SnapshotAt,
       top3CutoffEvaluatedAt: screenerSessionsTable.top3CutoffEvaluatedAt,
+      sourceReports: screenerSessionsTable.sourceReports,
     })
     .from(screenerSessionsTable)
     .where(eq(screenerSessionsTable.id, sessionId));
@@ -238,6 +255,16 @@ export async function synchronizeCandidates(
     .select()
     .from(candidatesTable)
     .where(eq(candidatesTable.sessionId, sessionId));
+  if (report && session) {
+    if (report.signalDate > today || !isAcceptedSignalDate(report.signalDate, session.date)) throw new ImportDataError("Signaldagen matchar inte sessionen eller föregående vardags stängningsdata. Ingen import har sparats.");
+    const receipts = Array.isArray(session.sourceReports) ? session.sourceReports : [];
+    if (receipts.some((row: any) => row.status !== "FAILED" && row.fingerprint === report.fingerprint)) {
+      return { candidates: existing, diff: { added: [], updated: [], removed: [] }, duplicateReport: true };
+    }
+    await tx.update(screenerSessionsTable).set({
+      sourceReports: [...receipts, { ...report, importedAt: now.toISOString() }],
+    }).where(eq(screenerSessionsTable.id, sessionId));
+  }
   const existingByIdentity = new Map<string, any>(
     existing.map((candidate) => [candidateIdentity(candidate), candidate]),
   );
@@ -268,7 +295,7 @@ export async function synchronizeCandidates(
   for (const candidate of incoming) {
     const identity = candidateIdentity(candidate);
     const current = existingByIdentity.get(identity);
-    const values: Record<string, unknown> = { ...candidate, sessionId };
+    const values: Record<string, unknown> = { ...candidate, ticker: normalizeImportSymbol(candidate.ticker, candidate.market ?? "SE"), sessionId };
 
     if (current) {
       // The first source row before the daily cutoff is the immutable cohort

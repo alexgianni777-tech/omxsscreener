@@ -9,6 +9,8 @@
  */
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
+import { makeImportReport, ImportDataError } from "./importReport";
+import { recordImportFailure } from "./importFailure";
 import { logger } from "./logger";
 import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "./omxs30TickerMap";
@@ -95,6 +97,8 @@ async function runImport(date: string): Promise<void> {
 
   const edgeData = await fetchFreshEdgeAiData(15_000);
   const signalDate = edgeAiSessionDate(edgeData);
+  const importReport = makeImportReport("edgeai", signalDate, edgeData, edgeData.generatedAt ?? null,
+    { SE: edgeData.markets?.SE?.dataAsOf ?? null, US: edgeData.markets?.US?.dataAsOf ?? null });
 
   const se = edgeData?.markets?.SE;
   const seSetups: any[] = se?.setups ?? [];
@@ -168,13 +172,14 @@ async function runImport(date: string): Promise<void> {
           .select()
           .from(candidatesTable)
           .where(eq(candidatesTable.sessionId, alreadyStored.id));
-        const { candidates: synchronizedCandidates, diff } = await synchronizeCandidates(
+        const { candidates: synchronizedCandidates, diff, duplicateReport } = await synchronizeCandidates(
           tx,
           alreadyStored.id,
           mergeCandidateInputs(
             mapped,
             existingCandidates.map(({ id, createdAt, ...candidate }) => candidate),
           ),
+          new Date(), importReport,
         );
         const source = aggregateSessionSource(
           alreadyStored.source,
@@ -201,7 +206,7 @@ async function runImport(date: string): Promise<void> {
             lastImportAt: new Date(),
           })
           .where(eq(screenerSessionsTable.id, alreadyStored.id));
-        await snapshotNewSessionTop3(
+        if (!duplicateReport) await snapshotNewSessionTop3(
           tx,
           { id: alreadyStored.id, date, source },
           mapped,
@@ -235,7 +240,7 @@ async function runImport(date: string): Promise<void> {
         })
         .returning();
 
-      const { candidates: insertedCandidates } = await synchronizeCandidates(tx, inserted.id, mapped);
+      const { candidates: insertedCandidates } = await synchronizeCandidates(tx, inserted.id, mapped, new Date(), importReport);
       await snapshotNewSessionTop3(
         tx,
         { id: inserted.id, date, source: "edgeai" },
@@ -249,6 +254,10 @@ async function runImport(date: string): Promise<void> {
       );
     });
   } catch (err: any) {
+    if (err instanceof ImportDataError && err.report) {
+      try { await recordImportFailure(date, err.report, err.message); }
+      catch (diagnosticError) { logger.warn({ diagnosticError }, "Import failure could not be recorded"); }
+    }
     throw new Error(`DB insert failed: ${err.message}`);
   }
 }

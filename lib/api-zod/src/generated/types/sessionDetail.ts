@@ -10,6 +10,7 @@ import type { ImportDiff } from './importDiff';
 import type { MarketWeather } from './marketWeather';
 import type { SessionDetailEdgeRegime } from './sessionDetailEdgeRegime';
 import type { SessionReview } from './sessionReview';
+import type { SessionSourceReport } from './sessionSourceReport';
 import type { Top3LiveSelection } from './top3LiveSelection';
 import type { Top3Revision } from './top3Revision';
 import type { Top3SelectionSnapshotStatus } from './top3SelectionSnapshotStatus';
@@ -27,6 +28,7 @@ export interface SessionDetail {
   createdAt: Date | null;
   /** @nullable */
   lastImportAt: Date | null;
+  sourceReports?: SessionSourceReport[];
   /** @nullable */
   edgeRegime?: SessionDetailEdgeRegime;
   /** @nullable */

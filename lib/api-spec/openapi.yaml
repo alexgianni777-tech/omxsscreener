@@ -748,6 +748,36 @@ components:
         status:
           type: string
 
+    SessionSourceReport:
+      type: object
+      required: [source, fingerprint, signalDate, reportDate, generatedAt, dataDates, importedAt]
+      properties:
+        status:
+          type: string
+          enum: [SUCCESS, FAILED]
+        error:
+          type: [string, "null"]
+        source:
+          type: string
+        fingerprint:
+          type: string
+        signalDate:
+          type: string
+        reportDate:
+          type: string
+        generatedAt:
+          type: [string, "null"]
+        importedAt:
+          type: string
+        dataDates:
+          type: object
+          required: [SE, US]
+          properties:
+            SE:
+              type: [string, "null"]
+            US:
+              type: [string, "null"]
+
     ErrorResponse:
       type: object
       required: [error]
@@ -1419,6 +1449,10 @@ components:
         lastImportAt:
           type: ["string", "null"]
           format: date-time
+        sourceReports:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionSourceReport"
         edgeRegime:
           type: ["object", "null"]
           additionalProperties: true

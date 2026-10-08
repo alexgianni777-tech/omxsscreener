@@ -24,6 +24,7 @@ export const screenerSessionsTable = pgTable("screener_sessions", {
   // diffing session history manually. Null until the first re-import happens.
   lastImportDiff: jsonb("last_import_diff"),
   lastImportAt: timestamp("last_import_at", { withTimezone: true }),
+  sourceReports: jsonb("source_reports").notNull().default([]),
   // Null means this session predates immutable official Top 3 capture (or has
   // not yet reached its first signal-time enrichment).
   top3SnapshotAt: timestamp("top3_snapshot_at", { withTimezone: true }),
@@ -43,6 +44,7 @@ export const insertScreenerSessionSchema = createInsertSchema(screenerSessionsTa
   createdAt: true,
   lastImportDiff: true,
   lastImportAt: true,
+  sourceReports: true,
 });
 export type InsertScreenerSession = z.infer<typeof insertScreenerSessionSchema>;
 export type ScreenerSession = typeof screenerSessionsTable.$inferSelect;

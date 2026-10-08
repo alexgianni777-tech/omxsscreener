@@ -1,5 +1,6 @@
 import { useListSessions, useGetSession, getGetSessionQueryKey, useGetQuotes, getGetQuotesQueryKey, type QuoteResult } from "@workspace/api-client-react";
 import { CurrentTop3Selection } from "./CurrentTop3Selection";
+import { DailyCandidates } from "./DailyCandidates";
 
 /** Current recommendations are explicitly separate from the original statistical cohort. */
 export function DashboardLiveTop3() {
@@ -13,6 +14,11 @@ export function DashboardLiveTop3() {
   quotes.data?.forEach(q => { quoteMap[q.ticker] = quotes.isError ? { ...q, error: "Kurshämtningen misslyckades." } : q; });
   return (
     <section data-testid="dashboard-live-top3" className="space-y-3">
+      {detail.data && <DailyCandidates picks={current?.picks ?? detail.data.top3LiveSelection?.picks ?? []}
+        signals={detail.data.candidates} reports={detail.data.sourceReports}
+        sessionDate={detail.data.date} preliminary={!current} />}
+      <details>
+      <summary className="cursor-pointer text-sm text-muted-foreground">Top 3-detaljer, USA och Live Entry Guard</summary>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-lg font-semibold">Aktuella Top 3 · screening och live-entry</h3>
         <button type="button" disabled={!params.tickers || quotes.isFetching}
@@ -32,6 +38,7 @@ export function DashboardLiveTop3() {
         : detail.data && current
           ? <CurrentTop3Selection revisions={detail.data.top3Revisions!} sessionId={id} quotes={quoteMap} candidates={detail.data.candidates} />
           : <p className="text-sm text-muted-foreground">Inget aktuellt versionssparat Top 3-urval finns. Historiska statistik-picks ersätter inte ett aktuellt entrybesked.</p>}
+      </details>
     </section>
   );
 }

@@ -1,3 +1,9 @@
+/** Shared with browser ranking code: keep this module free of Node/server imports. */
+export function normalizeImportSymbol(ticker: string, market = "SE"): string {
+  const symbol = ticker.trim().toUpperCase();
+  return market === "SE" ? symbol.replace(/\.ST$/, "").replace(/[\s_]+([AB])$/, "-$1") : symbol;
+}
+
 export type CandidatePolicyInput = {
   market?: string | null;
   signalSource?: string | null;
@@ -11,7 +17,7 @@ export function candidateIdentity(candidate: CandidatePolicyInput): string {
   return [
     candidate.market ?? "SE",
     candidate.category,
-    candidate.ticker.trim().toUpperCase(),
+    normalizeImportSymbol(candidate.ticker, candidate.market ?? "SE"),
     candidate.direction,
     ...(candidate.signalDate ? [candidate.signalDate] : []),
     candidate.signalSource ?? "<unknown>",
