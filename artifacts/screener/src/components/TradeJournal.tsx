@@ -1,4 +1,5 @@
 import { RiskPanel } from "./RiskPanel";
+import { JournalAnalysis } from "./JournalAnalysis";
 import { useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -164,6 +165,9 @@ export function TradeJournal() {
           Tider anges i webbläsarens lokala tidszon och visas här i Stockholmstid.
         </p>
 
+        {records.isLoading && <p>Läser befintlig journal…</p>}
+        {records.isError && <p role="alert" className="text-destructive">Journalen kunde inte läsas. Inga tomma eller syntetiska resultat används.</p>}
+        {!records.isLoading && !records.isError && <JournalAnalysis records={rows} />}
         <details className="border border-border rounded">
           <summary className="cursor-pointer px-3 py-2 text-primary" data-testid="button-journal-toggle">Ny journalpost</summary>
           <div className="p-3 space-y-3 border-t border-border bg-muted/20">

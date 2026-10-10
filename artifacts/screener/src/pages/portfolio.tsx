@@ -9,6 +9,7 @@ import {
   AlertTriangle, Target, ShieldAlert, ChevronUp, ChevronDown, ClipboardPaste, CheckCircle2, Pencil, X,
 } from "lucide-react";
 import { parseBrokerExport, type BrokerImportRow } from "../lib/portfolioBrokerParser";
+import { PortfolioRiskPanel } from "../components/PortfolioRiskPanel";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const api = (path: string) => `${BASE}/api${path}`;
@@ -995,6 +996,7 @@ export function Portfolio() {
       )}
 
       {/* summary */}
+      {data && <PortfolioRiskPanel positions={positions} />}
       {data && positions.length > 0 && (
         <SummaryBar summary={data.summary} fetchedAt={data.fetchedAt} />
       )}

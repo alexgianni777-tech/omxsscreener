@@ -1,4 +1,5 @@
 import React from "react";
+import { DataFreshness } from "./DataFreshness";
 import type { SessionSourceReport } from "@workspace/api-client-react";
 import { swedishDailyPicks, oldSignalWarning, previousWeekday, dailySymbol, isolatedDailyPick, type DailyPick } from "../lib/dailyCandidates";
 
@@ -56,6 +57,8 @@ export function DailyCandidates({ picks, signals, reports = [], sessionDate, pre
             <span className="text-xs text-muted-foreground">{p.source === "edgeai" ? "GitHub/EdgeAI" : p.source === "telegram" ? "Telegram" : p.source}</span></div>
           <p className="mt-1 text-xs">Rapport {report?.reportDate ?? p.signalDate ?? "okänd"} · Datadag {report?.dataDates.SE ?? "okänd"}
             {candidate?.volumeAsOf && ` · Volymdag ${candidate.volumeAsOf}`}</p>
+          <DataFreshness reportDate={report?.reportDate ?? p.signalDate} dataDate={report?.dataDates.SE}
+            source={p.source} receiptVerified={report?.status === "SUCCESS"} manual={p.source === "manual"} today={today} />
           {report && <p className="text-xs text-muted-foreground">Importversion {report.fingerprint.slice(0, 11)}</p>}
           <p className="mt-1 font-mono text-xs">Original entry {num(p.entryPrice)} · Stop {num(p.stopPrice)} · TP {num(p.targetPrice)} · RR {num(p.rr)}</p>
           <p className="mt-1 text-xs text-muted-foreground">{why[p.category] ?? `Setup ${p.category} enligt källrapporten`}. Ur befintlig Top 3-rankning, inte ett köpbesked.</p>

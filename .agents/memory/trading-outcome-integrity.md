@@ -65,3 +65,15 @@ description: Methodology rules that keep historical outcomes, earnings context, 
 **Why:** The user wants a credible, measurable screener, not an apparent edge inferred from signals without confirmed fills, execution times and costs. Separately entered journal evidence must not double-count an existing Challenge event.
 
 **How to apply:** Preserve unknown execution provenance and costs as unknown. Future reconciliation must link records rather than copy their P&L into a second event. Actual late or plan-broken executions remain evidence even when their R cannot be meaningfully established; disclose missing-R counts in later analysis instead of silently excluding those trades.
+
+## Excursion and correlation evidence
+**Rule:** MFE/MAE must be unavailable without actual intratrade high/low series;
+never estimate either from the exit/closing price. Shared sector exposure is a
+qualitative warning, not a measured correlation or a quantified hedge.
+
+**Why:** The user explicitly requires actual execution evidence and forbids
+invented excursions, leverage, correlation and stops in risk/analysis views.
+
+**How to apply:** Keep actual net-R cohorts separate from simulated/missed and
+legacy unverified outcomes, disclose missing-field counts, and leave absent
+currency/FX, financing, barrier and correlation evidence unknown.

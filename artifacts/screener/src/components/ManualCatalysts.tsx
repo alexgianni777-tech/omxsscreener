@@ -1,4 +1,5 @@
 import React from "react";
+import { DataFreshness } from "./DataFreshness";
 export const MANUAL_CATALYSTS = [
   { symbol: "SAM", name: "Boston Beer", date: "2026-10-22", timing: "efter USA-stängning" },
   { symbol: "BUD", name: "AB InBev", date: "2026-10-29", timing: "före USA-öppning" },
@@ -12,6 +13,8 @@ export function ManualCatalysts() {
     <p className="mt-2 text-amber-600">Användarangivna bevakningsdatum, inte automatiskt verifierade. Kontrollera bolagets aktuella rapportdatum,
       tidpunkt och instrumentets handels-/knock-out-status före handel. Ingen ranking eller signal ändras.</p>
     <ul className="mt-2 space-y-1">{MANUAL_CATALYSTS.map(c =>
-      <li key={c.symbol}><strong>{c.symbol} · {c.name}</strong> · {c.date} · {c.timing} · manuellt bevakningscase</li>)}</ul>
+      <li key={c.symbol}><strong>{c.symbol} · {c.name}</strong> · {c.date} · {c.timing} · manuellt bevakningscase
+        <DataFreshness reportDate={c.date} source="manuell rapportbevakning" manual event />
+      </li>)}</ul>
   </details>;
 }

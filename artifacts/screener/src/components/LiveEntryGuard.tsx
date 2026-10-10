@@ -1,4 +1,6 @@
 import React, { useEffect, useReducer } from "react";
+import { EntrySafety } from "./EntrySafety";
+import { DataFreshness } from "./DataFreshness";
 import { assessLiveEntry, LIVE_ENTRY_MAX_PRICE_AGE_MS, type EntryPlan, type EntryQuote, type EntryStatus } from "../lib/liveEntryGuard";
 
 const STYLES: Record<EntryStatus, string> = {
@@ -64,6 +66,9 @@ export function LiveEntryGuard({ plan, quote, signal, now }: {
         TRADEABLE = screeningstatus, inte live-entrybesked. READY avser bara prisvillkoren, inte en order.
         {" "}Regel: öppen marknad, asOf högst 5 min, entry ±0,25R (R = original entry–stop), aktuellt R/R ≥1,2.
       </p>
+      <DataFreshness reportDate={signal?.signalDate} source={signal?.signalSource}
+        manual={signal?.signalSource === "manual"} />
+      <EntrySafety plan={plan} quote={signal?.importWarning ? null : quote} now={now} />
     </div>
   );
 }
