@@ -9,6 +9,7 @@ import { AddToPortfolioModal } from "../components/AddToPortfolioModal";
 import { edgeAiMetrics, edgeAiScore } from "../lib/edgeAiMetrics";
 import { LiveTop3Preview } from "../components/LiveTop3Preview";
 import { CurrentTop3Selection } from "../components/CurrentTop3Selection";
+import { RiskPanel } from "../components/RiskPanel";
 import { LiveEntryGuard } from "../components/LiveEntryGuard";
 
 type Candidate = ApiCandidate & {
@@ -991,6 +992,7 @@ function CandidateRow({
         </div>
       </div>
 
+      <RiskPanel plan={candidate} realizedR={candidate.realizedR} />
       {/* Outcome Logger */}
       <div className="min-w-0 2xl:min-w-[280px] flex flex-col justify-center gap-2">
         <div className="flex items-center gap-2">

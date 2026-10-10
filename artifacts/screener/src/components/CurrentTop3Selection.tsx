@@ -1,4 +1,5 @@
 import { Link } from "wouter";
+import { currentSavedRevision, stockholmToday } from "../lib/persistentTop3Display";
 import type { Top3Revision } from "@workspace/api-client-react";
 import { DecisionBadge } from "./LiveTop3Preview";
 import { LiveEntryGuard, type SignalMetadata } from "./LiveEntryGuard";
@@ -55,10 +56,22 @@ function Picks({ revision, quotes, candidates }: { revision: Top3Revision } & Gu
 /** Uses revision prices, not the older candidate plan belonging to a logged trade. */
 export function CurrentTop3Selection({ revisions, sessionId, quotes, candidates }: { revisions: Top3Revision[]; sessionId: number } & GuardProps) {
   if (!revisions.length) return null;
-  const [current, ...history] = [...revisions].sort((a, b) => b.revision - a.revision);
+  const ordered = [...revisions].sort((a, b) => b.revision - a.revision);
+  const current = currentSavedRevision(ordered);
+  const latest = ordered[0];
+  const history = ordered.filter(r => r.revision !== current?.revision);
+  if (!current) return <div className="mb-4 rounded border border-amber-500/30 p-3 text-sm">
+    Ingen giltig sparad rekommendation i denna session. Live-data är preliminära, tomma eller ofullständiga.
+    <Link href="/" className="ml-2 text-primary underline">Senast giltiga sparade lista på startsidan</Link>
+    <details className="mt-2"><summary>Alla sparade versioner ({ordered.length})</summary>
+      {ordered.map(r => <p key={r.revision}>v{r.revision} · {timestamp(r.selectedAt)} · {r.picks.length} picks · {r.available ? "källor kompletta" : "ofullständig"}</p>)}
+    </details>
+  </div>;
   return (
     <div data-testid="panel-current-top3" className="mb-4 rounded-xl border border-primary/25 bg-card p-4 shadow-sm">
-      <h3 data-testid="text-current-top3-title" className="font-semibold">Aktuell Top 3 · version {current.revision}</h3>
+      <h3 data-testid="text-current-top3-title" className="font-semibold">Giltig sparad rekommendation · version {current.revision}</h3>
+      {new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm" }).format(new Date(current.selectedAt)) !== stockholmToday() &&
+        <p className="mt-1 text-xs text-amber-600">STALE · ej nytt köp utan liveverifiering. Originalplan och historik behålls.</p>}
       <p className="mt-1 text-xs text-muted-foreground">
         Uppdaterad {timestamp(current.selectedAt)} · Källor: {current.sources.join(" + ") || "saknas"}.
         Nya importer med ändrad signaldata räknar om förslagen. Registrerade trades och ursprunglig statistik skrivs inte om.
@@ -69,6 +82,10 @@ export function CurrentTop3Selection({ revisions, sessionId, quotes, candidates 
         </p>
       )}
       <div className="mt-3">
+        {latest.revision !== current.revision && <p className="mb-2 text-xs text-amber-600">
+          Ny live-/dataversion v{latest.revision} ersätter inte senast giltiga sparade rekommendation.
+          Automatisk, tom eller ofullständig data visas separat i kandidatlistan.
+        </p>}
         {!current.available
           ? <p className="text-sm text-amber-600">Inväntar Telegram och EdgeAI för dagens session. Föregående handelsdags rapporter accepteras.</p>
           : current.picks.length === 0

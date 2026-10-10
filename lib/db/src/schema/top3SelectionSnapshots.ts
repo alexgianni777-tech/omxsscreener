@@ -16,6 +16,7 @@ export const top3SelectionSnapshotsTable = pgTable("top3_selection_snapshots", {
   ticker: text("ticker").notNull(),
   category: text("category").notNull(),
   selected: boolean("selected").notNull(),
+  displayEligible: boolean("display_eligible").notNull().default(true),
   rank: integer("rank"),
   score: real("score").notNull(),
   review: jsonb("review").notNull(),

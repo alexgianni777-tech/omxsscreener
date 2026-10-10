@@ -22,6 +22,7 @@ export async function snapshotNewSessionTop3(
   incoming: any[],
   now = new Date(),
   replacedSources: string[] = [],
+  displayEligible = true,
 ): Promise<void> {
   const stockholmDate = new Intl.DateTimeFormat("sv-SE", {
     timeZone: "Europe/Stockholm",
@@ -49,7 +50,7 @@ export async function snapshotNewSessionTop3(
     .select()
     .from(candidatesTable)
     .where(eq(candidatesTable.sessionId, session.id));
-  await appendTop3Revision(tx, session, arrivals, incoming, now, replacedSources);
+  await appendTop3Revision(tx, session, arrivals, incoming, now, replacedSources, displayEligible);
   if (storedSession.top3SnapshotAt || storedSession.top3CutoffEvaluatedAt) return;
   const cohort = arrivals.filter((candidate: any) =>
     candidate.createdAt instanceof Date &&
@@ -90,6 +91,8 @@ export async function snapshotNewSessionTop3(
       session.source,
       now,
     );
-    if (rows.length > 0) await tx.insert(top3SelectionSnapshotsTable).values(rows);
+    if (rows.length > 0) await tx.insert(top3SelectionSnapshotsTable).values(
+      rows.map(row => ({ ...row, displayEligible })),
+    );
   }
 }

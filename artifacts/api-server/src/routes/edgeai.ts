@@ -1,5 +1,6 @@
 import { makeImportReport } from "../lib/importReport";
 import { isolateEdgeAiPlans } from "../lib/edgeAiPlanIsolation";
+import { approveImportedTop3 } from "../lib/persistentTop3";
 /**
  * POST /screener/sessions/import-from-edgeai
  *
@@ -289,6 +290,7 @@ router.post(
           uniqueMappedSetups,
           undefined, ["edgeai"],
         );
+        await approveImportedTop3(tx, updated.id, importReport);
         return updated.id;
       });
     } else {
@@ -331,6 +333,7 @@ router.post(
           undefined, ["edgeai"],
         );
         // Fresh insert: nothing existed before, so a diff would be all-"added" noise — skip it.
+        await approveImportedTop3(tx, inserted.id, importReport);
         return inserted.id;
       });
     }

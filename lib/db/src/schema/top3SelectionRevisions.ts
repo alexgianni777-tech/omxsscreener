@@ -9,6 +9,7 @@ export const top3SelectionRevisionsTable = pgTable("top3_selection_revisions", {
   fingerprint: text("fingerprint").notNull(),
   policyVersion: text("policy_version").notNull(),
   available: boolean("available").notNull(),
+  displayEligible: boolean("display_eligible").notNull().default(true),
   sources: jsonb("sources").$type<string[]>().notNull(),
   inputs: jsonb("inputs").$type<unknown[]>().notNull(),
   selections: jsonb("selections").$type<unknown[]>().notNull(),

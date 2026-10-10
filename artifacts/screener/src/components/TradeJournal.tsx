@@ -1,3 +1,4 @@
+import { RiskPanel } from "./RiskPanel";
 import { useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -296,7 +297,11 @@ export function TradeJournal() {
                       <td className="px-2 py-1">{r.signal.direction}</td>
                       <td className="px-2 py-1">{i.priceCurrency ?? "–"}</td>
                       <td className="px-2 py-1">{num(i.entryFxSek, 4)} / {num(i.exitFxSek, 4)}</td>
-                      <td className="px-2 py-1">{i.instrumentKind ?? "–"} {i.side ?? ""}</td>
+                      <td className="px-2 py-1">{i.instrumentKind ?? "–"} {i.side ?? ""}
+                        {i.fillPrice != null && i.stopPrice != null && i.targetPrice != null && i.side &&
+                          <RiskPanel plan={{ direction: i.side, entryPrice: i.fillPrice, stopPrice: i.stopPrice, targetPrice: i.targetPrice }}
+                            instrument={i.instrumentKind ?? "UNDERLYING"} netR={r.metrics.netR} />}
+                      </td>
                       <td className="px-2 py-1">{when(i.entryTime)}</td>
                       <td className="px-2 py-1">{when(i.exitTime)}</td>
                       <td className="px-2 py-1">{num(i.fillPrice)}</td>

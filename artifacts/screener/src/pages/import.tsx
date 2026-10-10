@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { Terminal, Upload, AlertTriangle, RefreshCw, X, ShieldAlert, Zap, CheckCircle2 } from "lucide-react";
-import { useImportSession, getListSessionsQueryKey, getGetSessionQueryKey } from "@workspace/api-client-react";
+import { useImportSession, getListSessionsQueryKey, getGetSessionQueryKey, getGetLastValidTop3QueryKey } from "@workspace/api-client-react";
 import { useAuthContext } from "../lib/auth-context";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -78,6 +78,7 @@ export function Import() {
       {
         onSuccess: (data) => {
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetLastValidTop3QueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(data.id) });
           setLocation(`/sessions/${data.id}`);
         },
@@ -175,6 +176,7 @@ export function Import() {
         return;
       }
       queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetLastValidTop3QueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(data.id) });
       setEdgeStatus({
         kind: "success",

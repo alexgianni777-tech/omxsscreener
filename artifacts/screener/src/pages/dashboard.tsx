@@ -1,4 +1,6 @@
 import { GroundZero } from "../components/GroundZero";
+import { SavedTop3 } from "../components/SavedTop3";
+import { ManualCatalysts } from "../components/ManualCatalysts";
 import { useGetDashboardSummary, useListSessions } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import {
@@ -88,7 +90,9 @@ export function Dashboard() {
       </header>
 
       {/* Today's Session */}
+      <SavedTop3 />
       <TodaySessionPanel />
+      <ManualCatalysts />
       <GroundZero />
 
       {/* Weekly Summary */}
@@ -356,7 +360,7 @@ function TodaySessionPanel() {
   const { data: top3 } = useTop3Analytics();
 
   // Use sv-SE locale so we get "YYYY-MM-DD" in the Swedish timezone
-  const todayStr = new Date().toLocaleDateString("sv-SE");
+  const todayStr = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Stockholm" });
   const latest = sessions?.[0]; // list is sorted DESC by date
   const isToday = latest?.date === todayStr;
 

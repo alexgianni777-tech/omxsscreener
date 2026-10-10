@@ -1,4 +1,5 @@
 import { makeImportReport } from "../lib/importReport";
+import { approveImportedTop3, readSavedTop3 } from "../lib/persistentTop3";
 import { Router, type IRouter } from "express";
 import { eq, ne, sql, and, inArray } from "drizzle-orm";
 import {
@@ -279,6 +280,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
           buildCandidateRow(updatedSession.id, candidate, earningsBatch.get(candidate.ticker) ?? UNKNOWN_EARNINGS),
         ),
       );
+      await approveImportedTop3(tx, updatedSession.id, importReport);
       return validatedImportResponse(tx, updatedSession.id, diff);
     });
 
@@ -332,6 +334,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
         buildCandidateRow(insertedSession.id, candidate, earningsBatch.get(candidate.ticker) ?? UNKNOWN_EARNINGS),
       ),
     );
+    await approveImportedTop3(tx, insertedSession.id, importReport);
     return validatedImportResponse(tx, insertedSession.id);
   });
 
@@ -490,6 +493,8 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
         { id: updatedSession.id, date: updatedSession.date, source: aggregateSource },
         rows,
       );
+      await approveImportedTop3(tx, updatedSession.id,
+        makeImportReport(String(rows[0]?.signalSource ?? "manual"), parsedSession.date, parsedSession));
       return validatedImportResponse(tx, updatedSession.id, diff);
     });
   } catch (error) {
@@ -500,6 +505,11 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
   res.json(response);
 });
 
+router.get("/screener/top3/last-valid", async (_req, res) => {
+  const state = await db.transaction(tx => readSavedTop3(tx),
+    { isolationLevel: "repeatable read", accessMode: "read only" });
+  res.json(state);
+});
 // GET /screener/sessions
 router.get("/screener/sessions", async (req, res): Promise<void> => {
   const sessions = await db

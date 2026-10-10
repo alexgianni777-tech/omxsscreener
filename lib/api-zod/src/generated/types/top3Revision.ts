@@ -7,7 +7,11 @@
  */
 import type { Top3RevisionPick } from './top3RevisionPick';
 
+/**
+ * Saved recommendation version; displayEligible excludes automatic-only updates from persistent display.
+ */
 export interface Top3Revision {
+  displayEligible?: boolean;
   revision: number;
   available: boolean;
   selectedAt: Date;

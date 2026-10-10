@@ -1,3 +1,4 @@
+import { approveImportedTop3 } from "../lib/persistentTop3";
 import { makeImportReport } from "../lib/importReport";
 /**
  * POST /api/telegram-import
@@ -329,6 +330,7 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
         ),
       );
     }
+    await approveImportedTop3(tx, stored.id, importReport);
     return { stored, candidateCount: storedCandidates.length, updated: Boolean(existing) };
   });
 

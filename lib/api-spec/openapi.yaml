@@ -137,6 +137,17 @@ paths:
               schema:
                 $ref: "#/components/schemas/ImportConflict"
 
+  /screener/top3/last-valid:
+    get:
+      operationId: getLastValidTop3
+      tags: [screener]
+      responses:
+        "200":
+          description: Last saved valid selection, independent of today's incomplete/live data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LastValidTop3State"
   /screener/sessions:
     get:
       operationId: listSessions
@@ -1583,10 +1594,52 @@ components:
           items:
             $ref: "#/components/schemas/Top3Revision"
 
+    LastValidTop3State:
+      type: object
+      required: [selection, warnings]
+      properties:
+        warnings:
+          type: array
+          items:
+            type: string
+        selection:
+          oneOf:
+            - $ref: "#/components/schemas/SavedTop3Display"
+            - type: "null"
+    SavedTop3Display:
+      type: object
+      required: [sessionId, date, kind, revision, dataDates]
+      properties:
+        sessionId:
+          type: number
+        date:
+          type: string
+        kind:
+          type: string
+          enum: [OFFICIAL, RECOMMENDATION]
+        revision:
+          $ref: "#/components/schemas/Top3Revision"
+        dataDates:
+          type: array
+          items:
+            $ref: "#/components/schemas/Top3DisplayDataDate"
+    Top3DisplayDataDate:
+      type: object
+      required: [source, signalDate, dataDate]
+      properties:
+        source:
+          type: string
+        signalDate:
+          type: ["string", "null"]
+        dataDate:
+          type: ["string", "null"]
     Top3Revision:
       type: object
+      description: Saved recommendation version; displayEligible excludes automatic-only updates from persistent display.
       required: [revision, available, selectedAt, policyVersion, sources, picks]
       properties:
+        displayEligible:
+          type: boolean
         revision:
           type: number
         available:

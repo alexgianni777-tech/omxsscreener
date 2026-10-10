@@ -208,7 +208,7 @@ async function runImport(date: string): Promise<boolean> {
           tx,
           { id: alreadyStored.id, date, source },
           mapped,
-          undefined, ["edgeai"],
+          undefined, ["edgeai"], false,
         );
         logger.info(
           { date, sessionId: alreadyStored.id, seSetups: seSetups.length, usSetups: usSetups.length },
@@ -243,7 +243,7 @@ async function runImport(date: string): Promise<boolean> {
         tx,
         { id: inserted.id, date, source: "edgeai" },
         mapped,
-        undefined, ["edgeai"],
+        undefined, ["edgeai"], false,
       );
       // Fresh insert: nothing existed before, so a diff would be all-"added" noise — skip it.
       logger.info(
@@ -269,7 +269,7 @@ async function evaluateTop3Cutoff(date: string, now: Date): Promise<void> {
       .from(screenerSessionsTable)
       .where(eq(screenerSessionsTable.date, date));
     if (!session) return;
-    await snapshotNewSessionTop3(tx, { ...session, date }, [], now);
+    await snapshotNewSessionTop3(tx, { ...session, date }, [], now, [], false);
   });
 }
 

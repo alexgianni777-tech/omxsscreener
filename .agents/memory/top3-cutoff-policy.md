@@ -51,3 +51,18 @@ participation without treating every pasted report as verified Telegram.
 reimport. Confirmation cannot rewrite the original report date or add later
 arrivals to the original frozen statistical cohort. Later valid signals can enter
 a new recommendation version. Preserve existing outcomes and previous versions.
+
+**Persistent display policy:** Keep the last valid saved Top 3 across date
+changes, weekends and holidays. Mark the retained list STALE and require live
+verification before a new entry. Empty, failed, preliminary or incomplete
+versions must never displace it; show their warnings separately.
+
+**Why:** The user confirmed that the homepage was hiding a still-valid saved
+list before a replacement screening had been imported.
+
+**How to apply:** Automatic GitHub ingestion is live/new-data status only,
+not approval to replace the retained recommendation. Accepted manual/Telegram
+imports can promote a complete valid version atomically. An older duplicate
+report cannot approve a different newer automatic version. Keep frozen official
+cohort, current approved recommendation, live candidates and historical outcomes
+distinct. Do not guess missing legacy provenance or change historical plans.

@@ -62,6 +62,7 @@ export async function appendTop3Revision(
   tx: any, session: { id: number; date: string; source: string | null },
   persisted: any[], incoming: any[], now: Date,
   replacedSources: string[] = [],
+  displayEligible = true,
 ): Promise<void> {
   const [previous] = await tx.select().from(top3SelectionRevisionsTable)
     .where(eq(top3SelectionRevisionsTable.sessionId, session.id))
@@ -77,7 +78,7 @@ export async function appendTop3Revision(
     : [];
   await tx.insert(top3SelectionRevisionsTable).values({
     sessionId: session.id, revision: (previous?.revision ?? 0) + 1,
-    fingerprint, policyVersion: TOP3_POLICY_VERSION, available, sources,
+    fingerprint, policyVersion: TOP3_POLICY_VERSION, available, sources, displayEligible,
     inputs, selections, createdAt: now,
   }).onConflictDoNothing();
 }
@@ -86,6 +87,7 @@ export function mapTop3Revision(row: typeof top3SelectionRevisionsTable.$inferSe
   const inputs = new Map((row.inputs as PolicyCandidate[]).map((input) => [input.id, input]));
   return {
     revision: row.revision, available: row.available,
+    displayEligible: row.displayEligible,
     selectedAt: row.createdAt.toISOString(), policyVersion: row.policyVersion,
     sources: row.sources,
     picks: (row.selections as SnapshotInput[])

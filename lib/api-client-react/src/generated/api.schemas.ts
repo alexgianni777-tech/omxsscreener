@@ -1363,7 +1363,11 @@ export interface Top3RevisionPick {
   decision: CandidateDecision;
 }
 
+/**
+ * Saved recommendation version; displayEligible excludes automatic-only updates from persistent display.
+ */
 export interface Top3Revision {
+  displayEligible?: boolean;
   revision: number;
   available: boolean;
   selectedAt: string;
@@ -1406,6 +1410,35 @@ export interface SessionDetail {
   top3LiveSelection?: Top3LiveSelection;
   /** Append-only current recommendation versions, newest first. Original official snapshots and actual trade records are not rewritten. */
   top3Revisions?: Top3Revision[];
+}
+
+export type SavedTop3DisplayKind = typeof SavedTop3DisplayKind[keyof typeof SavedTop3DisplayKind];
+
+
+export const SavedTop3DisplayKind = {
+  OFFICIAL: 'OFFICIAL',
+  RECOMMENDATION: 'RECOMMENDATION',
+} as const;
+
+export interface Top3DisplayDataDate {
+  source: string;
+  /** @nullable */
+  signalDate: string | null;
+  /** @nullable */
+  dataDate: string | null;
+}
+
+export interface SavedTop3Display {
+  sessionId: number;
+  date: string;
+  kind: SavedTop3DisplayKind;
+  revision: Top3Revision;
+  dataDates: Top3DisplayDataDate[];
+}
+
+export interface LastValidTop3State {
+  warnings: string[];
+  selection: SavedTop3Display | null;
 }
 
 /**

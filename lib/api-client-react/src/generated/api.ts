@@ -38,6 +38,7 @@ import type {
   ImportConflict,
   JournalEntryInput,
   JournalRecord,
+  LastValidTop3State,
   ListCandidatesParams,
   LogoutBrowserSessionParams,
   LogoutSuccess,
@@ -524,6 +525,77 @@ export const useImportSession = <TError = ErrorType<ErrorResponse | ImportConfli
       > => {
       return useMutation(getImportSessionMutationOptions(options));
     }
+
+export const getGetLastValidTop3Url = () => {
+
+
+
+
+  return `/api/screener/top3/last-valid`
+}
+
+export const getLastValidTop3 = async ( options?: Parameters<typeof customFetch>[1]): Promise<LastValidTop3State> => {
+
+  return customFetch<LastValidTop3State>(getGetLastValidTop3Url(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLastValidTop3QueryKey = () => {
+    return [
+    `/api/screener/top3/last-valid`
+    ] as const;
+    }
+
+
+export const getGetLastValidTop3QueryOptions = <TData = Awaited<ReturnType<typeof getLastValidTop3>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLastValidTop3>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLastValidTop3QueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLastValidTop3>>> = ({ signal }) => getLastValidTop3({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLastValidTop3>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLastValidTop3QueryResult = NonNullable<Awaited<ReturnType<typeof getLastValidTop3>>>
+export type GetLastValidTop3QueryError = ErrorType<unknown>
+
+
+
+export function useGetLastValidTop3<TData = Awaited<ReturnType<typeof getLastValidTop3>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLastValidTop3>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLastValidTop3QueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListSessionsUrl = () => {
 

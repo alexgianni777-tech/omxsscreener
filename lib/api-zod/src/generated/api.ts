@@ -470,6 +470,7 @@ export const ImportSessionResponse = zod.object({
 }))
 }).optional().describe('Read-only same-day source receipts and preliminary picks; omitted for historical sessions.'),
   "top3Revisions": zod.array(zod.object({
+  "displayEligible": zod.boolean().optional(),
   "revision": zod.number(),
   "available": zod.boolean(),
   "selectedAt": zod.coerce.date(),
@@ -494,7 +495,49 @@ export const ImportSessionResponse = zod.object({
   "reasons": zod.array(zod.string())
 })
 }))
-})).optional().describe('Append-only current recommendation versions, newest first. Original official snapshots and actual trade records are not rewritten.')
+}).describe('Saved recommendation version; displayEligible excludes automatic-only updates from persistent display.')).optional().describe('Append-only current recommendation versions, newest first. Original official snapshots and actual trade records are not rewritten.')
+})
+
+
+export const GetLastValidTop3Response = zod.object({
+  "warnings": zod.array(zod.string()),
+  "selection": zod.union([zod.object({
+  "sessionId": zod.number(),
+  "date": zod.string(),
+  "kind": zod.enum(['OFFICIAL', 'RECOMMENDATION']),
+  "revision": zod.object({
+  "displayEligible": zod.boolean().optional(),
+  "revision": zod.number(),
+  "available": zod.boolean(),
+  "selectedAt": zod.coerce.date(),
+  "policyVersion": zod.string(),
+  "sources": zod.array(zod.string()),
+  "picks": zod.array(zod.object({
+  "candidateId": zod.number(),
+  "ticker": zod.string(),
+  "signalDate": zod.string().optional().describe('Original report date, never rewritten to the import\/session day.'),
+  "category": zod.string(),
+  "rank": zod.number(),
+  "score": zod.number(),
+  "market": zod.enum(['SE', 'US']),
+  "direction": zod.enum(['LONG', 'SHORT']),
+  "source": zod.enum(['telegram', 'edgeai']),
+  "entryPrice": zod.number(),
+  "stopPrice": zod.number(),
+  "targetPrice": zod.number(),
+  "rr": zod.number(),
+  "decision": zod.object({
+  "status": zod.enum(['TRADEABLE', 'WAIT', 'BLOCKED', 'INVALID', 'STALE', 'CONFLICT']),
+  "reasons": zod.array(zod.string())
+})
+}))
+}).describe('Saved recommendation version; displayEligible excludes automatic-only updates from persistent display.'),
+  "dataDates": zod.array(zod.object({
+  "source": zod.string(),
+  "signalDate": zod.string().nullable(),
+  "dataDate": zod.string().nullable()
+}))
+}),zod.null()])
 })
 
 
@@ -732,6 +775,7 @@ export const ReimportSessionResponse = zod.object({
 }))
 }).optional().describe('Read-only same-day source receipts and preliminary picks; omitted for historical sessions.'),
   "top3Revisions": zod.array(zod.object({
+  "displayEligible": zod.boolean().optional(),
   "revision": zod.number(),
   "available": zod.boolean(),
   "selectedAt": zod.coerce.date(),
@@ -756,7 +800,7 @@ export const ReimportSessionResponse = zod.object({
   "reasons": zod.array(zod.string())
 })
 }))
-})).optional().describe('Append-only current recommendation versions, newest first. Original official snapshots and actual trade records are not rewritten.')
+}).describe('Saved recommendation version; displayEligible excludes automatic-only updates from persistent display.')).optional().describe('Append-only current recommendation versions, newest first. Original official snapshots and actual trade records are not rewritten.')
 })
 
 
@@ -961,6 +1005,7 @@ export const GetSessionResponse = zod.object({
 }))
 }).optional().describe('Read-only same-day source receipts and preliminary picks; omitted for historical sessions.'),
   "top3Revisions": zod.array(zod.object({
+  "displayEligible": zod.boolean().optional(),
   "revision": zod.number(),
   "available": zod.boolean(),
   "selectedAt": zod.coerce.date(),
@@ -985,7 +1030,7 @@ export const GetSessionResponse = zod.object({
   "reasons": zod.array(zod.string())
 })
 }))
-})).optional().describe('Append-only current recommendation versions, newest first. Original official snapshots and actual trade records are not rewritten.')
+}).describe('Saved recommendation version; displayEligible excludes automatic-only updates from persistent display.')).optional().describe('Append-only current recommendation versions, newest first. Original official snapshots and actual trade records are not rewritten.')
 })
 
 

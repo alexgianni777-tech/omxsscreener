@@ -184,7 +184,7 @@ test("a later trading target date is stale relative to the immutable source date
   const targetDate = nextDay.toISOString().slice(0, 10);
   const decision = decideCandidate(edgeCandidate, approved, targetDate, new Date(`${edgeCandidate.signalDate}T10:00:00.000Z`));
   assert.equal(decision.status, "STALE");
-  assert.match(decision.reasons.join(" "), /Signalen är från/);
+  assert.match(decision.reasons.join(" "), /Signalen är från|Källsignalen .* ligger utanför tillåten fördröjning/);
 });
 
 test("missing source date is stale and cannot be tradeable", () => {

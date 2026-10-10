@@ -127,6 +127,13 @@
       "when": 1791446400002,
       "tag": "0017_ground_zero_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791446400003,
+      "tag": "0018_persistent_top3_display",
+      "breakpoints": true
     }
   ]
 }
