@@ -7,6 +7,20 @@ description: Keep live price eligibility distinct from immutable screening and u
 
 **Why:** The user requested only three cost-conscious improvements: live entry status, current-versus-original R/R and truthful signal/quote provenance. They explicitly rejected a rebuild, paid quote services, faster polling and automatic publishing.
 
+## Quote presentation is not price verification
+**Rule:** Keep original D−1/screener prices visually separate from later market
+quotes. Missing actual source asOf means “tidpunkt ej verifierad”, never a
+guaranteed live quote; a timestamp alone does not guarantee real-time accuracy.
+Never substitute fetchedAt for the price timestamp.
+
+**Why:** The user reported confusing presentation and discrepancies versus
+Avanza, and explicitly separated UI polish from investigation of prices,
+providers, ticker mapping, fallbacks and calculations.
+
+**How to apply:** Use existing values and provenance only in presentation-only
+work. Investigate price discrepancies separately with matching instrument and
+source time; do not silently “correct” trading data while styling the UI.
+
 **How to apply:** Reuse existing quotes and their actual asOf timestamps; never substitute fetch time or fabricated setup age. Use unknown when revision metadata cannot safely be joined to its original signal.
 
 **Verification lesson:** Server-rendered component tests through the database workspace's tsx runner can use classic JSX and need an explicit React binding, even though Vite's automatic JSX runtime and typechecking pass. Passing the frontend tsconfig alone did not resolve this.

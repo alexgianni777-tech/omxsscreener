@@ -21,3 +21,4 @@
 - [Ambiguous source plans](signal-isolation-policy.md) — isolate conflicting identities, not entire reports; no guessed plan or historical identity migration.
 - [Ground Zero benchmark](ground-zero-policy.md) — manual account values; separate opening reconciliation and cumulative cashflows from development; preserve trading history.
 - [PG transaction sequencing](pg-transaction-queries.md) — serialize queries on a shared transaction client; concurrent client.query is deprecated.
+- [Protected UI verification](protected-ui-verification.md) — wait for auth loading before judging blank captures; browser notebook resets can erase the signed-in context.

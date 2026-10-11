@@ -1,6 +1,7 @@
 import React, { useEffect, useReducer } from "react";
 import { EntrySafety } from "./EntrySafety";
 import { DataFreshness } from "./DataFreshness";
+import { QuotePresentation } from "./QuotePresentation";
 import { assessLiveEntry, LIVE_ENTRY_MAX_PRICE_AGE_MS, type EntryPlan, type EntryQuote, type EntryStatus } from "../lib/liveEntryGuard";
 
 const STYLES: Record<EntryStatus, string> = {
@@ -17,15 +18,9 @@ export type SignalMetadata = {
   signalAgeBars?: number | null;
 };
 
-function quoteTime(value?: string | null) {
-  return value && Number.isFinite(Date.parse(value))
-    ? new Date(value).toLocaleString("sv-SE", { timeZone: "Europe/Stockholm" })
-    : "okänd";
-}
-
 export function LiveEntryGuard({ plan, quote, signal, now }: {
   plan: EntryPlan;
-  quote?: EntryQuote | null;
+  quote?: (EntryQuote & { yahooTicker?: string }) | null;
   signal?: SignalMetadata;
   now?: number;
 }) {
@@ -44,30 +39,31 @@ export function LiveEntryGuard({ plan, quote, signal, now }: {
   const age = signal?.signalAgeBars;
   return (
     <div data-testid="live-entry-guard" data-entry-status={assessment.status}
-      className={`mt-2 rounded-md border p-2 text-xs whitespace-normal ${STYLES[assessment.status]}`}>
+      className="mt-3 min-w-0 rounded-lg border border-border bg-background/60 p-3 text-xs whitespace-normal">
       <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <strong>Live Entry Guard · {assessment.status}</strong>
-        <span className="font-mono">
+        <strong className={`rounded-md border px-2 py-1 ${STYLES[assessment.status]}`}>Live Entry Guard · {assessment.status}</strong>
+        <span className="font-mono tabular-nums text-foreground">
           R/R original: {assessment.originalRr?.toFixed(2) ?? "okänt"} · aktuellt: {assessment.liveRr?.toFixed(2) ?? "okänt"}
         </span>
       </p>
       {assessment.status !== "READY" && <p className="mt-1 font-semibold">Ingen genomförbar live-entry.</p>}
       <p className="mt-1">{assessment.reason}</p>
-      <p className="mt-1 text-muted-foreground">
-        Kurs {quote?.livePrice != null && Number.isFinite(quote.livePrice) ? quote.livePrice.toFixed(2) : "okänd"}
-        {" · asOf "}{quoteTime(quote?.asOf)} (Stockholm)
-        {" · Marknad "}{quote?.marketState || "okänd"}
-      </p>
+      <div className="mt-2">
+        <QuotePresentation quote={quote} source={quote?.yahooTicker ? "Yahoo Finance" : null} status={assessment.status} />
+      </div>
       <p className="mt-1 text-muted-foreground">
         Rapport {signal?.signalDate || "okänt datum"} · Källa {signal?.signalSource || "okänd"}
         {" · Setupålder "}{age != null && Number.isFinite(age) && age >= 0 ? `${age} bars vid rapporten` : "okänd"}
       </p>
-      <p className="mt-1 text-[10px] text-muted-foreground">
+      <details className="mt-2 border-t border-border pt-2">
+      <summary className="cursor-pointer font-medium text-muted-foreground">Screening, datakvalitet och kontrollvillkor</summary>
+      <p className="mt-2 text-xs text-muted-foreground">
         TRADEABLE = screeningstatus, inte live-entrybesked. READY avser bara prisvillkoren, inte en order.
         {" "}Regel: öppen marknad, asOf högst 5 min, entry ±0,25R (R = original entry–stop), aktuellt R/R ≥1,2.
       </p>
       <DataFreshness reportDate={signal?.signalDate} source={signal?.signalSource}
         manual={signal?.signalSource === "manual"} />
+      </details>
       <EntrySafety plan={plan} quote={signal?.importWarning ? null : quote} now={now} />
     </div>
   );

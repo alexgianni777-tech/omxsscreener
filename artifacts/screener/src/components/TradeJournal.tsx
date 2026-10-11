@@ -156,14 +156,15 @@ export function TradeJournal() {
         === FRIVILLIG EXEKVERINGSJOURNAL ===
       </div>
       <div className="p-4 space-y-3 text-xs">
-        <p className="text-muted-foreground leading-relaxed">
+        <details><summary className="cursor-pointer text-muted-foreground">Om journalen och beräkningar</summary>
+        <p className="mt-2 text-muted-foreground leading-relaxed">
           Journalen är append-only och separat: den ändrar aldrig signaler, utfall eller Challenge Tracker.
           REAL, SIMULATED och NOT_TAKEN är olika underlag och summeras aldrig som bevis på edge.
           {" "}R beräknas från faktisk fill och initial stop. USD-resultat inkluderar angivna valutakurser.
           Finansiering och courtage dras en gång; okända värden ger okänt netto-R.
           En verkligt utförd sen eller planbruten trade får journalföras; ogiltig initial risk ger okänt R, inte ett påhittat resultat.
           Tider anges i webbläsarens lokala tidszon och visas här i Stockholmstid.
-        </p>
+        </p></details>
 
         {records.isLoading && <p>Läser befintlig journal…</p>}
         {records.isError && <p role="alert" className="text-destructive">Journalen kunde inte läsas. Inga tomma eller syntetiska resultat används.</p>}

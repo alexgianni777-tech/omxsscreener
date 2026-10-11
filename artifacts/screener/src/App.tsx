@@ -39,8 +39,9 @@ function LoginGate() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div role="status" aria-live="polite" className="min-h-screen flex flex-col gap-3 items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">Läser behörighet och arbetsyta…</p>
       </div>
     );
   }

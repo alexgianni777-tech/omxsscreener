@@ -40,7 +40,7 @@ export function Dashboard() {
   if (isError || !summary) {
     return (
       <div className="p-6 bg-destructive/10 text-destructive rounded-lg border border-destructive/20">
-        Failed to load dashboard summary.
+        Statistiken kunde inte hämtas. Ladda om sidan för att försöka igen.
       </div>
     );
   }
@@ -72,11 +72,11 @@ export function Dashboard() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <header className="flex justify-between items-end">
+      <header className="flex flex-wrap justify-between items-end gap-3">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Command Center</h2>
+          <h2 className="text-2xl md:text-3xl font-semibold tracking-tight">Översikt</h2>
           <p className="text-muted-foreground mt-1">
-            Overview of screener performance and candidates.
+            Fryst officiellt urval, aktuella kandidater och historiska utfall — separerat.
           </p>
         </div>
         <Link
@@ -85,21 +85,31 @@ export function Dashboard() {
           data-testid="btn-quick-import"
         >
           <Zap className="mr-2 h-4 w-4" />
-          Quick Import
+          Snabbimport
         </Link>
       </header>
 
       {/* Today's Session */}
+      <MarketIntelSection />
       <SavedTop3 />
       <TodaySessionPanel />
-      <ManualCatalysts />
-      <GroundZero />
+      <DashboardLiveTop3 />
+      <details className="rounded-lg border border-border bg-card" data-testid="details-manual-catalysts">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Manuella katalysatorer</summary>
+        <div className="border-t border-border p-2 sm:p-3"><ManualCatalysts /></div>
+      </details>
+      <details className="rounded-lg border border-border bg-card" data-testid="details-groundzero">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">GroundZero</summary>
+        <div className="border-t border-border p-2 sm:p-3"><GroundZero /></div>
+      </details>
+      <details className="rounded-lg border border-border bg-card" data-testid="details-historical-stats">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Historiska utfall och signalanalys
+          <span className="ml-2 font-normal text-xs text-muted-foreground">avslutade signaler, inte aktuella rekommendationer</span></summary>
+        <div className="border-t border-border p-3 sm:p-4 space-y-8">
 
       {/* Weekly Summary */}
       <WeekSummarySection equityCurve={summary.equityCurve} />
 
-      {/* Market Intel */}
-      <MarketIntelSection />
 
       {/* Top Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -257,12 +267,18 @@ export function Dashboard() {
       <RollingExpectancySection equityCurve={summary.equityCurve} />
 
       {/* Top 3 Strategy */}
-      <DashboardLiveTop3 />
       <Top3Section />
-      <TradeJournal />
+        </div>
+      </details>
+      <details className="rounded-lg border border-border bg-card" data-testid="details-trade-journal">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Exekveringsjournal (avancerat)</summary>
+        <div className="border-t border-border p-2 sm:p-3"><TradeJournal /></div>
+      </details>
 
       {/* Category Breakdown */}
-      <div>
+      <details className="rounded-lg border border-border bg-card p-3 sm:p-4" data-testid="details-category-stats">
+        <summary className="cursor-pointer text-sm font-semibold">Kategori-prestanda (historik)</summary>
+      <div className="mt-4">
         <h3 className="text-lg font-semibold mb-4 border-b border-border pb-2">
           Kategori-prestanda
         </h3>
@@ -308,6 +324,7 @@ export function Dashboard() {
           ))}
         </div>
       </div>
+      </details>
     </div>
   );
 }
@@ -615,7 +632,7 @@ function fgLabel(rating: string): string {
   return map[rating] ?? rating;
 }
 
-function MarketIntelSection() {
+export function MarketIntelSection() {
   const { data, isLoading } = useMarketIntel();
 
   const peRows: { label: string; key: keyof MarketIntelData["pe"]; avg: number }[] = [
@@ -625,9 +642,20 @@ function MarketIntelSection() {
   ];
 
   return (
-    <div>
-      <h3 className="text-lg font-semibold mb-4 border-b border-border pb-2">Marknadsläge</h3>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <section className="rounded-lg border border-border bg-card p-3 sm:p-4" data-testid="market-weather">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold">Marknadsläge</h3>
+        <p className="text-xs font-mono" data-testid="text-market-weather-summary">
+          {isLoading ? <span className="text-muted-foreground">Läser marknadsläge…</span>
+            : !data?.fearGreed ? <span className="text-muted-foreground">Fear &amp; Greed saknas</span>
+            : <>F&amp;G <strong style={{ color: fgColor(data.fearGreed.score) }}>{data.fearGreed.score}</strong> {fgLabel(data.fearGreed.rating)}</>}
+          {data && peRows.map(({ label, key }) => data.pe[key].trailing != null
+            ? <span key={key} className="ml-2 text-muted-foreground">{label.split(" (")[0]} P/E {Math.round((data.pe[key].trailing as number) * 10) / 10}</span> : null)}
+        </p>
+      </div>
+      <details className="mt-2">
+        <summary className="cursor-pointer text-xs text-muted-foreground">Visa Fear &amp; Greed och P/E-detaljer</summary>
+      <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Fear & Greed */}
         <div className="bg-card border border-border rounded-lg p-5 shadow-sm">
           <div className="text-sm font-medium text-muted-foreground mb-3">CNN Fear &amp; Greed Index</div>
@@ -730,7 +758,8 @@ function MarketIntelSection() {
           )}
         </div>
       </div>
-    </div>
+      </details>
+    </section>
   );
 }
 

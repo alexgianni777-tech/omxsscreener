@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { parseBrokerExport, type BrokerImportRow } from "../lib/portfolioBrokerParser";
 import { PortfolioRiskPanel } from "../components/PortfolioRiskPanel";
+import { QuotePresentation } from "../components/QuotePresentation";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const api = (path: string) => `${BASE}/api${path}`;
@@ -471,11 +472,13 @@ function PositionCard({ pos, onDelete, onEdited }: { pos: Position; onDelete: (i
                   {Math.abs(pos.changePct).toFixed(2)}%
                 </div>
               )}
-              {!pos.instrument && !pos.productType && (
-                <div className="mt-1">
-                  <FreshnessBadge iso={pos.quoteAsOf} label="Kurs" />
-                </div>
-              )}
+              <details className="mt-1 max-w-[240px] text-left">
+                <summary className="cursor-pointer text-xs text-muted-foreground">
+                  {pos.quoteAsOf && Number.isFinite(Date.parse(pos.quoteAsOf))
+                    ? "Kurstid / källa (ej garanterat live)" : "Tidpunkt ej verifierad"}
+                </summary>
+                <QuotePresentation showPrice={false} quote={{ livePrice: pos.livePrice, asOf: pos.quoteAsOf }} />
+              </details>
             </div>
           )}
           {/* P&L */}
@@ -943,7 +946,7 @@ export function Portfolio() {
             Nuvarande portfölj
           </h2>
           <p className="text-muted-foreground mt-1 text-sm">
-            Öppna positioner med live-kurs eller senast importerade instrumentkurs, orealiserat P&L och avstånd till stop/target.
+            Registrerade positioner med hämtad eller senast importerad kurs, orealiserat P&amp;L och avstånd till stop/target. Ingen garanti för realtidskurs.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -996,7 +999,10 @@ export function Portfolio() {
       )}
 
       {/* summary */}
-      {data && <PortfolioRiskPanel positions={positions} />}
+      {data && <details className="rounded-xl border border-border bg-card p-4">
+        <summary className="cursor-pointer text-sm font-medium">Portföljrisk · registrerade uppgifter och begränsningar</summary>
+        <div className="mt-3"><PortfolioRiskPanel positions={positions} /></div>
+      </details>}
       {data && positions.length > 0 && (
         <SummaryBar summary={data.summary} fetchedAt={data.fetchedAt} />
       )}

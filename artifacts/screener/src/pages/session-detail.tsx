@@ -915,7 +915,7 @@ function CandidateRow({
       {/* Live Price */}
       <div className="flex flex-col justify-center min-w-0 2xl:min-w-[140px] 2xl:border-r border-border 2xl:pr-4">
         <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
-          <Activity className="w-3 h-3" /> Live Price
+          <Activity className="w-3 h-3" /> Marknadskurs · ej garanterat live
         </div>
         {livePrice != null ? (
           <div className="space-y-1">

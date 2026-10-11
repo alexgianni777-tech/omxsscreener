@@ -4,6 +4,7 @@ import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils
 import { Link } from "wouter";
 import { Filter, ChevronRight } from "lucide-react";
 import { LiveEntryGuard } from "../components/LiveEntryGuard";
+import { QuotePresentation } from "../components/QuotePresentation";
 
 export function Candidates() {
   const [category, setCategory] = useState<string>("");
@@ -43,7 +44,7 @@ export function Candidates() {
       {/* Filters */}
       <div className="bg-card border border-border rounded-lg p-4 flex flex-wrap gap-4 items-center shadow-sm">
         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground mr-2">
-          <Filter className="w-4 h-4" /> Filters:
+          <Filter className="w-4 h-4" /> Filter:
         </div>
         
         <select 
@@ -87,16 +88,16 @@ export function Candidates() {
           <table className="w-full text-sm text-left">
             <thead className="bg-muted text-muted-foreground text-xs uppercase font-semibold">
               <tr>
-                <th className="px-4 py-3">Date / Session</th>
+                <th className="px-4 py-3">Datum / session</th>
                 <th className="px-4 py-3">Ticker</th>
-                <th className="px-4 py-3">Dir</th>
-                <th className="px-4 py-3">Category</th>
-                <th className="px-4 py-3 text-right">Screen Px</th>
-                <th className="px-4 py-3 text-right">Live Px</th>
+                <th className="px-4 py-3">Riktning</th>
+                <th className="px-4 py-3">Kategori</th>
+                <th className="px-4 py-3 text-right">Screenerpris · original</th>
+                <th className="px-4 py-3 text-right">Marknadskurs · ej garanterat live</th>
                 <th className="px-4 py-3 text-right">Entry</th>
-                <th className="px-4 py-3 text-right">Target</th>
+                <th className="px-4 py-3 text-right">Mål</th>
                 <th className="px-4 py-3 text-right">Stop</th>
-                <th className="px-4 py-3 text-center">Outcome</th>
+                <th className="px-4 py-3 text-center">Historiskt utfall</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -133,13 +134,21 @@ export function Candidates() {
                       <td className="px-4 py-3 text-right font-mono text-muted-foreground">{formatNumber(c.price)}</td>
                       <td className="px-4 py-3 text-right">
                         {live != null ? (
-                          <div className="flex flex-col items-end">
+                          <div className="flex flex-col items-end gap-1">
                             <span className="font-mono font-semibold">{formatNumber(live)}</span>
                             {chg != null && (
                               <span className={`text-[10px] font-mono ${chg >= 0 ? "text-success" : "text-destructive"}`}>
                                 {chg >= 0 ? "+" : ""}{chg.toFixed(2)}%
                               </span>
                             )}
+                            <details className="max-w-[240px] text-left">
+                              <summary className="cursor-pointer text-xs text-muted-foreground">
+                                {entryQuotes[c.ticker]?.asOf && Number.isFinite(Date.parse(entryQuotes[c.ticker].asOf!))
+                                  ? "Kurstid och källa" : "Tidpunkt ej verifierad"}
+                              </summary>
+                              <QuotePresentation showPrice={false} quote={entryQuotes[c.ticker]}
+                                source={entryQuotes[c.ticker]?.yahooTicker ? "Yahoo Finance" : null} />
+                            </details>
                           </div>
                         ) : (
                           <span className="text-muted-foreground">—</span>

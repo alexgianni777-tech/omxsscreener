@@ -1,4 +1,6 @@
 import { DailyCandidates } from "../components/DailyCandidates";
+import { SavedTop3 } from "../components/SavedTop3";
+import { MarketIntelSection } from "./dashboard";
 import type { SessionSourceReport } from "@workspace/api-client-react";
 /**
  * Idag — daglig briefing + challenge-tracker i ett
@@ -421,8 +423,15 @@ export function Today() {
   }
 
   return (
-    <div className="max-w-xl mx-auto space-y-5 pb-16">
-
+    <div className="max-w-5xl mx-auto min-w-0 space-y-5 pb-8">
+      <header>
+        <h2 className="text-2xl font-semibold tracking-tight">Dagens översikt</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Sparat officiellt urval, aktuella kandidater och utfall hålls isär.</p>
+      </header>
+      <MarketIntelSection />
+      <SavedTop3 />
+      <details className="rounded-xl border border-border bg-card">
+        <summary className="cursor-pointer p-4 text-sm font-medium">Challenge · registrerat modellkonto och riskinställningar</summary>
       {/* ── Challenge Progress ─────────────────────────────────────────────── */}
       <div className="bg-card border border-border rounded-xl p-5 shadow-sm">
         <div className="flex items-center justify-between mb-1">
@@ -503,6 +512,7 @@ export function Today() {
         </div>
       )}
 
+      </details>
       {/* ── Today's Picks ─────────────────────────────────────────────────── */}
       <div>
         <div className="flex items-center justify-between mb-3 px-1">
