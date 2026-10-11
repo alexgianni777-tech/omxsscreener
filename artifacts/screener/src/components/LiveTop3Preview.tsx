@@ -1,8 +1,10 @@
+import React from "react";
 import { Link } from "wouter";
 import type { Top3LiveSelection } from "@workspace/api-client-react";
 import { CheckCircle2, AlertTriangle, ChevronRight } from "lucide-react";
 import { LiveEntryGuard } from "./LiveEntryGuard";
 import type { EntryQuote } from "../lib/liveEntryGuard";
+import { PlanGrid } from "./PlanGrid";
 
 export type LiveSelection = Top3LiveSelection;
 type Cand = {
@@ -174,6 +176,7 @@ export function LiveTop3Preview({
           </p>
         ) : (
           <div className="mt-3 space-y-3">
+            <p data-testid="text-screening-explainer" className="text-[11px] text-muted-foreground">TRADEABLE/WAIT/BLOCKED är screeningstatus, inte entrybekräftelse. Livekontrollen per rad avgör.</p>
             {groups.map((g) => (
               <div key={g.key} data-testid={`group-live-${g.key}`}>
                 <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{g.label}</div>
@@ -186,21 +189,19 @@ export function LiveTop3Preview({
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     <span className="font-mono text-xs text-muted-foreground">#{p.rank}</span>
                     <span className="font-bold">{c ? c.ticker.replace(/\.ST$/i, "") : `Kandidat ${p.candidateId}`}</span>
-                    <span className="text-[11px] text-muted-foreground">
-                      {p.market} · {p.direction === "SHORT" ? "Sälj" : "Köp"} · {NAMES[p.signalSource]} · poäng {p.score.toFixed(2)}
-                    </span>
+                    {c?.signalDate && <span className="font-mono text-[11px] text-muted-foreground">{c.signalDate}</span>}
                     <span className="ml-auto"><DecisionBadge decision={decision} /></span>
                   </div>
-                  {c && (
-                    <div className="mt-1 font-mono text-[11px] text-muted-foreground">
-                      Entry {c.entryPrice} · Stop {c.stopPrice} · Mål {c.targetPrice} · R/R {c.rr}
-                    </div>
-                  )}
+                  {c && <PlanGrid plan={c} caption="Originalplan · D−1-underlag" />}
                   {c && <LiveEntryGuard plan={{ ...c, direction: p.direction }}
                     quote={quotes?.[c.ticker]} signal={c} />}
-                  {decision && decision.reasons.length > 0 && (
-                    <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{decision.reasons.join(" ")}</p>
-                  )}
+                  <details className="mt-1 text-[11px] text-muted-foreground">
+                    <summary className="cursor-pointer select-none">Visa detaljer</summary>
+                    <p className="mt-1">{p.market} · {p.direction === "SHORT" ? "Sälj" : "Köp"} · {NAMES[p.signalSource]} · poäng {p.score.toFixed(2)}</p>
+                    {decision && decision.reasons.length > 0 && (
+                      <p className="mt-1 leading-relaxed">{decision.reasons.join(" ")}</p>
+                    )}
+                  </details>
                 </li>
               );
             })}

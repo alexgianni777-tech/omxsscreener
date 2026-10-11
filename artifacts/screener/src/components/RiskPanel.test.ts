@@ -11,7 +11,7 @@ test("long/short risk uses the original plan; instruments are not levered underl
   assert.equal(riskInR({ ...short, direction: "LONG" }), null);
   const before = JSON.stringify(short);
   const html = renderToStaticMarkup(React.createElement(RiskPanel, { plan: short, instrument: "PRODUCT", netR: -1.1 }));
-  for (const s of ["handlat instrument", "7.44", "-1.10R", "garanteras inte", "knock-out"]) assert.ok(html.includes(s));
+  for (const s of ["handlat instrument", "7,44", "-1.10R", "garanteras inte", "knock-out"]) assert.ok(html.includes(s));
   const unknown = renderToStaticMarkup(React.createElement(RiskPanel, { plan: short, realizedR: 2 }));
   assert.ok(unknown.includes("kostnader ej verifierade"));
   assert.equal(JSON.stringify(short), before);

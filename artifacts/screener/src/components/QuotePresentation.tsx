@@ -1,5 +1,6 @@
 import React from "react";
 import type { EntryQuote, EntryStatus } from "../lib/liveEntryGuard";
+import { formatPrice } from "../lib/presentationNumbers";
 
 /** Captions only: no prices, timestamps or entry decisions are recalculated here. */
 export function QuotePresentation({ quote, source, status, showPrice = true }: {
@@ -10,7 +11,7 @@ export function QuotePresentation({ quote, source, status, showPrice = true }: {
   return <div className="min-w-0 break-words text-xs leading-relaxed text-muted-foreground" data-testid="quote-provenance">
     {showPrice ? <p><span className="font-medium text-foreground">Marknadskurs</span>{" "}
       <span className="font-mono tabular-nums text-foreground">
-        {quote?.livePrice != null && Number.isFinite(quote.livePrice) ? quote.livePrice.toFixed(2) : "okänd"}
+        {quote?.livePrice != null && Number.isFinite(quote.livePrice) ? formatPrice(quote.livePrice) : "okänd"}
       </span> · källa {source || "ej specificerad"}</p> : <p>Kurskälla: {source || "ej specificerad"}</p>}
     <p>asOf {time}{hasTime && " (Stockholm)"} · marknad {quote?.marketState || "okänd"}</p>
     {status && <p>Entrykontroll: {status}{status === "STALE_PRICE" && " · för gammal kurs eller marknad ej öppen"}</p>}

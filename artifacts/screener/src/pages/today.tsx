@@ -1,6 +1,7 @@
 import { DailyCandidates } from "../components/DailyCandidates";
 import { SavedTop3 } from "../components/SavedTop3";
 import { MarketIntelSection } from "./dashboard";
+import { formatPrice, formatRR } from "../lib/presentationNumbers";
 import type { SessionSourceReport } from "@workspace/api-client-react";
 /**
  * Idag — daglig briefing + challenge-tracker i ett
@@ -804,7 +805,7 @@ export function Today() {
                           }`}
                           title={quote.asOf ? `Kursen är från kl ${new Date(quote.asOf).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}` : undefined}
                         >
-                          {quote.livePrice.toFixed(2)}
+                          {formatPrice(quote.livePrice)}
                           {quote.changePct != null && (
                             <span className="ml-1 opacity-70">{pct(quote.changePct)}</span>
                           )}
@@ -816,7 +817,7 @@ export function Today() {
                     </div>
                     <LiveEntryGuard plan={candidate} quote={quote} signal={candidate} />
                     <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-x-2">
-                      <span>Pick #{i + 1} · R:R {candidate.rr.toFixed(1)}</span>
+                      <span>Pick #{i + 1} · R:R {formatRR(candidate.rr)}</span>
                       {edgeMetrics.isEdgeAI && (
                         <span data-testid={`edgeai-metrics-${candidate.id}`}>
                           EdgeAI · WR {edgeMetrics.winRate == null ? "okänd" : `${Math.round(edgeMetrics.winRate * 100)}%`}
@@ -850,16 +851,16 @@ export function Today() {
                   <div className="grid grid-cols-3 gap-3 text-sm">
                     <div className="bg-muted/50 rounded-lg p-3 text-center">
                       <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Entry</div>
-                      <div className="font-mono font-bold">{candidate.entryPrice.toFixed(2)}</div>
+                      <div className="font-mono font-bold">{formatPrice(candidate.entryPrice)}</div>
                     </div>
                     <div className="bg-destructive/5 border border-destructive/15 rounded-lg p-3 text-center">
                       <div className="text-[10px] text-destructive/80 uppercase tracking-wider mb-1">Stop</div>
-                      <div className="font-mono font-bold text-destructive">{candidate.stopPrice.toFixed(2)}</div>
+                      <div className="font-mono font-bold text-destructive">{formatPrice(candidate.stopPrice)}</div>
                       <div className="text-[10px] text-destructive/60">{pct(-Math.abs(stopDist))}</div>
                     </div>
                     <div className={`rounded-lg p-3 text-center ${candidate.targetPrice > 0 && Math.abs(targetDist) > 10 ? "bg-amber-500/5 border border-amber-500/20" : "bg-success/5 border border-success/15"}`}>
                       <div className="text-[10px] text-success/80 uppercase tracking-wider mb-1">Target</div>
-                      <div className="font-mono font-bold text-success">{candidate.targetPrice.toFixed(2)}</div>
+                      <div className="font-mono font-bold text-success">{formatPrice(candidate.targetPrice)}</div>
                       <div className={`text-[10px] font-medium ${candidate.targetPrice > 0 && Math.abs(targetDist) > 10 ? "text-amber-500" : "text-success/60"}`}>
                         +{Math.abs(targetDist).toFixed(1)}%{candidate.targetPrice > 0 && Math.abs(targetDist) > 10 ? " ⚠" : ""}
                       </div>

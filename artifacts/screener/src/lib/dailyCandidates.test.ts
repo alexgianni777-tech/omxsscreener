@@ -56,7 +56,8 @@ test("view states manual Avanza/ChatGPT workflow, original plans, unknown data, 
     picks: [p], signals: [{ id: 2, ticker: p.ticker, market: "SE", direction: "SHORT", entryPrice: 105, stopPrice: 110, targetPrice: 95 }],
     sessionDate: "2026-10-12", preliminary: true, now: new Date("2026-10-12T08:00:00Z"),
   }));
-  for (const text of ["Avanza", "ChatGPT", "Ingen position eller order", "Original entry", "Datadag okänd", "Flera planer", "Källhälsa", "Preliminärt", "Inga extra signaler", "helgdagskalender"]) assert.ok(html.includes(text), text);
+  for (const text of ["Avanza", "ChatGPT", "Ingen position eller order", "Originalplan", "Datadag okänd", "Flera planer", "Källhälsa", "Preliminärt", "Inga extra signaler", "helgdagskalender"]) assert.ok(html.includes(text), text);
+  for (const field of ["Entry", "Stop", "TP", "R/R"]) assert.ok(html.includes(`aria-label="${field} `), field);
   assert.ok(!html.includes("<form"));
 });
 test("a report generated today can validly use yesterday's close; competing versions never lend a newer date to an older plan", () => {

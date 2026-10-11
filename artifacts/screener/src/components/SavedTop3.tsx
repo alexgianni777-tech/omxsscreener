@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { useGetLastValidTop3, getGetLastValidTop3QueryKey, type SavedTop3Display } from "@workspace/api-client-react";
 import { stockholmToday } from "../lib/persistentTop3Display";
 import { previousWeekday } from "../lib/dailyCandidates";
+import { PlanGrid } from "./PlanGrid";
 
 export function SavedTop3Content({ selection: s, today }: { selection: SavedTop3Display; today: string }) {
   const stale = s.date !== today || s.dataDates.some(d => !d.dataDate || d.dataDate !== previousWeekday(today));
@@ -21,10 +22,13 @@ export function SavedTop3Content({ selection: s, today }: { selection: SavedTop3
           <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{market === "SE" ? "Sverige" : "USA"} · {direction === "LONG" ? "Long" : "Short"}</h4>
           {picks.map(p => {
             const date = s.dataDates.find(d => d.source === p.source && d.signalDate === p.signalDate);
-            return <p key={p.candidateId} className="mt-1 text-xs">
-              <strong>{p.ticker}</strong> · {p.source ?? "okänd källa"} · rapport/signal {p.signalDate ?? "okänd"} · datadag {date?.dataDate ?? "okänd"}
-              <br /><span className="font-mono text-[11px] break-words">Entry {p.entryPrice} · Stop {p.stopPrice} · TP {p.targetPrice} · R/R {p.rr.toFixed(2)}</span>
-            </p>;
+            return <div key={p.candidateId} className="mt-2 text-xs">
+              <div className="flex flex-wrap items-center gap-2"><strong>{p.ticker}</strong>
+                <span className="font-mono text-[11px] text-muted-foreground">{p.signalDate ?? "okänd"}</span></div>
+              <PlanGrid plan={p} caption="Originalplan · D−1-underlag" />
+              <details className="mt-1 text-[11px] text-muted-foreground"><summary className="cursor-pointer">Visa detaljer</summary>
+                <p className="mt-1">{p.source ?? "okänd källa"} · rapport/signal {p.signalDate ?? "okänd"} · datadag {date?.dataDate ?? "okänd"}</p></details>
+            </div>;
           })}
         </section> : null;
       }))}

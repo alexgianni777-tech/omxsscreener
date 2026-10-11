@@ -26,3 +26,18 @@ source time; do not silently “correct” trading data while styling the UI.
 **Verification lesson:** Server-rendered component tests through the database workspace's tsx runner can use classic JSX and need an explicit React binding, even though Vite's automatic JSX runtime and typechecking pass. Passing the frontend tsconfig alone did not resolve this.
 
 **Why:** This surfaced only when adding server-rendered component tests to a suite that previously tested pure functions.
+
+## Mobile information priority
+**Rule:** Prioritize the original plan over status explanations in mobile
+candidate cards. Missing live data needs a short, always-visible
+non-confirmation warning, not a large repeated safety panel. Preserve the full
+rules and diagnostics in accessible disclosures.
+
+**Why:** The user showed that the earlier visual polish still left NIBE/SCA
+cards cluttered, with raw floating-point R/R and repeated UNKNOWN warnings.
+They explicitly requested compact trading information rather than removing
+safety rules or changing prices.
+
+**How to apply:** Review closed cards on a narrow viewport, not just expanded
+SSR markup. Treat display formatting and warning placement as presentation
+only; never feed formatted numbers back into trading calculations.

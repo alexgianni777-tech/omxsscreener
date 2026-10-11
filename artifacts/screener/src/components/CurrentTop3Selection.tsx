@@ -1,9 +1,11 @@
+import React from "react";
 import { Link } from "wouter";
 import { currentSavedRevision, stockholmToday } from "../lib/persistentTop3Display";
 import type { Top3Revision } from "@workspace/api-client-react";
 import { DecisionBadge } from "./LiveTop3Preview";
 import { LiveEntryGuard, type SignalMetadata } from "./LiveEntryGuard";
 import type { EntryQuote, EntryPlan } from "../lib/liveEntryGuard";
+import { PlanGrid } from "./PlanGrid";
 
 type GuardCandidate = SignalMetadata & EntryPlan & { id: number };
 type GuardProps = { quotes?: Record<string, EntryQuote>; candidates?: readonly GuardCandidate[] };
@@ -28,12 +30,12 @@ function Picks({ revision, quotes, candidates }: { revision: Top3Revision } & Gu
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     <span className="font-mono text-xs">#{pick.rank}</span>
                     <strong>{pick.ticker.replace(/\.ST$/i, "")}</strong>
-                    <span className="text-xs text-muted-foreground">{pick.source === "telegram" ? "Telegram" : "EdgeAI"}</span>
-                    {pick.signalDate && <span className="text-xs text-muted-foreground">Rapport {pick.signalDate}</span>}
-                    <DecisionBadge decision={pick.decision} />
+                    <span className="text-[11px] text-muted-foreground">Signal {pick.signalDate || "okänd"}</span>
+                    <span className="ml-auto"><DecisionBadge decision={pick.decision} /></span>
                   </div>
-                  <p className="mt-1 font-mono text-xs">Entry {pick.entryPrice} · Stop {pick.stopPrice} · Mål {pick.targetPrice} · R/R {pick.rr}</p>
-                  {quotes && <LiveEntryGuard plan={pick} quote={quotes[pick.ticker]} signal={{
+                  <PlanGrid plan={pick}
+                    caption="Originalplan · D−1-underlag" />
+                  <LiveEntryGuard plan={pick} quote={quotes?.[pick.ticker]} signal={{
                     importWarning: candidates?.find(c => c.id === pick.candidateId)?.importWarning,
                     signalDate: pick.signalDate, signalSource: pick.source,
                     // Do not attach newer or trade-frozen metadata to a different revision plan.
@@ -41,8 +43,12 @@ function Picks({ revision, quotes, candidates }: { revision: Top3Revision } & Gu
                       c.signalDate === pick.signalDate && c.signalSource === pick.source &&
                       c.entryPrice === pick.entryPrice && c.stopPrice === pick.stopPrice &&
                       c.targetPrice === pick.targetPrice)?.signalAgeBars,
-                  }} />}
-                  {pick.decision.reasons.length > 0 && <p className="mt-1 text-xs text-muted-foreground">{pick.decision.reasons.join(" ")}</p>}
+                  }} />
+                  <details className="mt-1 text-xs text-muted-foreground">
+                    <summary className="cursor-pointer">Visa signalens detaljer</summary>
+                    <p className="mt-2">Källa {pick.source === "telegram" ? "Telegram" : "EdgeAI"} · Rapport {pick.signalDate || "okänd"}</p>
+                    {pick.decision.reasons.length > 0 && <p className="mt-1">{pick.decision.reasons.join(" ")}</p>}
+                  </details>
                 </li>
               ))}
             </ol>
@@ -70,6 +76,7 @@ export function CurrentTop3Selection({ revisions, sessionId, quotes, candidates 
   return (
     <div data-testid="panel-current-top3" className="mb-4 rounded-xl border border-primary/25 bg-card p-4 shadow-sm">
       <h3 data-testid="text-current-top3-title" className="font-semibold">Giltig sparad rekommendation · version {current.revision}</h3>
+      <p className="mt-1 text-xs text-muted-foreground">TRADEABLE/WAIT/BLOCKED är screeningstatus, inte entrybekräftelse.</p>
       {new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm" }).format(new Date(current.selectedAt)) !== stockholmToday() &&
         <p className="mt-1 text-xs text-amber-600">STALE · ej nytt köp utan liveverifiering. Originalplan och historik behålls.</p>}
       <p className="mt-1 text-xs text-muted-foreground">

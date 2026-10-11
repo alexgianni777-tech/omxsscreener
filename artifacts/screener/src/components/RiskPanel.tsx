@@ -1,3 +1,4 @@
+import { formatPrice, formatRR } from "../lib/presentationNumbers";
 import React from "react";
 type Plan = { direction: string; entryPrice: number; stopPrice: number; targetPrice: number };
 export function riskInR(p: Plan) {
@@ -14,10 +15,10 @@ export function RiskPanel({ plan, instrument = "UNDERLYING", netR, realizedR }: 
   const r = riskInR(plan);
   return <details className="mt-2 rounded border border-border p-2 text-xs" data-testid="risk-panel">
     <summary className="cursor-pointer">R/risk · {instrument === "PRODUCT" ? "handlat instrument" : instrument === "SHARE" ? "handlad aktie" : "underliggande aktiesignal"}
-      {" "}· 1R = {r?.risk.toFixed(2) ?? "okänd"} prisenheter · planerat R:R {r?.rewardR.toFixed(2) ?? "okänt"}</summary>
-    <p className="mt-2 font-mono">Entry/fill {plan.entryPrice} · Stop/invalidation {plan.stopPrice} · Target {plan.targetPrice}</p>
-    <p>Initial prisrisk = |entry − stop| = {r?.risk.toFixed(2) ?? "okänd"} = {r ? "1R" : "okänt R"}.
-      {" "}Target motsvarar {r?.rewardR.toFixed(2) ?? "okänt"}R. Kostnader ingår inte i planerat R:R.</p>
+      {" "}· 1R = {formatPrice(r?.risk)} prisenheter · planerat R:R {formatRR(r?.rewardR)}</summary>
+    <p className="mt-2 font-mono">Entry/fill {formatPrice(plan.entryPrice)} · Stop/invalidation {formatPrice(plan.stopPrice)} · Target {formatPrice(plan.targetPrice)}</p>
+    <p>Initial prisrisk = |entry − stop| = {formatPrice(r?.risk)} = {r ? "1R" : "okänt R"}.
+      {" "}Target motsvarar {formatRR(r?.rewardR)}R. Kostnader ingår inte i planerat R:R.</p>
     <p>Realiserad netto-R: {netR != null && Number.isFinite(netR) ? `${netR.toFixed(2)}R` : "okänd / kostnader ej verifierade"}.
       {realizedR != null && Number.isFinite(realizedR) ? ` Separat registrerat signalutfall: ${realizedR.toFixed(2)}R; inte verifierad nettoavkastning.` : ""}</p>
     <p className="mt-1 text-amber-600">Underliggandens risk är inte produktens risk. För mini futures garanteras inte stop/exitnivån:

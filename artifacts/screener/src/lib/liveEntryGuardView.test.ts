@@ -13,7 +13,7 @@ test("entry view renders separate status, both R/Rs, exact quote provenance and 
     signal: { signalDate: "2026-10-01", signalSource: "edgeai", signalAgeBars: 3 },
   }));
   for (const expected of [
-    'data-entry-status="READY"', "original: 2.00", "aktuellt: 1.50",
+    'data-entry-status="READY"', "original: 2,00", "aktuellt: 1,50",
     "2026-10-02 13:59:00", "Rapport 2026-10-01", "edgeai", "3 bars vid rapporten",
     "TRADEABLE = screeningstatus, inte live-entrybesked",
   ]) assert.ok(html.includes(expected), `missing ${expected}`);

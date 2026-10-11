@@ -1,5 +1,6 @@
 import React from "react";
 import { DataFreshness } from "./DataFreshness";
+import { PlanGrid } from "./PlanGrid";
 import type { SessionSourceReport } from "@workspace/api-client-react";
 import { swedishDailyPicks, oldSignalWarning, previousWeekday, dailySymbol, isolatedDailyPick, type DailyPick } from "../lib/dailyCandidates";
 
@@ -11,7 +12,6 @@ const why: Record<string, string> = {
   MOMENTUM: "Styrka enligt källans momentum-setup", SQUEEZE: "Kompression enligt källans squeeze-setup",
   STUDS: "Studs-setup enligt källrapporten", WEAKEST: "Svaghet/short-setup enligt källrapporten",
 };
-const num = (n: number) => Number.isFinite(n) ? n.toLocaleString("sv-SE", { maximumFractionDigits: 2 }) : "okänt";
 export function DailyCandidates({ picks, signals, reports = [], sessionDate, preliminary = false, now = new Date() }: {
   picks: readonly DailyPick[]; signals: readonly Signal[]; reports?: readonly SessionSourceReport[];
   sessionDate: string; preliminary?: boolean; now?: Date;
@@ -53,16 +53,20 @@ export function DailyCandidates({ picks, signals, reports = [], sessionDate, pre
           matchingReports.length > 1 ? "Flera rapportversioner samma signaldag – planens datadag kan inte kopplas entydigt." : null,
         ].filter(Boolean);
         return <li key={p.candidateId} className="rounded-md border border-border p-3" data-testid={`daily-pick-${p.candidateId}`}>
-          <div className="flex flex-wrap gap-2 text-sm"><strong>{dailySymbol(p.ticker)}</strong>
-            <span className="text-xs text-muted-foreground">{p.source === "edgeai" ? "GitHub/EdgeAI" : p.source === "telegram" ? "Telegram" : p.source}</span></div>
-          <p className="mt-1 text-xs">Rapport {report?.reportDate ?? p.signalDate ?? "okänd"} · Datadag {report?.dataDates.SE ?? "okänd"}
-            {candidate?.volumeAsOf && ` · Volymdag ${candidate.volumeAsOf}`}</p>
-          <DataFreshness reportDate={report?.reportDate ?? p.signalDate} dataDate={report?.dataDates.SE}
-            source={p.source} receiptVerified={report?.status === "SUCCESS"} manual={p.source === "manual"} today={today} />
-          {report && <p className="text-xs text-muted-foreground">Importversion {report.fingerprint.slice(0, 11)}</p>}
-          <p className="mt-1 font-mono text-xs">Original entry {num(p.entryPrice)} · Stop {num(p.stopPrice)} · TP {num(p.targetPrice)} · RR {num(p.rr)}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{why[p.category] ?? `Setup ${p.category} enligt källrapporten`}. Ur befintlig Top 3-rankning, inte ett köpbesked.</p>
-          {warnings.map(w => <p key={w} className="mt-1 text-xs text-amber-600 dark:text-amber-400">{w}</p>)}
+          <div className="flex flex-wrap items-center gap-2 text-sm"><strong>{dailySymbol(p.ticker)}</strong>
+            <span className="font-mono text-[11px] text-muted-foreground">{report?.reportDate ?? p.signalDate ?? "okänd"}</span>
+            {warnings.length > 0 && <span data-testid={`status-daily-warn-${p.candidateId}`} className="ml-auto rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">
+              {conflict ? "Konflikt · " : ""}{warnings.length} varning{warnings.length > 1 ? "ar" : ""}</span>}</div>
+          <PlanGrid plan={p} caption="Originalplan · D−1-underlag" />
+          <details className="mt-1 text-xs text-muted-foreground"><summary className="cursor-pointer">Visa detaljer</summary>
+            <p className="mt-1">{p.source === "edgeai" ? "GitHub/EdgeAI" : p.source === "telegram" ? "Telegram" : p.source} · Rapport {report?.reportDate ?? p.signalDate ?? "okänd"} · Datadag {report?.dataDates.SE ?? "okänd"}
+              {candidate?.volumeAsOf && ` · Volymdag ${candidate.volumeAsOf}`}</p>
+            <DataFreshness reportDate={report?.reportDate ?? p.signalDate} dataDate={report?.dataDates.SE}
+              source={p.source} receiptVerified={report?.status === "SUCCESS"} manual={p.source === "manual"} today={today} />
+            {report && <p>Importversion {report.fingerprint.slice(0, 11)}</p>}
+            <p className="mt-1">{why[p.category] ?? `Setup ${p.category} enligt källrapporten`}. Ur befintlig Top 3-rankning, inte ett köpbesked.</p>
+            {warnings.map(w => <p key={w} className="mt-1 text-amber-600 dark:text-amber-400">{w}</p>)}
+          </details>
         </li>;
       })}</ul>
     </section>)}</div>
