@@ -88,19 +88,22 @@ test("official Top 3 includes only tradeable rows and caps each market/direction
 });
 
 test("opposing directions for the same canonical underlying are neither auto-selected and carry CONFLICT", () => {
-  const now = new Date();
-  const yesterday = new Date();
+  // Control both evaluation and source dates: calendar "yesterday" on a
+  // Sunday is Saturday, which is correctly STALE rather than eligible.
+  const now = new Date("2026-10-09T10:00:00.000Z");
+  const sessionDate = "2026-10-09";
+  const yesterday = new Date(now);
   yesterday.setUTCDate(yesterday.getUTCDate() - 1);
   const rows = buildTop3SelectionSnapshot(
     [
-      candidate(1, "SAME.ST", "LONG", "SE"),
-      candidate(2, "SAME", "SHORT", "US"),
-      candidate(3, "OTHER", "SHORT", "SE"),
+      candidate(1, "SAME.ST", "LONG", "SE", { signalDate: sessionDate }),
+      candidate(2, "SAME", "SHORT", "US", { signalDate: sessionDate }),
+      candidate(3, "OTHER", "SHORT", "SE", { signalDate: sessionDate }),
       candidate(4, "SAME", "SHORT", "SE", { signalDate: yesterday.toISOString().slice(0, 10) }),
-      candidate(5, "SAME", "LONG", "SE", { volMultiplier: 0 }),
+      candidate(5, "SAME", "LONG", "SE", { signalDate: sessionDate, volMultiplier: 0 }),
     ] as any,
     101,
-    currentStockholmDate(),
+    sessionDate,
     null,
     now,
   );
