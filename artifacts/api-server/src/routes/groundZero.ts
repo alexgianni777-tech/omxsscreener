@@ -1,13 +1,14 @@
 import { Router } from "express";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db, groundZeroSnapshotsTable } from "@workspace/db";
 import { CreateGroundZeroSnapshotBody } from "@workspace/api-zod";
 import { GROUND_ZERO, groundZeroSnapshot, validateGroundZeroInput } from "../lib/groundZero";
 import { stockholmSignalDate } from "../lib/signalDatePolicy";
+import { createGroundZeroDeleteHandler } from "../lib/groundZeroDelete";
 
 const router = Router();
-async function state() {
-  const rows = await db.select().from(groundZeroSnapshotsTable)
+async function state(reader: Pick<typeof db, "select"> = db) {
+  const rows = await reader.select().from(groundZeroSnapshotsTable)
     .orderBy(desc(groundZeroSnapshotsTable.asOfDate), desc(groundZeroSnapshotsTable.id));
   const history = rows.map(groundZeroSnapshot);
   return { ...GROUND_ZERO, latest: history[0] ?? null, history };
@@ -22,4 +23,11 @@ router.post("/ground-zero", async (req, res) => {
   await db.insert(groundZeroSnapshotsTable).values(values);
   res.status(201).json(await state());
 });
+router.delete("/ground-zero/:id", createGroundZeroDeleteHandler(async id =>
+  db.transaction(async tx => {
+    const removed = await tx.delete(groundZeroSnapshotsTable)
+      .where(eq(groundZeroSnapshotsTable.id, id)).returning({ id: groundZeroSnapshotsTable.id });
+    return removed.length ? state(tx) : null;
+  })
+));
 export default router;

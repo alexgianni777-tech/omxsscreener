@@ -112,6 +112,60 @@ export const CreateGroundZeroSnapshotResponse = zod.object({
 
 
 /**
+ * @summary Delete only one manual reconciliation; never trading history
+ */
+export const deleteGroundZeroSnapshotPathIdMax = 2147483647;
+
+
+
+export const DeleteGroundZeroSnapshotParams = zod.object({
+  "id": zod.coerce.number().int().min(1).max(deleteGroundZeroSnapshotPathIdMax)
+})
+
+export const deleteGroundZeroSnapshotResponseLatestOneOneTotalValueSekMin = 0;
+export const deleteGroundZeroSnapshotResponseLatestOneOneTotalValueSekMax = 1000000000;
+
+export const deleteGroundZeroSnapshotResponseHistoryItemOneTotalValueSekMin = 0;
+export const deleteGroundZeroSnapshotResponseHistoryItemOneTotalValueSekMax = 1000000000;
+
+
+
+export const DeleteGroundZeroSnapshotResponse = zod.object({
+  "label": zod.string(),
+  "baseDate": zod.string(),
+  "baselineSek": zod.number(),
+  "observedStartSek": zod.number(),
+  "reconciliationDifferenceSek": zod.number(),
+  "goalSek": zod.number(),
+  "targetDate": zod.string(),
+  "latest": zod.union([zod.object({
+  "asOfDate": zod.string(),
+  "totalValueSek": zod.number().min(deleteGroundZeroSnapshotResponseLatestOneOneTotalValueSekMin).max(deleteGroundZeroSnapshotResponseLatestOneOneTotalValueSekMax),
+  "netExternalFlowsSek": zod.number().nullable()
+}).and(zod.object({
+  "id": zod.number(),
+  "createdAt": zod.string(),
+  "rawChangeSek": zod.number(),
+  "adjustedChangeSek": zod.number().nullable(),
+  "adjustedChangePct": zod.number().nullable(),
+  "remainingToGoalSek": zod.number()
+})),zod.null()]),
+  "history": zod.array(zod.object({
+  "asOfDate": zod.string(),
+  "totalValueSek": zod.number().min(deleteGroundZeroSnapshotResponseHistoryItemOneTotalValueSekMin).max(deleteGroundZeroSnapshotResponseHistoryItemOneTotalValueSekMax),
+  "netExternalFlowsSek": zod.number().nullable()
+}).and(zod.object({
+  "id": zod.number(),
+  "createdAt": zod.string(),
+  "rawChangeSek": zod.number(),
+  "adjustedChangeSek": zod.number().nullable(),
+  "adjustedChangePct": zod.number().nullable(),
+  "remainingToGoalSek": zod.number()
+})))
+})
+
+
+/**
  * @summary Separate real, simulated and missed-trade execution journal
  */
 export const listJournalRecordsResponseInputIdRegExp = new RegExp('^[a-fA-F0-9-]{36}$');

@@ -230,6 +230,77 @@ export const useCreateGroundZeroSnapshot = <TError = ErrorType<void>,
       return useMutation(getCreateGroundZeroSnapshotMutationOptions(options));
     }
 
+export const getDeleteGroundZeroSnapshotUrl = (id: number,) => {
+
+
+
+
+  return `/api/ground-zero/${id}`
+}
+
+/**
+ * @summary Delete only one manual reconciliation; never trading history
+ */
+export const deleteGroundZeroSnapshot = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<GroundZeroState> => {
+
+  return customFetch<GroundZeroState>(getDeleteGroundZeroSnapshotUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteGroundZeroSnapshotMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteGroundZeroSnapshot>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteGroundZeroSnapshot>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteGroundZeroSnapshot'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteGroundZeroSnapshot>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteGroundZeroSnapshot(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteGroundZeroSnapshotMutationResult = NonNullable<Awaited<ReturnType<typeof deleteGroundZeroSnapshot>>>
+
+    export type DeleteGroundZeroSnapshotMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete only one manual reconciliation; never trading history
+ */
+export const useDeleteGroundZeroSnapshot = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteGroundZeroSnapshot>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteGroundZeroSnapshot>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteGroundZeroSnapshotMutationOptions(options));
+    }
+
 export const getListJournalRecordsUrl = () => {
 
 

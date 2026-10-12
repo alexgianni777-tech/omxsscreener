@@ -26,7 +26,7 @@ paths:
       summary: Optional manual AG Invest Ground Zero reconciliation
       responses:
         "200":
-          description: Fixed benchmark and append-only manual valuation history
+          description: Fixed benchmark and saved manual valuation history
           content:
             application/json:
               schema:
@@ -50,6 +50,30 @@ paths:
                 $ref: "#/components/schemas/GroundZeroState"
         "400":
           description: Invalid manual value or date
+  /ground-zero/{id}:
+    delete:
+      operationId: deleteGroundZeroSnapshot
+      tags: [dashboard]
+      summary: Delete only one manual reconciliation; never trading history
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+      responses:
+        "200":
+          description: Remaining reconciliations and recalculated current state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroundZeroState"
+        "400":
+          description: Invalid reconciliation ID
+        "404":
+          description: Reconciliation no longer exists
   /journal:
     get:
       operationId: listJournalRecords

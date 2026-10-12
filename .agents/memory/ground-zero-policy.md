@@ -11,3 +11,10 @@ Keep the chosen benchmark and observed starting balance separate. The initial re
 **Why:** The user explicitly required capital flows and the opening reconciliation difference not to be mistaken for trading returns. Cumulative net flows keep the feature small without adding a separate transaction ledger.
 
 **How to apply:** Append corrected manual valuations rather than overwriting prior ones. Label the result as simple account-value development, not verified trade P&L or time-weighted return. Do not automatically change allocation, risk limits or orders.
+
+### Incorrect manual valuations
+Allow removal of one explicitly confirmed manual valuation, with fallback to the latest remaining valuation. Never delete trades, journal or benchmarks as part of this action.
+
+**Why:** The user explicitly requested a way to delete a mistakenly entered account value, without affecting trading history.
+
+**How to apply:** Identify the selected valuation by its own ID, show its amount/date and permanent-deletion warning before confirmation, and leave other values unchanged. No remaining valuations means unknown current account value, not a guessed balance.
