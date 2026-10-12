@@ -10,6 +10,7 @@ import { edgeAiMetrics, edgeAiScore } from "../lib/edgeAiMetrics";
 import { LiveTop3Preview } from "../components/LiveTop3Preview";
 import { CurrentTop3Selection } from "../components/CurrentTop3Selection";
 import { RiskPanel } from "../components/RiskPanel";
+import { SessionTradePlan } from "../components/SessionTradePlan";
 import { LiveEntryGuard } from "../components/LiveEntryGuard";
 
 type Candidate = ApiCandidate & {
@@ -722,10 +723,10 @@ function CandidateRow({
       className="bg-card border border-border rounded-lg shadow-sm text-sm group"
       data-testid={isEdgeAI ? `edgeai-candidate-${candidate.id}` : undefined}
     >
-    <div className="p-4 flex flex-col 2xl:flex-row gap-4 2xl:items-stretch">
+    <div data-testid={`session-candidate-layout-${candidate.id}`} className="grid min-w-0 grid-cols-1 gap-4 p-4 xl:grid-cols-2">
       
       {/* Identity & Core Metrics */}
-      <div className="flex flex-col gap-3 min-w-0 2xl:min-w-[280px] 2xl:border-r border-border 2xl:pr-4">
+      <div className="flex min-w-0 flex-col gap-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="font-mono text-muted-foreground text-xs">#{rank}</span>
@@ -913,7 +914,7 @@ function CandidateRow({
       </div>
 
       {/* Live Price */}
-      <div className="flex flex-col justify-center min-w-0 2xl:min-w-[140px] 2xl:border-r border-border 2xl:pr-4">
+      <div className="flex min-w-0 flex-col justify-center">
         <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
           <Activity className="w-3 h-3" /> Marknadskurs · ej garanterat live
         </div>
@@ -958,43 +959,11 @@ function CandidateRow({
       </div>
 
       {/* Trade Plan */}
-      <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4 2xl:border-r border-border 2xl:pr-4 py-2 2xl:py-0 bg-muted/30 p-3 rounded-md 2xl:bg-transparent 2xl:p-0">
-        <div className="flex flex-col justify-center">
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1"><Crosshair className="w-3 h-3"/> Entry</div>
-          <div className="font-mono font-semibold text-base">{formatNumber(candidate.entryPrice)}</div>
-          {entryGapPct != null && (
-            <div className={`font-mono text-[10px] mt-0.5 ${Math.abs(entryGapPct) < 0.3 ? "text-success" : "text-muted-foreground"}`}>
-              {entryGapPct >= 0 ? "+" : ""}{entryGapPct.toFixed(1)}% fr. nu
-            </div>
-          )}
-        </div>
-        <div className="flex flex-col justify-center">
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1"><ShieldAlert className="w-3 h-3"/> Stop</div>
-          <div className="font-mono font-semibold text-destructive">{formatNumber(candidate.stopPrice)}</div>
-          {stopPct != null && (
-            <div className="font-mono text-[10px] text-destructive mt-0.5">
-              −{stopPct.toFixed(1)}% fr. entry
-            </div>
-          )}
-        </div>
-        <div className="flex flex-col justify-center">
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1"><Target className="w-3 h-3"/> Target</div>
-          <div className="font-mono font-semibold text-success">{formatNumber(candidate.targetPrice)}</div>
-          {targetPct > 0 && (
-            <div className="font-mono text-[10px] text-success mt-0.5">
-              +{targetPct.toFixed(1)}% fr. entry
-            </div>
-          )}
-        </div>
-        <div className="flex flex-col justify-center">
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Risk / Reward</div>
-          <div className="font-mono font-bold">{formatNumber(candidate.rr)}R</div>
-        </div>
-      </div>
+      <SessionTradePlan plan={candidate} entryGapPct={entryGapPct} stopPct={stopPct} targetPct={targetPct} />
 
       <RiskPanel plan={candidate} realizedR={candidate.realizedR} />
       {/* Outcome Logger */}
-      <div className="min-w-0 2xl:min-w-[280px] flex flex-col justify-center gap-2">
+      <div className="col-span-full flex min-w-0 flex-col justify-center gap-2">
         <div className="flex items-center gap-2">
           <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Log Outcome</div>
           {(candidate.outcome === "WIN" || candidate.outcome === "LOSS") && (

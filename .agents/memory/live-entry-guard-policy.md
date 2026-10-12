@@ -41,3 +41,14 @@ safety rules or changing prices.
 **How to apply:** Review closed cards on a narrow viewport, not just expanded
 SSR markup. Treat display formatting and warning placement as presentation
 only; never feed formatted numbers back into trading calculations.
+
+**Session-card layout rule:** Give the trading plan and expandable risk help
+their own rows, and size plan columns from the available card width rather
+than only from the browser viewport.
+
+**Why:** The user supplied a screenshot where a wide-screen horizontal card
+layout compressed Entry, Stop, Target and R/R until their text overlapped.
+Earlier compact Top 3 checks did not cover this separate session view.
+
+**How to apply:** Include the session view when checking price-field layout,
+on both a narrow phone and a wide screen with the actual surrounding panels.

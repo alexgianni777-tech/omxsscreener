@@ -13,7 +13,7 @@ export function RiskPanel({ plan, instrument = "UNDERLYING", netR, realizedR }: 
   plan: Plan; instrument?: "UNDERLYING" | "SHARE" | "PRODUCT"; netR?: number | null; realizedR?: number | null;
 }) {
   const r = riskInR(plan);
-  return <details className="mt-2 rounded border border-border p-2 text-xs" data-testid="risk-panel">
+  return <details className="col-span-full mt-2 min-w-0 rounded border border-border p-2 text-xs break-words" data-testid="risk-panel">
     <summary className="cursor-pointer">R/risk · {instrument === "PRODUCT" ? "handlat instrument" : instrument === "SHARE" ? "handlad aktie" : "underliggande aktiesignal"}
       {" "}· 1R = {formatPrice(r?.risk)} prisenheter · planerat R:R {formatRR(r?.rewardR)}</summary>
     <p className="mt-2 font-mono">Entry/fill {formatPrice(plan.entryPrice)} · Stop/invalidation {formatPrice(plan.stopPrice)} · Target {formatPrice(plan.targetPrice)}</p>
