@@ -93,6 +93,8 @@ export * from './portfolioPositionUpdateProductSide';
 export * from './portfolioPositionUpdateUnderlyingDirection';
 export * from './portfolioResponse';
 export * from './portfolioSummary';
+export * from './pruneUnusedCandidates200';
+export * from './pruneUnusedCandidates200RetentionDays';
 export * from './quoteResult';
 export * from './removedCandidatePreview';
 export * from './removedCandidatePreviewCategory';

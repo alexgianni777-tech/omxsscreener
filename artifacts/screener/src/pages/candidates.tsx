@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useListCandidates, useGetQuotes, getGetQuotesQueryKey, type QuoteResult } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { usePruneUnusedCandidates, getListCandidatesQueryKey, getListSessionsQueryKey, getGetLastValidTop3QueryKey, useListCandidates, useGetQuotes, getGetQuotesQueryKey, type QuoteResult } from "@workspace/api-client-react";
 import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
 import { Link } from "wouter";
 import { Filter, ChevronRight } from "lucide-react";
@@ -37,6 +38,7 @@ export function Candidates() {
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Candidate Database</h2>
+          {import.meta.env.DEV && <PruneUnusedButton />}
           <p className="text-muted-foreground mt-1">Filter and review all historical trade candidates.</p>
         </div>
       </header>
@@ -182,4 +184,22 @@ export function Candidates() {
       </div>
     </div>
   );
+}
+
+/** DEV-only manual cleanup; backend rejects non-development with 403. */
+function PruneUnusedButton() {
+  const qc = useQueryClient();
+  const prune = usePruneUnusedCandidates({ mutation: { onSuccess: () => {
+    void qc.invalidateQueries({ queryKey: getListCandidatesQueryKey().slice(0, 1) });
+    void qc.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+    void qc.invalidateQueries({ predicate: q => String(q.queryKey[0]).startsWith("/api/screener/sessions/") });
+    void qc.invalidateQueries({ queryKey: getGetLastValidTop3QueryKey() });
+  } } });
+  return <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+    <button type="button" data-testid="button-prune-unused" disabled={prune.isPending} onClick={() => prune.mutate()}
+      className="rounded-md border border-border px-2 py-1 text-muted-foreground hover:text-foreground disabled:opacity-50">
+      {prune.isPending ? "Rensar…" : "Rensa oanvända kandidater (DEV, >3 dagar)"}</button>
+    {prune.isSuccess && <span data-testid="text-prune-result">{prune.data.deletedCount} borttagna · retention {prune.data.retentionDays} dagar</span>}
+    {prune.isError && <span role="alert" className="text-destructive">Rensning misslyckades.</span>}
+  </div>;
 }

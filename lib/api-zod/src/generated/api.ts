@@ -9,6 +9,19 @@ import * as zod from 'zod';
 
 
 /**
+ * @summary Development-only manual cleanup of unreferenced candidates older than three days
+ */
+export const pruneUnusedCandidatesResponseDeletedCountMin = 0;
+
+
+
+export const PruneUnusedCandidatesResponse = zod.object({
+  "deletedCount": zod.number().min(pruneUnusedCandidatesResponseDeletedCountMin),
+  "retentionDays": zod.literal(3)
+})
+
+
+/**
  * @summary Optional manual AG Invest Ground Zero reconciliation
  */
 export const getGroundZeroResponseLatestOneOneTotalValueSekMin = 0;

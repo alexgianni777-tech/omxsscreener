@@ -19,6 +19,28 @@ tags:
   - name: Auth
     description: Browser and mobile authentication endpoints.
 paths:
+  /candidates/unused:
+    delete:
+      operationId: pruneUnusedCandidates
+      tags: [candidates]
+      summary: Development-only manual cleanup of unreferenced candidates older than three days
+      responses:
+        "200":
+          description: Cleanup completed without deleting sessions or historical evidence
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deletedCount, retentionDays]
+                properties:
+                  deletedCount:
+                    type: number
+                    minimum: 0
+                  retentionDays:
+                    type: number
+                    enum: [3]
+        "403":
+          description: Cleanup is not enabled outside development
   /ground-zero:
     get:
       operationId: getGroundZero

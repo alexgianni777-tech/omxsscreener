@@ -22,3 +22,4 @@
 - [Ground Zero benchmark](ground-zero-policy.md) — manual account values; separate opening reconciliation and cumulative cashflows from development; preserve trading history.
 - [PG transaction sequencing](pg-transaction-queries.md) — serialize queries on a shared transaction client; concurrent client.query is deprecated.
 - [Protected UI verification](protected-ui-verification.md) — wait for auth loading before judging blank captures; browser notebook resets can erase the signed-in context.
+- [Unused candidate retention](candidate-retention-policy.md) — user chose three days without an extra preview; preserve trading evidence and latest research; no production cleanup approval.

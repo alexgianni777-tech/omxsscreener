@@ -1,3 +1,4 @@
+import { SwedishResearch } from "../components/SwedishResearch";
 import { DailyCandidates } from "../components/DailyCandidates";
 import { SavedTop3 } from "../components/SavedTop3";
 import { MarketIntelSection } from "./dashboard";
@@ -430,7 +431,11 @@ export function Today() {
         <p className="mt-1 text-sm text-muted-foreground">Sparat officiellt urval, aktuella kandidater och utfall hålls isär.</p>
       </header>
       <MarketIntelSection />
-      <SavedTop3 />
+      <SwedishResearch />
+      <details className="rounded-xl border border-border bg-card" data-testid="details-saved-top3">
+        <summary className="cursor-pointer p-4 text-sm font-medium">Fullt sparat urval inklusive USA</summary>
+        <div className="border-t border-border p-2 sm:p-3"><SavedTop3 /></div>
+      </details>
       <details className="rounded-xl border border-border bg-card">
         <summary className="cursor-pointer p-4 text-sm font-medium">Challenge · registrerat modellkonto och riskinställningar</summary>
       {/* ── Challenge Progress ─────────────────────────────────────────────── */}
@@ -515,7 +520,9 @@ export function Today() {
 
       </details>
       {/* ── Today's Picks ─────────────────────────────────────────────────── */}
-      <div>
+      <details data-testid="details-session-workspace" className="rounded-xl border border-border bg-card p-3">
+        <summary className="cursor-pointer text-sm font-medium">Sessionsarbetsyta<span className="ml-2 text-xs font-normal text-muted-foreground">ändringsbar research, USA, statistik-picks, diagnostik och utfallsloggning</span></summary>
+        <div className="mt-3">
         <div className="flex items-center justify-between mb-3 px-1">
           <div>
             <div className="flex items-center gap-2">
@@ -998,7 +1005,8 @@ export function Today() {
             );
           })}
         </div>
-      </div>
+        </div>
+      </details>
 
       {/* ── No session state ──────────────────────────────────────────────── */}
       {!session && !loading && (

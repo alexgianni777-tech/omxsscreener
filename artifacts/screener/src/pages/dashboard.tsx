@@ -1,3 +1,4 @@
+import { SwedishResearch } from "../components/SwedishResearch";
 import { GroundZero } from "../components/GroundZero";
 import { SavedTop3 } from "../components/SavedTop3";
 import { ManualCatalysts } from "../components/ManualCatalysts";
@@ -91,9 +92,15 @@ export function Dashboard() {
 
       {/* Today's Session */}
       <MarketIntelSection />
+      <SwedishResearch />
+      <details className="rounded-lg border border-border bg-card" data-testid="details-current-selection">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Sparat urval inkl. USA, dagens session och aktuella versioner</summary>
+        <div className="border-t border-border p-2 sm:p-3 space-y-4">
       <SavedTop3 />
       <TodaySessionPanel />
       <DashboardLiveTop3 />
+        </div>
+      </details>
       <details className="rounded-lg border border-border bg-card" data-testid="details-manual-catalysts">
         <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Manuella katalysatorer</summary>
         <div className="border-t border-border p-2 sm:p-3"><ManualCatalysts /></div>
@@ -480,7 +487,7 @@ function TodaySessionPanel() {
                 >
                   {p.ticker.replace(/\.ST$/i, "")}
                   {p.signalSource === "edgeai" ? " · E" : p.signalSource === "telegram" ? " · T" : ""}
-                  {p.outcome === "WIN" ? " ✓" : p.outcome === "LOSS" ? " ✗" : ""}
+                  {p.outcome === "WIN" ? " · V" : p.outcome === "LOSS" ? " · F" : ""}
                 </span>
               ))}
             </div>

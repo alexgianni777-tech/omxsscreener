@@ -48,6 +48,7 @@ import type {
   PortfolioPositionRecord,
   PortfolioPositionUpdate,
   PortfolioResponse,
+  PruneUnusedCandidates200,
   QuoteResult,
   SessionDetail,
   SessionImport,
@@ -81,6 +82,77 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getPruneUnusedCandidatesUrl = () => {
+
+
+
+
+  return `/api/candidates/unused`
+}
+
+/**
+ * @summary Development-only manual cleanup of unreferenced candidates older than three days
+ */
+export const pruneUnusedCandidates = async ( options?: Parameters<typeof customFetch>[1]): Promise<PruneUnusedCandidates200> => {
+
+  return customFetch<PruneUnusedCandidates200>(getPruneUnusedCandidatesUrl(),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getPruneUnusedCandidatesMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pruneUnusedCandidates>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof pruneUnusedCandidates>>, TError,void, TContext> => {
+
+const mutationKey = ['pruneUnusedCandidates'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof pruneUnusedCandidates>>, void> = () => {
+
+
+          return  pruneUnusedCandidates(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PruneUnusedCandidatesMutationResult = NonNullable<Awaited<ReturnType<typeof pruneUnusedCandidates>>>
+
+    export type PruneUnusedCandidatesMutationError = ErrorType<void>
+
+    /**
+ * @summary Development-only manual cleanup of unreferenced candidates older than three days
+ */
+export const usePruneUnusedCandidates = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof pruneUnusedCandidates>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof pruneUnusedCandidates>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getPruneUnusedCandidatesMutationOptions(options));
+    }
 
 export const getGetGroundZeroUrl = () => {
 

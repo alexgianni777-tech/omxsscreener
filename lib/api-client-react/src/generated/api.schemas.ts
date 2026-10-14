@@ -1773,6 +1773,19 @@ export interface DashboardSummary {
  */
 export type AuthorizationSessionHeaderParameter = string;
 
+export type PruneUnusedCandidates200RetentionDays = typeof PruneUnusedCandidates200RetentionDays[keyof typeof PruneUnusedCandidates200RetentionDays];
+
+
+export const PruneUnusedCandidates200RetentionDays = {
+  NUMBER_3: 3,
+} as const;
+
+export type PruneUnusedCandidates200 = {
+  /** @minimum 0 */
+  deletedCount: number;
+  retentionDays: PruneUnusedCandidates200RetentionDays;
+};
+
 export type ListCandidatesParams = {
 category?: ListCandidatesCategory;
 outcome?: ListCandidatesOutcome;
