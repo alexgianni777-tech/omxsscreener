@@ -5,7 +5,7 @@ import { LiveEntryGuard } from "./LiveEntryGuard";
 import { dailySymbol, type DailyPick } from "../lib/dailyCandidates";
 import { edgeAiMetrics, type EdgeAICandidateMetrics } from "../lib/edgeAiMetrics";
 import { formatPrice } from "../lib/presentationNumbers";
-import { quoteLabels } from "../lib/researchQuote";
+import { quoteLabels, researchQuoteForMarket } from "../lib/researchQuote";
 
 export type ResearchSignal = EdgeAICandidateMetrics & {
   id: number; signalDate?: string | null; entryPrice: number; stopPrice: number; targetPrice: number;
@@ -21,9 +21,13 @@ const unknown = "okänd";
 export function ResearchCard({ pick, signal, dataDate, quote, warnings = [] }: {
   pick: DailyPick; signal?: ResearchSignal; dataDate: string | null; quote?: QuoteResult; warnings?: readonly string[];
 }) {
-  const importWarning = warnings.length ? warnings.join(" ") : signal?.importWarning;
+  // Comparing alternative plans is informational, not proof of a failed import.
+  const importWarning = [...new Set([
+    ...warnings.filter(w => w.startsWith("Källkonflikt")), signal?.importWarning,
+  ].filter(Boolean))].join(" ") || undefined;
   const m = signal ? edgeAiMetrics(signal) : null;
-  const q = quoteLabels(quote);
+  const checkedQuote = researchQuoteForMarket(pick.market, quote);
+  const q = quoteLabels(checkedQuote);
   const long = pick.direction === "LONG";
   return <li data-testid={`research-card-${pick.candidateId}`} className="min-w-0 rounded-md border border-border bg-background/70 p-3">
     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -55,7 +59,7 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [] }: {
       {signal?.price != null && <div className="text-muted-foreground">Screeningens referenskurs: {formatPrice(signal.price)} · datadag {dataDate ?? unknown}</div>}
     </div>
     <div className="mt-2 text-xs" data-testid={`guard-${pick.candidateId}`}>
-      <LiveEntryGuard plan={pick} quote={quote ?? null}
+    <LiveEntryGuard plan={pick} quote={checkedQuote?.error ? null : checkedQuote ?? null}
         signal={{ signalDate: pick.signalDate, signalSource: pick.source, signalAgeBars: signal?.signalAgeBars, importWarning }} />
     </div>
     <p className="mt-1 text-[10px] text-muted-foreground">Kurs vid nivå bekräftar inte köp. Eget beslut efter Avanza och ChatGPT.</p>

@@ -52,3 +52,11 @@ Earlier compact Top 3 checks did not cover this separate session view.
 
 **How to apply:** Include the session view when checking price-field layout,
 on both a narrow phone and a wide screen with the actual surrounding panels.
+
+### Quote instrument identity
+
+A fresh timestamp does not prove that a quote belongs to the signal's instrument and market. Never use a quote from another listing as evidence of a missed entry or broken plan.
+
+**Why:** An authenticated UI check surfaced a Swedish EQT plan alongside a quote identified only by Yahoo's unsuffixed EQT symbol. The time was current, but the listing did not match the Swedish research context.
+
+**How to apply:** Keep quote values and original plans unchanged, mark uncertain instrument linkage visibly, and withhold entry confirmation. Any later source/mapping repair must handle both Swedish and US instruments without globally redirecting a shared ticker.

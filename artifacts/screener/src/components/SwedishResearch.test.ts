@@ -4,8 +4,9 @@ import React from "react";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Router } from "wouter";
-import { SwedishResearchContent } from "./SwedishResearch";
-import { quoteLabels } from "../lib/researchQuote";
+import { SwedishResearchContent, allowPreliminaryResearch } from "./SwedishResearch";
+import { quoteLabels, researchQuoteForMarket } from "../lib/researchQuote";
+import { ResearchCard } from "./ResearchCard";
 const pick = (id: number, direction: string, market = "SE") => ({ candidateId: id, ticker: `T${id}`, source: "edgeai", market, direction,
   category: "MOMENTUM", rank: id, score: 1, signalDate: "2026-10-09", entryPrice: 100, stopPrice: 95, targetPrice: 110, rr: 2,
   decision: { status: "WAIT", reasons: [] } });
@@ -15,6 +16,47 @@ const selection: any = { sessionId: 7, date: "2026-10-09", kind: "RECOMMENDATION
   dataDates: [{ source: "edgeai", signalDate: "2026-10-09", dataDate: "2026-10-08" }] };
 const render = (props: any) => renderToStaticMarkup(React.createElement(Router, { ssrPath: "/" },
   React.createElement(SwedishResearchContent, { selection, today: "2026-10-12", ...props })));
+test("failed or unfinished saved-selection lookup cannot promote preliminary research", () => {
+  assert.equal(allowPreliminaryResearch(false, null), false);
+  assert.equal(allowPreliminaryResearch(false, undefined), false);
+  assert.equal(allowPreliminaryResearch(true, undefined), false);
+  assert.equal(allowPreliminaryResearch(true, selection), false);
+  assert.equal(allowPreliminaryResearch(true, null), true);
+});
+test("comparison of alternative plans does not replace a usable quote with a fabricated import error", () => {
+  const now = new Date();
+  const signalDate = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm" }).format(now);
+  const html = renderToStaticMarkup(React.createElement(ResearchCard, {
+    pick: { ...pick(1, "LONG"), signalDate }, dataDate: signalDate,
+    warnings: ["Flera planer/riktningar för aktien – jämför innan beslut"],
+    quote: { ticker: "T1", yahooTicker: "T1.ST", livePrice: 100,
+      marketState: "REGULAR", asOf: now.toISOString() } as any,
+  }));
+  assert.ok(html.includes("Flera planer/riktningar"));
+  assert.ok(html.includes('data-entry-status="READY"'));
+  assert.ok(html.includes("inte köpbesked"));
+});
+test("a US Yahoo symbol cannot be shown as a verified current price for a Swedish EQT plan", () => {
+  const quote: any = { ticker: "EQT", yahooTicker: "EQT", livePrice: 53.82,
+    marketState: "REGULAR", asOf: new Date().toISOString() };
+  const original = JSON.stringify(quote);
+  const checked = researchQuoteForMarket("SE", quote);
+  assert.equal(checked!.livePrice, 53.82);
+  assert.ok(checked!.error?.includes("Stockholmsmarknad"));
+  assert.equal(quoteLabels(checked)!.price, "Kurs ej verifierad");
+  assert.equal(JSON.stringify(quote), original);
+  assert.equal(researchQuoteForMarket("US", quote), quote);
+  const swedish = { ...quote, yahooTicker: "EQT.ST" };
+  assert.equal(researchQuoteForMarket("SE", swedish), swedish);
+  const sel = { ...selection, revision: { ...selection.revision, picks: [{
+    ...pick(8, "SHORT"), ticker: "EQT", entryPrice: 289.5, stopPrice: 296.48, targetPrice: 272.04,
+  }] } };
+  const html = render({ selection: sel, quotes: { EQT: quote } });
+  assert.ok(html.includes("Kurs ej verifierad"));
+  assert.ok(html.includes("Yahoo-symbol EQT"));
+  assert.ok(html.includes('data-entry-status="UNKNOWN"'));
+  assert.ok(!html.includes("53,82"));
+});
 test("max 3 long + existing shorts only, no invented signals, US excluded from prominent surface", () => {
   const html = render({});
   assert.equal((html.match(/data-testid="research-card-/g) ?? []).length, 4);

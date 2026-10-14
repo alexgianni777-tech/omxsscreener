@@ -73,6 +73,11 @@ export function pickWarnings(p: DailyPick, reports: readonly SessionSourceReport
 }
 const HEAD = (d: string) => d === "LONG" ? "Köp / Long" : "Sälj / Short";
 
+/** An API failure is not evidence that no saved valid selection exists. */
+export function allowPreliminaryResearch(success: boolean, selection: unknown) {
+  return success && selection === null;
+}
+
 /** Shown only when no saved valid selection exists. Existing ranked live selection, unchanged. */
 export function PreliminaryResearchContent({ picks, sessionDate, signals = [], quotes = {}, onRefresh, refreshing = false, quoteError = false }: {
   picks: readonly DailyPick[]; sessionDate: string; signals?: readonly ResearchSignal[]; quotes?: Record<string, QuoteResult>;
@@ -112,10 +117,11 @@ export function PreliminaryResearchContent({ picks, sessionDate, signals = [], q
 export function SwedishResearch() {
   const last = useGetLastValidTop3({ query: { queryKey: getGetLastValidTop3QueryKey(), retry: false } });
   const s = last.data?.selection ?? null;
-  const sessions = useListSessions({ query: { queryKey: ["/api/screener/sessions"], enabled: !last.isLoading && !s } });
-  const id = s?.sessionId ?? (!last.isLoading ? sessions.data?.[0]?.id ?? 0 : 0);
+  const canUsePreliminary = allowPreliminaryResearch(last.isSuccess, last.data?.selection);
+  const sessions = useListSessions({ query: { queryKey: ["/api/screener/sessions"], enabled: canUsePreliminary } });
+  const id = s?.sessionId ?? (canUsePreliminary ? sessions.data?.[0]?.id ?? 0 : 0);
   const detail = useGetSession(id, { query: { enabled: id > 0, queryKey: getGetSessionQueryKey(id) } });
-  const prelim: DailyPick[] = !s && detail.data ? (detail.data.top3LiveSelection?.picks ?? []).flatMap(p => {
+  const prelim: DailyPick[] = canUsePreliminary && detail.data ? (detail.data.top3LiveSelection?.picks ?? []).flatMap(p => {
     const c = detail.data!.candidates.find(x => x.id === p.candidateId);
     return c ? [{ candidateId: p.candidateId, rank: p.rank, market: p.market ?? "", direction: p.direction, source: p.signalSource ?? "okänd",
       ticker: c.ticker, signalDate: c.signalDate, category: c.category, entryPrice: c.entryPrice, stopPrice: c.stopPrice, targetPrice: c.targetPrice, rr: c.rr }] : [];
@@ -125,15 +131,16 @@ export function SwedishResearch() {
   const quotes = useGetQuotes(params, { query: { enabled: false, retry: false, queryKey: getGetQuotesQueryKey(params) } });
   const map: Record<string, QuoteResult> = {};
   if (!quotes.isError) quotes.data?.forEach(q => { map[q.ticker] = q; });
-  return <section data-testid="swedish-research" aria-busy={last.isLoading} className="rounded-lg border border-primary/30 bg-card p-3 sm:p-4 shadow-sm">
+  const loading = last.isLoading || (canUsePreliminary && (sessions.isLoading || detail.isLoading));
+  return <section data-testid="swedish-research" aria-busy={loading} className="rounded-lg border border-primary/30 bg-card p-3 sm:p-4 shadow-sm">
     {s ? <SwedishResearchContent selection={s} signals={(detail.data?.candidates ?? []) as ResearchSignal[]} reports={detail.data?.sourceReports ?? []} quotes={map}
       today={stockholmToday()} onRefresh={params.tickers ? () => void quotes.refetch() : undefined}
       refreshing={quotes.isFetching} quoteError={quotes.isError} />
       : prelim.length && detail.data ? <PreliminaryResearchContent picks={prelim} sessionDate={detail.data.date}
         signals={detail.data.candidates as ResearchSignal[]} quotes={map}
         onRefresh={params.tickers ? () => void quotes.refetch() : undefined} refreshing={quotes.isFetching} quoteError={quotes.isError} />
-      : last.isLoading ? <div className="space-y-2"><div className="h-5 w-48 rounded bg-muted" /><div className="h-32 rounded bg-muted" /></div>
-      : <p className="text-sm">Ingen giltig sparad Top 3 hittades. Inga picks gissas.</p>}
+      : loading ? <div className="space-y-2"><div className="h-5 w-48 rounded bg-muted" /><div className="h-32 rounded bg-muted" /></div>
+      : <p className="text-sm">{last.isError ? "Inget urval kunde verifieras." : "Ingen giltig sparad Top 3 hittades. Inga picks gissas."}</p>}
     {last.isError && <p role="alert" className="mt-2 text-xs text-amber-700">Status kunde inte hämtas.{" "}
       <button onClick={() => last.refetch()} className="underline" data-testid="button-retry-research">Försök igen</button></p>}
     {last.data?.warnings.map(w => <p key={w} role="status" className="mt-2 text-xs text-amber-700">{w}</p>)}
