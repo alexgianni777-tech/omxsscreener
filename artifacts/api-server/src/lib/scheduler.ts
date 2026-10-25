@@ -7,7 +7,7 @@
  *  - This gracefully handles server restarts: if the server came up after
  *    06:15 and no session exists, it imports immediately on the first tick.
  */
-import { db, screenerSessionsTable } from "@workspace/db";
+import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import YahooFinance from "yahoo-finance2";
@@ -53,10 +53,17 @@ function todayUtc(): string {
 
 async function sessionExistsForDate(date: string): Promise<boolean> {
   const rows = await db
-    .select({ id: screenerSessionsTable.id })
+    .select({ id: screenerSessionsTable.id, source: screenerSessionsTable.source })
     .from(screenerSessionsTable)
     .where(eq(screenerSessionsTable.date, date));
-  return rows.length > 0;
+  if (rows.length === 0) return false;
+  const candidates = await db
+    .select({ origin: candidatesTable.origin })
+    .from(candidatesTable)
+    .where(eq(candidatesTable.sessionId, rows[0].id));
+  // A legacy/manual import must not prevent the scheduled EdgeAI merge.
+  return candidates.some((c) => c.origin === "edgeai" ||
+    (c.origin == null && rows[0].source === "edgeai"));
 }
 
 function mapCategory(dir: string, setupName: string): "MOMENTUM" | "SQUEEZE" | "STUDS" | "WEAKEST" {
