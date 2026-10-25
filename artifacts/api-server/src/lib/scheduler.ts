@@ -81,10 +81,28 @@ async function fetchOmxsMarketWeather(): Promise<{
   if (history.length === 0) return { omxsValue: 0, perf5d: 0, perf1m: 0, perf3m: 0, marketRsi: 0 };
 
   const omxsValue = history[history.length - 1].close;
+  // Wilder RSI(14) using completed daily closes; never mislabel a placeholder zero as RSI.
+  let marketRsi = 0;
+  if (history.length >= 15) {
+    const closes = history.map((bar) => bar.close);
+    let gains = 0, losses = 0;
+    for (let i = 1; i <= 14; i++) {
+      const change = closes[i] - closes[i - 1];
+      gains += Math.max(change, 0);
+      losses += Math.max(-change, 0);
+    }
+    let avgGain = gains / 14, avgLoss = losses / 14;
+    for (let i = 15; i < closes.length; i++) {
+      const change = closes[i] - closes[i - 1];
+      avgGain = (avgGain * 13 + Math.max(change, 0)) / 14;
+      avgLoss = (avgLoss * 13 + Math.max(-change, 0)) / 14;
+    }
+    marketRsi = avgLoss === 0 ? (avgGain === 0 ? 50 : 100) : 100 - 100 / (1 + avgGain / avgLoss);
+  }
   const perf5d  = history.length >= 6  ? ((omxsValue - history[history.length - 6].close)  / history[history.length - 6].close)  * 100 : 0;
   const perf1m  = history.length >= 22 ? ((omxsValue - history[history.length - 22].close) / history[history.length - 22].close) * 100 : 0;
   const perf3m  = history.length >= 64 ? ((omxsValue - history[history.length - 64].close) / history[history.length - 64].close) * 100 : 0;
-  return { omxsValue, perf5d, perf1m, perf3m, marketRsi: 0 };
+  return { omxsValue, perf5d, perf1m, perf3m, marketRsi };
 }
 
 function mapSetup(s: any, rankCounter: Record<string, number>) {
