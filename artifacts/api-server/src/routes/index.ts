@@ -21,14 +21,20 @@ import { ImportDataError } from "../lib/importReport";
 import { recordImportFailure } from "../lib/importFailure";
 import { isAcceptedSignalDate, stockholmSignalDate } from "../lib/signalDatePolicy";
 import { requireAdministrator, requireAuthentication } from "../middlewares/authMiddleware";
+import { checkEdgeAiAfterWake } from "../lib/scheduler";
+import { createEdgeAiSyncRouter } from "./edgeAiSync";
+import { createImportWakeMiddleware } from "../middlewares/importWake";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(authRouter);
 router.use(telegramImportRouter); // unauthenticated — uses its own bearer-token check
+router.use(createEdgeAiSyncRouter(checkEdgeAiAfterWake));
 router.use(requireAuthentication);
 router.use(requireAdministrator);
+// Public health probes and rejected users cannot start a wake check.
+router.use(createImportWakeMiddleware(checkEdgeAiAfterWake));
 router.use(groundZeroRouter);
 router.use(unusedCandidatesRouter);
 router.use(screenerRouter);

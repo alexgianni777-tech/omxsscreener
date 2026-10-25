@@ -4,12 +4,15 @@ export type PriceBar = {
 };
 
 /**
- * Wilder RSI(14) with an extended warm-up. The extra bars avoid the
- * window-roll artifact where RSI moves in the opposite direction to price.
+ * Wilder RSI: seed with `period` changes, then smooth every remaining bar.
+ * Upstream mini-charts have 22 bars; standard RSI(14) requires 15, not 29.
+ * Missing prices are not silently bridged into a fabricated continuous series.
  */
 export function calculateWilderRsi(closes: number[], period = 14): number | null {
-  const valid = closes.filter((close) => Number.isFinite(close) && close > 0);
-  if (valid.length < period * 2 + 1) return null;
+  if (!Number.isInteger(period) || period < 1 ||
+      closes.length < period + 1 ||
+      closes.some((close) => !Number.isFinite(close) || close <= 0)) return null;
+  const valid = closes;
 
   let gains = 0;
   let losses = 0;
@@ -29,7 +32,7 @@ export function calculateWilderRsi(closes: number[], period = 14): number | null
     averageLoss = (averageLoss * (period - 1) + loss) / period;
   }
 
-  if (averageLoss === 0) return 100;
+  if (averageLoss === 0) return averageGain === 0 ? 50 : 100;
   const relativeStrength = averageGain / averageLoss;
   return Math.round((100 - 100 / (1 + relativeStrength)) * 10) / 10;
 }

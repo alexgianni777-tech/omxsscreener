@@ -37,7 +37,11 @@ Stop always = entry - 1.2×ATR. R/R = targetMult / 1.2 (e.g., 2.0/1.2 ≈ 1.67).
 **Why:** Fixed +1% target with 1.2×ATR stop gave R/R 0.24–0.55 on all OMXS30 stocks (ATR 1.5–3.3%). Impossible to have positive expectancy. ATR-relative targets give consistent ~1.67 R/R.
 
 ## RSI implementation
-Switched from simple 14-bar window average to Wilder's EMA warmup (2026-08-12). Requires closes.length >= 29. Eliminates "RSI rises when price falls" window-rollover artifact.
+Use standard Wilder seeding and smoothing, not a rolling average of gains/losses. Accept sufficient compact upstream history rather than requiring a longer warm-up than the producer supplies.
+
+**Why:** EdgeAI's compact charts supplied enough history for standard RSI but not the former extended warm-up, silently leaving signal RSI missing and preventing the oversold-short check from using it.
+
+**How to apply:** Calculate only through the original signal bar. Insufficient/invalid history stays missing; a flat series is neutral. Do not add quote polling or rewrite historical trades just to fill missing RSI.
 
 ## EdgeAI staleness guard
 EdgeAI imports fetch the canonical GitHub repository file, rather than GitHub Pages, because the Pages endpoint can serve an outdated `data.json` after a fresh commit. Manual imports may use a recent prior trading-day snapshot with its original date; invalid or excessively old data remains blocked.

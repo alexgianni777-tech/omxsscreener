@@ -8,7 +8,7 @@
  *    09:00 Stockholm time and no session exists, it imports immediately.
  */
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { makeImportReport, ImportDataError } from "./importReport";
 import { recordImportFailure } from "./importFailure";
 import { isolateEdgeAiPlans } from "./edgeAiPlanIsolation";
@@ -21,7 +21,7 @@ import { edgeAiSessionDate, fetchFreshEdgeAiData } from "./edgeAiSource";
 import { AUTOMATIC_EARNINGS_CHECK_ENABLED } from "./screeningReview";
 import {
   lockScreenerSession,
-  mergeCandidateInputs,
+  preserveCandidateInputs,
   synchronizeCandidates,
 } from "./candidateSynchronization";
 import { aggregateSessionSource } from "./candidateSynchronizationPolicy";
@@ -30,6 +30,7 @@ import { calendarDaysUntil } from "./marketCalendar";
 import { mapEdgeAiSetup } from "./edgeAiMapping";
 import { withRetry } from "./retry";
 import { alreadyAcceptedReport } from "./scheduledReportPolicy";
+import { createImportCheckCoordinator } from "./importCheckCoordinator";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -76,13 +77,17 @@ export let schedulerStatus: {
   nextCheckAt: null,
 };
 
-async function sessionHasReport(date: string, report: ReturnType<typeof makeImportReport>): Promise<boolean> {
-  const [session] = await db
+async function sessionHasReport(
+  date: string,
+  report: ReturnType<typeof makeImportReport>,
+  client: Pick<typeof db, "select"> = db,
+): Promise<boolean> {
+  const sessions = await client
     .select({ sourceReports: screenerSessionsTable.sourceReports })
     .from(screenerSessionsTable)
-    .where(eq(screenerSessionsTable.date, date));
-  if (!session) return false;
-  return alreadyAcceptedReport(session.sourceReports, report, date);
+    .where(inArray(screenerSessionsTable.date, [date, report.signalDate]));
+  // D-1 content already accepted on its original day is not a new Monday report.
+  return sessions.some(session => alreadyAcceptedReport(session.sourceReports, report, date));
 }
 
 async function runImport(date: string): Promise<boolean> {
@@ -159,8 +164,11 @@ async function runImport(date: string): Promise<boolean> {
   );
 
   try {
-    await db.transaction(async (tx) => {
+    const imported = await db.transaction(async (tx) => {
       await lockScreenerSession(tx, date);
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${"edgeai-report:" + importReport.fingerprint}))`);
+      // Another instance may have accepted the report during Yahoo enrichment.
+      if (await sessionHasReport(date, importReport, tx)) return false;
       const [alreadyStored] = await tx
         .select({ id: screenerSessionsTable.id, source: screenerSessionsTable.source })
         .from(screenerSessionsTable)
@@ -173,7 +181,7 @@ async function runImport(date: string): Promise<boolean> {
         const { candidates: synchronizedCandidates, diff, duplicateReport } = await synchronizeCandidates(
           tx,
           alreadyStored.id,
-          mergeCandidateInputs(
+      preserveCandidateInputs(
             mapped,
             existingCandidates.map(({ id, createdAt, ...candidate }) => candidate),
           ),
@@ -214,7 +222,7 @@ async function runImport(date: string): Promise<boolean> {
           { date, sessionId: alreadyStored.id, seSetups: seSetups.length, usSetups: usSetups.length },
           "[scheduler] EdgeAI merged into existing session",
         );
-        return;
+        return !duplicateReport;
       }
       const [inserted] = await tx
         .insert(screenerSessionsTable)
@@ -250,8 +258,9 @@ async function runImport(date: string): Promise<boolean> {
         { date, sessionId: inserted.id, seSetups: seSetups.length, usSetups: usSetups.length, omxsValue: mw.omxsValue },
         "[scheduler] Auto-import complete",
       );
+      return true;
     });
-    return true;
+    return imported;
   } catch (err: any) {
     if (err instanceof ImportDataError && err.report) {
       try { await recordImportFailure(date, err.report, err.message); }
@@ -275,15 +284,11 @@ async function evaluateTop3Cutoff(date: string, now: Date): Promise<void> {
 
 
 
-let tickInFlight = false;
+export type EdgeAiCheckResult = {
+  status: "IMPORTED" | "UNCHANGED" | "SKIPPED" | "FAILED";
+};
 
-async function tick() {
-  if (tickInFlight) {
-    logger.warn("[scheduler] Skipping overlapping tick");
-    return;
-  }
-  tickInFlight = true;
-  try {
+async function runCheck(): Promise<EdgeAiCheckResult> {
   const now = new Date();
   schedulerStatus.lastChecked = now.toISOString();
 
@@ -294,7 +299,7 @@ async function tick() {
       schedulerStatus.lastError = err.message ?? String(err);
       logger.warn({ err: err.message }, "[scheduler] Top 3 source-readiness evaluation failed");
     }
-  if (stockholm.weekday === "Sat" || stockholm.weekday === "Sun") return;
+   if (stockholm.weekday === "Sat" || stockholm.weekday === "Sun") return { status: "SKIPPED" };
 
   // ── Daily import (Mon–Fri from 09:00 Europe/Stockholm) ──────────────────────
   const marketIsOpen =
@@ -306,15 +311,25 @@ async function tick() {
         const imported = await runImport(today);
         if (imported) schedulerStatus.lastImported = today;
         schedulerStatus.lastError = null;
+         return { status: imported ? "IMPORTED" : "UNCHANGED" };
       } catch (err: any) {
         schedulerStatus.lastError = err.message ?? String(err);
         logger.warn({ err: err.message }, "[scheduler] Auto-import failed");
+         return { status: "FAILED" };
       }
     }
   }
-  } finally {
-    tickInFlight = false;
-  }
+  return { status: "SKIPPED" };
+}
+
+// Shared by startup, existing timer, authenticated page reads and the external
+// wake hook. Sharing a pending promise prevents premature webhook success.
+export const checkEdgeAiAfterWake = createImportCheckCoordinator(runCheck, CHECK_INTERVAL_MS);
+function tick() {
+  void checkEdgeAiAfterWake().catch(err => {
+    schedulerStatus.lastError = "Import check failed";
+    logger.warn({ err: err instanceof Error ? err.message : "unknown" }, "[scheduler] Check failed");
+  });
 }
 
 export function startScheduler() {

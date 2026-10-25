@@ -23,3 +23,4 @@
 - [PG transaction sequencing](pg-transaction-queries.md) — serialize queries on a shared transaction client; concurrent client.query is deprecated.
 - [Protected UI verification](protected-ui-verification.md) — wait for auth loading before judging blank captures; browser notebook resets can erase the signed-in context.
 - [Unused candidate retention](candidate-retention-policy.md) — user chose three days without an extra preview; preserve trading evidence and latest research; no production cleanup approval.
+- [Autoscale import recovery](autoscale-import-recovery.md) — await wake checks while CPU is allocated; durable receipts prevent restart duplicates; local workflow ≠ active schedule.

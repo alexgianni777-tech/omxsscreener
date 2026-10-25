@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { CandlestickChart } from "../components/CandlestickChart";
 import { AddToPortfolioModal } from "../components/AddToPortfolioModal";
-import { edgeAiMetrics, edgeAiScore } from "../lib/edgeAiMetrics";
+import { edgeAiMetrics, edgeAiScore, edgeAiIndicators } from "../lib/edgeAiMetrics";
 import { LiveTop3Preview } from "../components/LiveTop3Preview";
 import { CurrentTop3Selection } from "../components/CurrentTop3Selection";
 import { RiskPanel } from "../components/RiskPanel";
@@ -715,6 +715,7 @@ function CandidateRow({
     : null;
 
   const edgeMetrics = edgeAiMetrics(candidate);
+  const measured = edgeAiIndicators(candidate);
   const score = edgeAiScore(candidate);
   const decision = candidate.decision;
 
@@ -879,10 +880,16 @@ function CandidateRow({
           )}
           <div>
             <span className="text-muted-foreground block text-[10px]">{isEdgeAI ? "1R" : "ATR"}</span>
-            <span className="font-mono">{formatNumber(candidate.atr)}</span>
+            <span className="font-mono">{isEdgeAI
+              ? measured.oneR == null ? "saknas" : formatNumber(measured.oneR)
+              : candidate.atr > 0 ? formatNumber(candidate.atr) : "saknas"}</span>
           </div>
           {isEdgeAI ? (
             <>
+              <div>
+                <span className="text-muted-foreground block text-[10px]">RSI · signal</span>
+                <span className="font-mono">{measured.rsi == null ? "saknas" : formatNumber(measured.rsi, 1)}</span>
+              </div>
               <div>
                 <span className="text-muted-foreground block text-[10px]">Sample N</span>
                 <span className="font-mono">{edgeMetrics.sampleN == null ? "okänd" : Math.round(edgeMetrics.sampleN)}</span>
@@ -897,7 +904,7 @@ function CandidateRow({
               </div>
               <div>
                 <span className="text-muted-foreground block text-[10px]">VOL</span>
-                <span className="font-mono">{candidate.volMultiplier > 0
+                <span className="font-mono">{measured.volume != null
                   ? `${candidate.volMultiplier.toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}x · stängd ${candidate.volumeAsOf || "datum saknas"}${candidate.volumeAsOf && candidate.signalDate && candidate.volumeAsOf < candidate.signalDate ? " (före signal)" : ""}`
                   : "saknas"}</span>
               </div>

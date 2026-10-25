@@ -26,7 +26,7 @@ import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "../lib/omxs30TickerMap";
 import { fetchCompletedVolumeBatch } from "../lib/completedVolumeBatch";
 import { calendarDaysBetween } from "../lib/marketCalendar";
-import { timingSafeEqual } from "node:crypto";
+import { validImportBearer } from "../lib/importBearer";
 import {
   deduplicateCandidates,
   lockScreenerSession,
@@ -144,14 +144,7 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
     res.status(503).json({ error: "TELEGRAM_IMPORT_SECRET not configured on server" });
     return;
   }
-  const authHeader = req.headers["authorization"] ?? "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-  const received = Buffer.from(token);
-  const expected = Buffer.from(secret);
-  if (
-    received.length !== expected.length ||
-    !timingSafeEqual(received, expected)
-  ) {
+  if (!validImportBearer(req.headers.authorization, secret)) {
     res.status(401).json({ error: "Invalid or missing bearer token" });
     return;
   }

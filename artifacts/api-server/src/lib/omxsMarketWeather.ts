@@ -55,6 +55,10 @@ export async function fetchOmxsMarketWeather(
   }
 
   const closes = bars.map((bar) => bar.close);
+  const marketRsi = calculateWilderRsi(closes);
+  if (marketRsi == null) {
+    throw new Error(`OMXS30 RSI history insufficient for ${dataAsOf}; no placeholder RSI stored`);
+  }
   const omxsValue = closes[closes.length - 1];
   const performance = (days: number) =>
     closes.length > days ? ((omxsValue - closes[closes.length - 1 - days]) /
@@ -65,6 +69,6 @@ export async function fetchOmxsMarketWeather(
     perf5d: performance(5),
     perf1m: performance(21),
     perf3m: performance(63),
-    marketRsi: calculateWilderRsi(closes) ?? 0,
+    marketRsi,
   };
 }

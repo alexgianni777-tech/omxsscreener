@@ -23,6 +23,23 @@ test("partial legacy machine report never drops existing same-source proposals",
   assert.deepEqual(retained.map((candidate) => candidate.ticker), ["NEWER", "OLDER"]);
   assert.deepEqual(pendingRemovalIdentities([old], retained), []);
 });
+
+test("scheduled recovery of a partial EdgeAI report preserves legacy, Telegram, manual, omitted and registered outcomes", async () => {
+  const existing = [
+    syncCandidate(1, "LEGACY", { signalSource: null }),
+    syncCandidate(2, "TELEGRAM", { signalSource: "telegram" }),
+    syncCandidate(3, "MANUAL", { signalSource: "manual" }),
+    syncCandidate(4, "OMITTED"),
+    syncCandidate(5, "RECORDED", { outcome: "WIN", realizedR: 2, exitPrice: 110 }),
+  ];
+  const recorded = structuredClone(existing[4]);
+  const fresh = syncCandidate(6, "NEW");
+  const incoming = preserveCandidateInputs([fresh], existing);
+  await synchronizeCandidates(synchronizationTx(existing, [], incoming), 1, incoming);
+  assert.deepEqual(existing.map(c => c.ticker).sort(),
+    ["LEGACY","TELEGRAM","MANUAL","OMITTED","RECORDED","NEW"].sort());
+  assert.deepEqual(existing.find(c => c.ticker === "RECORDED"), recorded);
+});
 import { reviewCandidate } from "./screeningReview.ts";
 import { top3CutoffForDate } from "./top3SelectionPolicyCore.ts";
 
