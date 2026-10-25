@@ -83,6 +83,23 @@ router.post(
       }) as Array<{ close: number }>;
       if (history.length > 0) {
         omxsValue = history[history.length - 1].close;
+        // Compute Wilder RSI(14) from daily closes rather than returning a placeholder zero.
+        if (history.length >= 15) {
+          const closes = history.map((bar) => bar.close);
+          let gains = 0, losses = 0;
+          for (let i = 1; i <= 14; i++) {
+            const change = closes[i] - closes[i - 1];
+            gains += Math.max(change, 0);
+            losses += Math.max(-change, 0);
+          }
+          let avgGain = gains / 14, avgLoss = losses / 14;
+          for (let i = 15; i < closes.length; i++) {
+            const change = closes[i] - closes[i - 1];
+            avgGain = (avgGain * 13 + Math.max(change, 0)) / 14;
+            avgLoss = (avgLoss * 13 + Math.max(-change, 0)) / 14;
+          }
+          marketRsi = avgLoss === 0 ? (avgGain === 0 ? 50 : 100) : 100 - 100 / (1 + avgGain / avgLoss);
+        }
         if (history.length >= 6)  perf5d  = ((omxsValue - history[history.length - 6].close)  / history[history.length - 6].close)  * 100;
         if (history.length >= 22) perf1m  = ((omxsValue - history[history.length - 22].close) / history[history.length - 22].close) * 100;
         if (history.length >= 64) perf3m  = ((omxsValue - history[history.length - 64].close) / history[history.length - 64].close) * 100;
