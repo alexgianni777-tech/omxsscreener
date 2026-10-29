@@ -1709,6 +1709,48 @@ export interface QuoteResult {
   error?: string | null;
 }
 
+export interface EarningsIntradayCandle {
+  timestamp: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  /** @nullable */
+  volume: number | null;
+}
+
+export type EarningsIntradayResponseMarket = typeof EarningsIntradayResponseMarket[keyof typeof EarningsIntradayResponseMarket];
+
+
+export const EarningsIntradayResponseMarket = {
+  SE: 'SE',
+  US: 'US',
+} as const;
+
+export type EarningsIntradayResponseStatus = typeof EarningsIntradayResponseStatus[keyof typeof EarningsIntradayResponseStatus];
+
+
+export const EarningsIntradayResponseStatus = {
+  AVAILABLE: 'AVAILABLE',
+  MISSING: 'MISSING',
+  CONFLICT: 'CONFLICT',
+} as const;
+
+export interface EarningsIntradayResponse {
+  ticker: string;
+  reportDate: string;
+  market: EarningsIntradayResponseMarket;
+  timezone: string;
+  source: string;
+  fetchedAt: string;
+  status: EarningsIntradayResponseStatus;
+  /** @nullable */
+  asOf: string | null;
+  candles: EarningsIntradayCandle[];
+  /** @nullable */
+  reason: string | null;
+}
+
 /**
  * Recorded outcome method; TIME_EXIT is classified as a win, loss, or flat result by the sign of r.
  */
@@ -1827,6 +1869,20 @@ export type GetQuotesParams = {
  */
 tickers: string;
 };
+
+export type GetEarningsIntradayParams = {
+ticker: string;
+reportDate: string;
+market: GetEarningsIntradayMarket;
+};
+
+export type GetEarningsIntradayMarket = typeof GetEarningsIntradayMarket[keyof typeof GetEarningsIntradayMarket];
+
+
+export const GetEarningsIntradayMarket = {
+  SE: 'SE',
+  US: 'US',
+} as const;
 
 export type BeginBrowserLoginParams = {
 returnTo?: string;

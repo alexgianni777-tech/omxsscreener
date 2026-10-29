@@ -433,6 +433,49 @@ paths:
                 items:
                   $ref: "#/components/schemas/QuoteResult"
 
+  /screener/earnings-screener/intraday:
+    get:
+      operationId: getEarningsIntraday
+      tags: [sessions]
+      summary: Fetch one report day's actual Yahoo Finance minute candles on demand
+      parameters:
+        - name: ticker
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: reportDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: market
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [SE, US]
+      responses:
+        "200":
+          description: Actual minute candles for the exchange-local report day, or an explicit missing/conflict status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EarningsIntradayResponse"
+        "400":
+          description: Invalid ticker, market or report date
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Historical minute data provider failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /dashboard/summary:
     get:
       operationId: getDashboardSummary
@@ -2052,6 +2095,55 @@ components:
           type: ["number", "null"]
           description: Calendar days until the next earnings date; negative means it has passed
         error:
+          type: ["string", "null"]
+
+    EarningsIntradayCandle:
+      type: object
+      required: [timestamp, open, high, low, close, volume]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        open:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        close:
+          type: number
+        volume:
+          type: ["number", "null"]
+    EarningsIntradayResponse:
+      type: object
+      required: [ticker, reportDate, market, timezone, source, fetchedAt, status, asOf, candles, reason]
+      properties:
+        ticker:
+          type: string
+        reportDate:
+          type: string
+          format: date
+        market:
+          type: string
+          enum: [SE, US]
+        timezone:
+          type: string
+        source:
+          type: string
+        fetchedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [AVAILABLE, MISSING, CONFLICT]
+        asOf:
+          type: ["string", "null"]
+          format: date-time
+        candles:
+          type: array
+          items:
+            $ref: "#/components/schemas/EarningsIntradayCandle"
+        reason:
           type: ["string", "null"]
 
     EquityCurvePoint:

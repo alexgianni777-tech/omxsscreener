@@ -3,6 +3,7 @@ import { useState } from "react";
 import { TrendingUp, TrendingDown, CalendarDays, AlertTriangle, RefreshCw, Info, CandlestickChart as CandlestickIcon, ArrowUpDown } from "lucide-react";
 import { formatNumber, formatPercent } from "../lib/utils";
 import { CandlestickChart } from "../components/CandlestickChart";
+import { EarningsReaction, type EarningsReactionData } from "../components/EarningsReaction";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -21,9 +22,15 @@ interface EarningsStock {
   display: string;
   market: "SE" | "US";
   earningsDate: string | null;
+  reportDate: string | null;
+  earningsTimestamp: string | null;
   earningsInDays: number | null;
   livePrice: number | null;
   changePct: number | null;
+  marketDataAsOf: string | null;
+  priceDataAsOf: string | null;
+  priceHistoryStatus: "CURRENT" | "STALE" | "UNKNOWN";
+  reportReaction: EarningsReactionData;
   nextEpsEstimate: number | null;
   beatRate: number | null;
   avgSurprisePct: number | null;
@@ -169,8 +176,8 @@ export function Earnings() {
           <p className="text-xs text-muted-foreground">
             {sorted.length} bolag hittade · uppdaterad {new Date(data.generatedAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
           </p>
-          {sorted.map((stock) => (
-            <EarningsCard key={stock.yahooTicker} stock={stock} />
+            {sorted.map((stock) => (
+              <EarningsCard key={stock.yahooTicker} stock={stock} pageFetchedAt={data.generatedAt} />
           ))}
         </div>
       )}
@@ -179,7 +186,7 @@ export function Earnings() {
 }
 
 // ── Card ──────────────────────────────────────────────────────────────────────
-function EarningsCard({ stock }: { stock: EarningsStock }) {
+function EarningsCard({ stock, pageFetchedAt }: { stock: EarningsStock; pageFetchedAt: string }) {
   const [showChart, setShowChart] = useState(false);
   const isToday = stock.earningsInDays === 0;
   const isTomorrow = stock.earningsInDays === 1;
@@ -255,8 +262,8 @@ function EarningsCard({ stock }: { stock: EarningsStock }) {
           }`}>
             {dayLabel}
           </div>
-          {stock.earningsDate && (
-            <div className="text-xs text-muted-foreground mt-1">{stock.earningsDate}</div>
+           {(stock.reportDate || stock.earningsDate) && (
+            <div className="text-xs text-muted-foreground mt-1">{stock.reportDate ?? stock.earningsDate}</div>
           )}
           {stock.compositeScore != null && (
             <div className="text-xs text-muted-foreground mt-1">
@@ -338,6 +345,14 @@ function EarningsCard({ stock }: { stock: EarningsStock }) {
           }
         />
       </div>
+
+      <EarningsReaction
+        ticker={stock.ticker}
+        yahooTicker={stock.yahooTicker}
+        market={stock.market}
+        reaction={stock.reportReaction}
+        pageFetchedAt={pageFetchedAt}
+      />
 
       {/* Historical earnings mini-table */}
       {stock.historicalEarnings.length > 0 && (

@@ -1494,6 +1494,36 @@ export const GetQuotesResponse = zod.array(GetQuotesResponseItem)
 
 
 /**
+ * @summary Fetch one report day's actual Yahoo Finance minute candles on demand
+ */
+export const GetEarningsIntradayQueryParams = zod.object({
+  "ticker": zod.coerce.string(),
+  "reportDate": zod.date(),
+  "market": zod.enum(['SE', 'US'])
+})
+
+export const GetEarningsIntradayResponse = zod.object({
+  "ticker": zod.string(),
+  "reportDate": zod.coerce.date(),
+  "market": zod.enum(['SE', 'US']),
+  "timezone": zod.string(),
+  "source": zod.string(),
+  "fetchedAt": zod.coerce.date(),
+  "status": zod.enum(['AVAILABLE', 'MISSING', 'CONFLICT']),
+  "asOf": zod.coerce.date().nullable(),
+  "candles": zod.array(zod.object({
+  "timestamp": zod.coerce.date(),
+  "open": zod.number(),
+  "high": zod.number(),
+  "low": zod.number(),
+  "close": zod.number(),
+  "volume": zod.number().nullable()
+})),
+  "reason": zod.string().nullable()
+})
+
+
+/**
  * @summary Overall stats — session counts, win rate, R/R by category
  */
 export const GetDashboardSummaryResponse = zod.object({

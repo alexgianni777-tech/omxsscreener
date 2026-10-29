@@ -5,6 +5,7 @@
  */
 import { Router, type IRouter } from "express";
 import YahooFinance from "yahoo-finance2";
+import { isE2ETestMode } from "../lib/e2eTestSafety";
 
 const router: IRouter = Router();
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
@@ -29,6 +30,20 @@ let cache: { data: MarketIntelData; ts: number } | null = null;
 const CACHE_MS = 15 * 60_000; // 15 minutes
 
 router.get("/market-intel", async (_req, res): Promise<void> => {
+  if (isE2ETestMode()) {
+    res.json({
+      fearGreed: null,
+      pe: {
+        sp500: { trailing: null, forward: null },
+        nasdaq: { trailing: null, forward: null },
+        omxs30: { trailing: null, forward: null },
+      },
+      fetchedAt: null,
+      e2eTest: "DEMO_NO_EXTERNAL_DATA",
+    });
+    return;
+  }
+
   if (cache && Date.now() - cache.ts < CACHE_MS) {
     res.json(cache.data);
     return;

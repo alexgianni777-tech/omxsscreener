@@ -28,8 +28,10 @@ import type {
   CandidateTop3AnnotationInput,
   CandidateWithSession,
   DashboardSummary,
+  EarningsIntradayResponse,
   ErrorEnvelope,
   ErrorResponse,
+  GetEarningsIntradayParams,
   GetQuotesParams,
   GroundZeroSnapshotInput,
   GroundZeroState,
@@ -1414,6 +1416,90 @@ export function useGetQuotes<TData = Awaited<ReturnType<typeof getQuotes>>, TErr
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetQuotesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetEarningsIntradayUrl = (params: GetEarningsIntradayParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/screener/earnings-screener/intraday?${stringifiedParams}` : `/api/screener/earnings-screener/intraday`
+}
+
+/**
+ * @summary Fetch one report day's actual Yahoo Finance minute candles on demand
+ */
+export const getEarningsIntraday = async (params: GetEarningsIntradayParams, options?: Parameters<typeof customFetch>[1]): Promise<EarningsIntradayResponse> => {
+
+  return customFetch<EarningsIntradayResponse>(getGetEarningsIntradayUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEarningsIntradayQueryKey = (params?: GetEarningsIntradayParams,) => {
+    return [
+    `/api/screener/earnings-screener/intraday`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetEarningsIntradayQueryOptions = <TData = Awaited<ReturnType<typeof getEarningsIntraday>>, TError = ErrorType<ErrorResponse>>(params: GetEarningsIntradayParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEarningsIntraday>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEarningsIntradayQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEarningsIntraday>>> = ({ signal }) => getEarningsIntraday(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEarningsIntraday>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetEarningsIntradayQueryResult = NonNullable<Awaited<ReturnType<typeof getEarningsIntraday>>>
+export type GetEarningsIntradayQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Fetch one report day's actual Yahoo Finance minute candles on demand
+ */
+
+export function useGetEarningsIntraday<TData = Awaited<ReturnType<typeof getEarningsIntraday>>, TError = ErrorType<ErrorResponse>>(
+ params: GetEarningsIntradayParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getEarningsIntraday>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetEarningsIntradayQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -71,6 +71,10 @@ function LoginGate() {
 
   return (
     <Shell>
+      {import.meta.env.VITE_E2E_TEST === "1" && <div role="note" data-testid="e2e-demo-banner"
+        className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-center text-xs font-semibold tracking-wide text-amber-800 dark:text-amber-300">
+        ISOLERAT E2E-TEST · ENDAST DEMODATA · INGA VERKLIGA KURSER
+      </div>}
       <Switch>
         <Route path="/" component={Today} />
         <Route path="/dashboard" component={Dashboard} />

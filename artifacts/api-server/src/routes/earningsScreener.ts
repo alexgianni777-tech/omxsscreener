@@ -16,6 +16,15 @@ import YahooFinance from "yahoo-finance2";
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
 import { calendarDaysBetween, utcCalendarDate } from "../lib/marketCalendar";
+import {
+  buildEarningsDailyReaction,
+  earningsTimezone,
+  isDailyHistoryStale,
+  marketDayUtcBounds,
+  marketDate,
+  normalizeIntradayBars,
+  type EarningsMarket,
+} from "../lib/earningsReportReaction";
 
 const router: IRouter = Router();
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
@@ -174,9 +183,77 @@ function daysFromToday(dt: Date | string | null | undefined): number | null {
   return calendarDaysBetween(eventDate);
 }
 
+function validDateOnly(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+router.get("/screener/earnings-screener/intraday", async (req, res): Promise<void> => {
+  const ticker = typeof req.query.ticker === "string" ? req.query.ticker.trim() : "";
+  const reportDate = req.query.reportDate;
+  const market = req.query.market;
+  if (!/^[A-Za-z0-9.^=-]{1,24}$/.test(ticker) || !validDateOnly(reportDate) ||
+      (market !== "SE" && market !== "US")) {
+    res.status(400).json({ error: "ticker, reportDate (YYYY-MM-DD) and market (SE|US) are required." });
+    return;
+  }
+
+  const timezone = earningsTimezone(market as EarningsMarket);
+  const dayBounds = marketDayUtcBounds(reportDate, market as EarningsMarket);
+  if (!dayBounds) {
+    res.status(400).json({ error: "reportDate is not a valid market date." });
+    return;
+  }
+  const today = marketDate(new Date(), market as EarningsMarket);
+  if (today && reportDate > today) {
+    res.json({
+      ticker, reportDate, market, timezone, status: "MISSING", source: "Yahoo Finance",
+      fetchedAt: new Date().toISOString(), asOf: null, candles: [],
+      reason: "Rapportdagen ligger framåt i tiden; minutdata har inte hämtats.",
+    });
+    return;
+  }
+
+  try {
+    const chart = await yf.chart(ticker, {
+      period1: dayBounds.start,
+      period2: dayBounds.end,
+      interval: "1m",
+      includePrePost: true,
+    });
+    const result = normalizeIntradayBars(
+      chart.quotes.map((quote) => ({
+        date: quote.date,
+        open: quote.open,
+        high: quote.high,
+        low: quote.low,
+        close: quote.close,
+        volume: quote.volume,
+      })),
+      reportDate,
+      market as EarningsMarket,
+    );
+    res.json({
+      ticker,
+      reportDate,
+      market,
+      timezone,
+      source: "Yahoo Finance",
+      fetchedAt: new Date().toISOString(),
+      status: result.status,
+      asOf: result.asOf,
+      candles: result.candles,
+      reason: result.reason,
+    });
+  } catch {
+    res.status(502).json({ error: "Yahoo Finance kunde inte leverera minutdata för den valda rapportdagen." });
+  }
+});
+
 // ── Day-of-earnings price reaction ────────────────────────────────────────────
 function computeDayPlusOneReturn(
-  history: { date: Date; close: number }[],
+  history: { date: Date; close: number | null }[],
   earningsDate: Date | string,
 ): number | null {
   const targetMs = new Date(earningsDate).getTime();
@@ -197,7 +274,8 @@ function computeDayPlusOneReturn(
   if (beforeIdx < 0 || beforeIdx >= sorted.length - 1) return null;
   const before = sorted[beforeIdx].close;
   const after = sorted[beforeIdx + 1].close;
-  if (!before) return null;
+  if (typeof before !== "number" || !Number.isFinite(before) || before <= 0 ||
+      typeof after !== "number" || !Number.isFinite(after) || after <= 0) return null;
   return Number((((after - before) / before) * 100).toFixed(2));
 }
 
@@ -255,6 +333,7 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
         earningsTimestamp: (q as any).earningsTimestamp as Date | null | undefined,
         livePrice: (q.regularMarketPrice ?? null) as number | null,
         changePct: (q.regularMarketChangePercent ?? null) as number | null,
+        marketDataAsOf: yahooDate((q as any).regularMarketTime)?.toISOString() ?? null,
       };
     }),
     8,
@@ -293,7 +372,17 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
         period2: now,
         interval: "1d",
       });
-      return { ticker: stock.yahoo, history: h as { date: Date; close: number }[] };
+      return {
+        ticker: stock.yahoo,
+        history: h as Array<{
+          date: Date;
+          open: number | null;
+          high: number | null;
+          low: number | null;
+          close: number | null;
+          volume: number | null;
+        }>,
+      };
     }),
     4,
   );
@@ -310,6 +399,51 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
   const stocks = relevant.map((stock) => {
     const summary = summaryMap.get(stock.yahoo);
     const history = historyMap.get(stock.yahoo) ?? [];
+    const reportTimestamp = yahooDate(stock.earningsTimestamp)?.toISOString() ?? null;
+    const reportDate = reportTimestamp
+      ? marketDate(reportTimestamp, stock.market)
+      : null;
+    const marketToday = marketDate(new Date(), stock.market);
+    const priceDataAsOf = history.reduce<string | null>((latest, bar) => {
+      const date = marketDate(bar.date, stock.market);
+      return date && (!latest || date > latest) ? date : latest;
+    }, null);
+    const priceHistoryStale = isDailyHistoryStale(
+      priceDataAsOf,
+      (stock as any).marketDataAsOf ?? null,
+      stock.market,
+    );
+    const reportReaction = !reportDate
+      ? {
+          status: "MISSING" as const,
+          reportDate: null,
+          reportTimestamp,
+          timezone: earningsTimezone(stock.market),
+          dataAsOf: priceDataAsOf,
+          previousClose: null,
+          reportDay: null,
+          changePct: null,
+          postReport: [1, 3, 5].map((sessions) => ({
+            sessions: sessions as 1 | 3 | 5, date: null, close: null, returnPct: null,
+          })),
+          reason: "Rapportdatum eller rapporttidpunkt saknas i källan.",
+        }
+      : marketToday && reportDate > marketToday
+      ? {
+          status: "UPCOMING" as const,
+          reportDate,
+          reportTimestamp,
+          timezone: earningsTimezone(stock.market),
+          dataAsOf: priceDataAsOf,
+          previousClose: null,
+          reportDay: null,
+          changePct: null,
+          postReport: [1, 3, 5].map((sessions) => ({
+            sessions: sessions as 1 | 3 | 5, date: null, close: null, returnPct: null,
+          })),
+          reason: "Rapporten har inte inträffat ännu.",
+        }
+      : { ...buildEarningsDailyReaction(history, reportDate, stock.market), reportTimestamp };
 
     // earningsHistory
     const rawHistory: any[] = (summary?.earningsHistory as any)?.history ?? [];
@@ -414,9 +548,20 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
       display: stock.display,
       market: stock.market,
       earningsDate: utcCalendarDate(stock.earningsTimestamp),
+      earningsTimestamp: reportTimestamp,
+      reportDate,
       earningsInDays: stock.earningsInDays,
       livePrice: stock.livePrice,
       changePct: stock.changePct,
+      marketDataAsOf: (stock as any).marketDataAsOf ?? null,
+      priceDataAsOf,
+      priceHistoryStatus: priceHistoryStale === true ? "STALE" : priceHistoryStale === false ? "CURRENT" : "UNKNOWN",
+      reportReaction: {
+        ...reportReaction,
+        priceHistoryStatus: priceHistoryStale === true ? "STALE" : priceHistoryStale === false ? "CURRENT" : "UNKNOWN",
+        marketDataAsOf: (stock as any).marketDataAsOf ?? null,
+        source: "Yahoo Finance",
+      },
       nextEpsEstimate,
       beatRate,
       avgSurprisePct,

@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "../lib/omxs30TickerMap";
+import { isE2ETestMode } from "../lib/e2eTestSafety";
 
 const router: IRouter = Router();
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
@@ -34,6 +35,23 @@ router.get("/screener/quotes", async (req, res): Promise<void> => {
   }
 
   const fetchedAt = new Date().toISOString();
+
+  if (isE2ETestMode()) {
+    res.json(tickers.map((ticker) => ({
+      ticker,
+      yahooTicker: resolveYahooTicker(ticker),
+      livePrice: null,
+      change: null,
+      changePct: null,
+      marketState: null,
+      asOf: null,
+      fetchedAt: null,
+      earningsDate: null,
+      earningsInDays: null,
+      error: "DEMO: real quote lookup disabled in isolated E2E_TEST mode.",
+    })));
+    return;
+  }
 
   const results = await Promise.all(
     tickers.map(async (ticker) => {

@@ -1,4 +1,5 @@
 import { isAcceptedSignalDate, stockholmSignalDate } from "./signalDatePolicy";
+import { isE2ETestMode } from "./e2eTestSafety";
 
 const EDGEAI_CONTENTS_API_URL =
   "https://api.github.com/repos/alexgianni777-tech/edgeai/contents/public/data.json?ref=main";
@@ -28,6 +29,9 @@ export async function fetchFreshEdgeAiData(
   timeoutMs: number,
   options: { now?: Date } = {},
 ): Promise<any> {
+  if (isE2ETestMode()) {
+    throw new Error("External EdgeAI fetch is disabled in isolated E2E_TEST mode.");
+  }
   let response = await fetch(EDGEAI_CONTENTS_API_URL, {
     headers: {
       Accept: "application/vnd.github.raw+json",

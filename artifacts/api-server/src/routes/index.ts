@@ -24,17 +24,21 @@ import { requireAdministrator, requireAuthentication } from "../middlewares/auth
 import { checkEdgeAiAfterWake } from "../lib/scheduler";
 import { createEdgeAiSyncRouter } from "./edgeAiSync";
 import { createImportWakeMiddleware } from "../middlewares/importWake";
+import { isE2ETestMode } from "../lib/e2eTestSafety";
 
 const router: IRouter = Router();
+const edgeAiCheck = isE2ETestMode()
+  ? async () => ({ status: "SKIPPED" as const })
+  : checkEdgeAiAfterWake;
 
 router.use(healthRouter);
 router.use(authRouter);
 router.use(telegramImportRouter); // unauthenticated — uses its own bearer-token check
-router.use(createEdgeAiSyncRouter(checkEdgeAiAfterWake));
+router.use(createEdgeAiSyncRouter(edgeAiCheck));
 router.use(requireAuthentication);
 router.use(requireAdministrator);
 // Public health probes and rejected users cannot start a wake check.
-router.use(createImportWakeMiddleware(checkEdgeAiAfterWake));
+router.use(createImportWakeMiddleware(edgeAiCheck));
 router.use(groundZeroRouter);
 router.use(unusedCandidatesRouter);
 router.use(screenerRouter);
