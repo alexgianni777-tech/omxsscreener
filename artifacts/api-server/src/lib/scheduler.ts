@@ -124,7 +124,7 @@ async function runImport(date: string): Promise<boolean> {
   const usMapped = usSetups.map((s) => mapEdgeAiSetup(s, "US", rankCounterUS));
   const allMapped = [...seMapped, ...usMapped];
   allMapped.forEach((candidate) => {
-    Object.assign(candidate, { signalSource: "edgeai" as const, origin: "edgeai" as const, signalDate });
+    Object.assign(candidate, { signalSource: "edgeai" as const, origin: "edgeai" as const });
   });
   const mapped = isolateEdgeAiPlans(allMapped, [...seSetups, ...usSetups].map(s => `${s.setup} (${s.signalT ?? "signaltid okänd"})`), importReport);
 

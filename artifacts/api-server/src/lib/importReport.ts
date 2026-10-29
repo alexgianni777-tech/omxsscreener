@@ -37,6 +37,6 @@ export function makeImportReport(source: string, signalDate: string, input: unkn
   for (const date of Object.values(dataDates)) {
     if (date != null && (!isAcceptedSignalDate(date, date) || date > reportDate)) throw new ImportDataError("Datadag är ogiltig eller ligger efter rapportdagen. Ingen import har sparats.");
   }
-  const fingerprint = "v2:" + createHash("sha256").update(JSON.stringify({ processorVersion: "isolated-edgeai-plans", source, signalDate, reportDate, dataDates, input: canonical(input) })).digest("hex");
+  const fingerprint = "v2:" + createHash("sha256").update(JSON.stringify({ processorVersion: "edgeai-setup-signal-date", source, signalDate, reportDate, dataDates, input: canonical(input) })).digest("hex");
   return { source, signalDate, reportDate, generatedAt, dataDates, fingerprint, status: "SUCCESS" };
 }

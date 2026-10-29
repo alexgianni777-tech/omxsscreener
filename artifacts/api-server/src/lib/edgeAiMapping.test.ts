@@ -49,6 +49,27 @@ test("EdgeAI signal age and statistics use dedicated fields", () => {
   assert.equal(candidate.distFrom20dH, 0);
 });
 
+test("EdgeAI candidates use the setup signalT market date, never the report date or server-local fallback", () => {
+  const base = {
+    ticker: "TEST",
+    dir: "long",
+    entry: 100,
+    stop: 95,
+    target: 110,
+    chart: [],
+  };
+  assert.equal(
+    mapEdgeAiSetup({ ...base, signalT: "Mon Oct 26 2026 23:30:00 GMT-0400 (Eastern Daylight Time)" }, "US", {}).signalDate,
+    "2026-10-26",
+  );
+  assert.equal(
+    mapEdgeAiSetup({ ...base, signalT: "Tue Oct 27 2026 08:00:00 GMT+0000 (Coordinated Universal Time)" }, "SE", {}).signalDate,
+    "2026-10-27",
+  );
+  assert.equal(mapEdgeAiSetup({ ...base, signalT: "2026-10-27T08:00:00" }, "SE", {}).signalDate, null);
+  assert.equal(mapEdgeAiSetup({ ...base, signalT: "not-a-date" }, "SE", {}).signalDate, null);
+});
+
 test("signal indicators exclude bars after the trigger", () => {
   const chart = Array.from({ length: 31 }, (_, index) => ({
     o: index === 0 ? 100 : 99 + index,

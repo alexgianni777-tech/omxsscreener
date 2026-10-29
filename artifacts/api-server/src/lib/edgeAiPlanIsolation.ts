@@ -3,7 +3,7 @@ import type { ImportReport } from "./importReport";
 
 type Plan = {
   ticker: string; market: string; category: string; direction: string; signalSource?: string;
-  signalDate?: string; entryPrice: number; stopPrice: number; targetPrice: number; rr: number;
+  signalDate?: string | null; entryPrice: number; stopPrice: number; targetPrice: number; rr: number;
 };
 /** Different setups can collapse into one legacy bucket. Never choose a conflicting plan by array order. */
 export function isolateEdgeAiPlans<T extends Plan>(rows: T[], labels: string[], report: ImportReport): T[] {

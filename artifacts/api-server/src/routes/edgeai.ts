@@ -119,7 +119,7 @@ router.post(
       ...usRaw.map((s: any) => mapEdgeAiSetup(s, "US", rankCounter)),
     ];
     mappedSetups.forEach((candidate) => {
-      Object.assign(candidate, { signalSource: "edgeai" as const, origin: "edgeai" as const, signalDate });
+      Object.assign(candidate, { signalSource: "edgeai" as const, origin: "edgeai" as const });
     });
     const safeSetups = isolateEdgeAiPlans(mappedSetups, [...setups, ...usRaw].map(s => `${s.setup} (${s.signalT ?? "signaltid okänd"})`), importReport);
     const { candidates: uniqueMappedSetups, skipped } = deduplicateCandidates(safeSetups, importReport);
@@ -191,7 +191,7 @@ router.post(
         .from(candidatesTable)
         .where(eq(candidatesTable.sessionId, existing[0].id));
       const incomingByIdentity = new Map(
-        uniqueMappedSetups.map((candidate) => [candidateIdentity(candidate), signalDate] as const),
+        uniqueMappedSetups.map((candidate) => [candidateIdentity(candidate), candidate.signalDate] as const),
       );
       const mismatch = existingRows.find((candidate) =>
         candidate.signalDate != null &&
@@ -200,7 +200,7 @@ router.post(
       );
       if (mismatch) {
         res.status(409).json({
-          error: `Signal date mismatch for ${mismatch.ticker}: stored ${mismatch.signalDate}, incoming ${signalDate}`,
+          error: `Signal date mismatch for ${mismatch.ticker}: stored ${mismatch.signalDate}, incoming ${incomingByIdentity.get(candidateIdentity(mismatch))}`,
         });
         return;
       }

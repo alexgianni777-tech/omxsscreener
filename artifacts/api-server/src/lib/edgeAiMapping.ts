@@ -16,6 +16,29 @@ import { edgeAiDirection } from "./edgeAiSource.ts";
 export type EdgeAiCategory = "MOMENTUM" | "SQUEEZE" | "STUDS" | "WEAKEST";
 export type EdgeAiMarket = "SE" | "US";
 
+function setupSignalDate(signalT: unknown, market: EdgeAiMarket): string | null {
+  if (typeof signalT !== "string" || !signalT.trim()) return null;
+  const value = signalT.trim();
+  // Do not let Date.parse interpret a timestamp without a zone in the server's
+  // local timezone. EdgeAI supplies UTC/offset timestamps for signalT.
+  if (!/(?:Z|[+-]\d{2}:?\d{2}|GMT[+-]\d{4})(?:\b|(?=\s|\)|$))/i.test(value)) return null;
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return null;
+
+  // Candidate signal dates are market-session dates, not the report/import date.
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: market === "SE" ? "Europe/Stockholm" : "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(timestamp));
+  const part = (type: string) => parts.find((item) => item.type === type)?.value;
+  const year = part("year");
+  const month = part("month");
+  const day = part("day");
+  return year && month && day ? `${year}-${month}-${day}` : null;
+}
+
 export function mapEdgeAiCategory(
   direction: "LONG" | "SHORT",
   setupName: string,
@@ -72,6 +95,7 @@ export function mapEdgeAiSetup(
 
   return {
     market,
+    signalDate: setupSignalDate(s.signalT, market),
     category,
     rank: rankCounter[rankKey],
     ticker,
