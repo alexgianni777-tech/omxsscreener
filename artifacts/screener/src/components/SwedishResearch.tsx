@@ -8,6 +8,7 @@ import { ResearchCard, type ResearchSignal } from "./ResearchCard";
 import { swedishDailyPicks, previousWeekday, isolatedDailyPick, dailySymbol, type DailyPick } from "../lib/dailyCandidates";
 import { stockholmToday } from "../lib/persistentTop3Display";
 import { savedDataDate } from "../lib/researchQuote";
+import { SourceProvenance } from "./SourceProvenance";
 
 export function researchPicks(selection: SavedTop3Display): DailyPick[] {
   return selection.revision.picks.map(p => ({ ...p, market: p.market ?? "", source: p.source ?? "okänd", signalDate: p.signalDate ?? null }));
@@ -40,6 +41,7 @@ export function SwedishResearchContent({ selection, signals = [], reports = [], 
       Senast giltiga sparade urval behålls tills ett nytt giltigt finns. Underlag från föregående stängning; inte ett köpbesked.
       {stale && " Gammalt eller ej styrkt datadatum: inget nytt köp utan egen liveverifiering."}
     </p>
+    <SourceProvenance reports={reports} />
     {quoteError && <p role="alert" className="mt-2 text-xs text-destructive">Kurshämtningen misslyckades. Planerna är oförändrade; försök igen eller kontrollera Avanza.</p>}
     <div className="mt-3 grid gap-3 md:grid-cols-2">
       {groups.map(g => <section key={g.direction} data-testid={`research-${g.direction}`} className="min-w-0">

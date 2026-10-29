@@ -3,6 +3,13 @@ name: EdgeAI pipeline topology
 description: The three separate GitHub repos/workflows that feed this app's daily data, and how their crons can miss independently.
 ---
 
+## Source-health presentation
+Show saved receipts as evidence for the selected session, not proof that both remote deliveries are currently healthy or that their signals are identical. Missing market dates must remain unknown rather than borrowing a report date or the other source's date.
+
+**Why:** Telegram and EdgeAI are independent producers, and retained Top 3 can refer to an older session or plan version. Equal dates alone do not establish identical content or live delivery.
+
+**How to apply:** Distinguish report day, market-data day and import timestamp. Show the latest rejected attempt even when retaining an earlier successful receipt; legacy receipts without status are not verified successes.
+
 This app's daily screener data comes from **three separate GitHub repos**, each with its own independent cron schedule under the `alexgianni777-tech` GitHub account:
 
 1. **`omxs30`** — workflow "1 · Daglig screener" runs weekdays at 22:15 in `Europe/Stockholm`, after the normal US close. Sends the daily Telegram message and posts the session to this app's dashboard via a webhook. A miss here means no Telegram message and no auto-created session for the day.

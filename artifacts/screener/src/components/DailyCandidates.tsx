@@ -1,6 +1,7 @@
 import React from "react";
 import { DataFreshness } from "./DataFreshness";
 import { PlanGrid } from "./PlanGrid";
+import { SourceProvenance } from "./SourceProvenance";
 import type { SessionSourceReport } from "@workspace/api-client-react";
 import { swedishDailyPicks, oldSignalWarning, previousWeekday, dailySymbol, isolatedDailyPick, type DailyPick } from "../lib/dailyCandidates";
 
@@ -19,6 +20,7 @@ export function DailyCandidates({ picks, signals, reports = [], sessionDate, pre
   const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm" }).format(now);
   return <div data-testid="daily-candidates" className="space-y-3">
     <h3 className="text-lg font-semibold">Dagens kandidater · Sverige</h3>
+    <SourceProvenance reports={reports} />
     {["edgeai", "telegram"].map(source => {
       const latest = [...reports].reverse().find(r => r.source === source && r.status !== "FAILED");
       return latest?.warnings?.length ? <details key={`warning-${source}`} className="text-xs text-amber-600 dark:text-amber-400">
@@ -73,12 +75,6 @@ export function DailyCandidates({ picks, signals, reports = [], sessionDate, pre
     <details className="text-xs text-muted-foreground">
       <summary className="cursor-pointer">Källhälsa och datumkontroll</summary>
       <p className="mt-2">Föregående vardags stängningsdata behålls. Svensk helgdagskalender är inte verifierad här; kontrollera senaste faktiska börsdag vid helgdagar.</p>
-      {["edgeai", "telegram"].map(source => {
-        const report = [...reports].reverse().find(r => r.status !== "FAILED" && r.source === source);
-        return <p key={source} className="mt-1">{source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"}: {report
-          ? `senaste kvitterade import ${new Date(report.importedAt).toLocaleString("sv-SE", { timeZone: "Europe/Stockholm" })}; rapport ${report.reportDate}; importversion ${report.fingerprint.slice(0, 11)}`
-          : signals.length ? "Ingen importkvittens för denna session; äldre kandidater bevisar inte aktuell källhälsa." : "Ingen lyckad import registrerad."}</p>;
-      })}
       <p className="mt-1">Visar sparade importuppgifter, inte ett nytt tillgänglighetstest. Ingen extra polling.</p>
     </details>
   </div>;
