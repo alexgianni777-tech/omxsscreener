@@ -15,11 +15,15 @@ test("dashboard keeps official and current selections ahead of folded historical
   assert.ok(home.indexOf("<MarketIntelSection />") < home.indexOf("<SavedTop3 />"));
   assert.ok(home.indexOf("<SavedTop3 />") < home.indexOf("Challenge · registrerat modellkonto"));
   assert.ok(home.includes("max-w-5xl"));
+  assert.ok(home.includes("if (!sessionsResponse.ok) throw new Error"));
+  assert.ok(home.includes('data-testid="status-session-load-error"'));
+  assert.ok(home.includes('data-testid="status-challenge-load-error"'));
 });
 test("mobile layout preserves logout and nav semantics and tables scroll rather than getting globally clipped", () => {
   const layout = source("./layout.tsx"), css = source("../index.css");
   assert.ok(layout.includes('aria-label="Huvudnavigering"')); assert.ok(layout.includes('aria-current={isActive ? "page"'));
   assert.ok(layout.includes("md:hidden")); assert.ok(layout.includes("onClick={logout}"));
+  assert.ok(layout.includes('!(item.href === "/sessions" && location.startsWith("/sessions/today"))'));
   assert.ok(layout.includes("min-w-0")); assert.ok(layout.includes("overflow-x-auto"));
   assert.ok(!css.includes("html, body { overflow-x: hidden"));
   assert.ok(source("../pages/candidates.tsx").includes('className="overflow-x-auto"'));

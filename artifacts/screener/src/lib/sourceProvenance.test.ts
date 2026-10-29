@@ -16,8 +16,8 @@ test("compact source lines show separate report/data/import times and do not equ
   const reports = [receipt("telegram"), receipt("edgeai")];
   const before = JSON.stringify(reports);
   const html = render(reports);
-  for (const text of ["Telegram: Importerad", "GitHub/EdgeAI: Importerad", "Rapport 2026-10-12",
-    "Marknadsdata as-of 2026-10-09", "Importerad 2026-10-12 10:05", "överensstämmer", "olika signaler", "vald session"]) {
+  for (const text of ["Telegram: Importerad", "GitHub/EdgeAI: Importerad", "Rapportdatum 2026-10-12",
+    "Marknadsdag SE 2026-10-09 / USA okänd", "Senast lyckad import i sessionen 2026-10-12 10:05", "överensstämmer", "olika signaler", "vald session"]) {
     assert.ok(html.includes(text), text);
   }
   assert.equal(JSON.stringify(reports), before);
@@ -29,7 +29,7 @@ test("different dates warn without modifying plans or claiming delivery failure"
 });
 test("missing market date or receipt never borrows the report date or claims synchronization", () => {
   const html = render([receipt("telegram", {dataDates:{SE:null,US:null},importedAt:"not-a-time"})]);
-  assert.ok(html.includes("Marknadsdata as-of okänd"));
+  assert.ok(html.includes("Marknadsdag SE okänd / USA okänd"));
   assert.ok(html.includes("Importerad okänd"));
   assert.ok(html.includes("GitHub/EdgeAI: Importkvittens saknas"));
   assert.ok(html.includes("Synkronisering ej verifierad"));
@@ -40,7 +40,7 @@ test("latest failure remains visible beside retained successful receipt, not fal
     status:"FAILED",reportDate:"2026-10-13",importedAt:"2026-10-13T08:00:00Z", dataDates:{SE:"2026-10-12",US:null},
   })]);
   assert.ok(html.includes("GitHub/EdgeAI: Import avvisad"));
-  assert.ok(html.includes("Senast bevarade: Rapport 2026-10-12"));
+  assert.ok(html.includes("Senast lyckad import i sessionen: Rapportdatum 2026-10-12"));
   assert.ok(html.includes("Avvisat försök 2026-10-13 10:00"));
   assert.ok(html.includes("Synkronisering ej verifierad"));
 });

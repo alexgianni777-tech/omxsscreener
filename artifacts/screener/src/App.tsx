@@ -28,8 +28,8 @@ function NotFound() {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
       <h1 className="text-6xl font-bold text-muted-foreground/30">404</h1>
-      <p className="text-xl font-medium">Page not found</p>
-      <a href="/" className="text-primary hover:underline">Return to Dashboard</a>
+      <p className="text-xl font-medium">Sidan kunde inte hittas</p>
+      <a href="/" className="text-primary hover:underline">Till dagens översikt</a>
     </div>
   );
 }
@@ -39,7 +39,7 @@ function LoginGate() {
 
   if (isLoading) {
     return (
-      <div role="status" aria-live="polite" className="min-h-screen flex flex-col gap-3 items-center justify-center bg-background">
+      <div role="status" aria-live="polite" className="min-h-[100dvh] flex flex-col gap-3 items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         <p className="text-sm text-muted-foreground">Läser behörighet och arbetsyta…</p>
       </div>
@@ -48,20 +48,21 @@ function LoginGate() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-6 text-center max-w-sm px-6">
-          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-            <Lock className="h-5 w-5 text-primary" />
+      <div className="min-h-[100dvh] flex items-center justify-center bg-background px-5">
+        <div className="flex flex-col items-start gap-6 text-left max-w-md w-full rounded-2xl border border-border bg-card p-7 sm:p-10 shadow-sm">
+          <div className="w-12 h-12 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center">
+            <Lock className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">AG Investment Capital</h1>
-            <p className="text-muted-foreground text-sm mt-2">Private trading dashboard. Access restricted.</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[.16em] text-primary mb-2">Privat researchmiljö</p>
+            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">AG Investment Capital</h1>
+            <p className="text-muted-foreground text-sm leading-relaxed mt-3">Inloggning krävs för att visa kandidater, sessionshistorik och portföljdata.</p>
           </div>
           <button
             onClick={login}
-            className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-medium py-2.5 px-6 rounded-md transition-colors"
+            className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-medium py-3 px-6 rounded-lg transition-colors"
           >
-            Log in
+            Logga in
           </button>
         </div>
       </div>

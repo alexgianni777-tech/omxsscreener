@@ -1,4 +1,3 @@
-import { SwedishResearch } from "../components/SwedishResearch";
 import { GroundZero } from "../components/GroundZero";
 import { SavedTop3 } from "../components/SavedTop3";
 import { ManualCatalysts } from "../components/ManualCatalysts";
@@ -75,9 +74,9 @@ export function Dashboard() {
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <header className="flex flex-wrap justify-between items-end gap-3">
         <div>
-          <h2 className="text-2xl md:text-3xl font-semibold tracking-tight">Översikt</h2>
+          <h2 className="text-2xl md:text-3xl font-semibold tracking-tight">Historiska utfall</h2>
           <p className="text-muted-foreground mt-1">
-            Fryst officiellt urval, aktuella kandidater och historiska utfall — separerat.
+            Avslutade signaler och statistik. Dagens rekommendationer visas separat under Idag.
           </p>
         </div>
         <Link
@@ -90,12 +89,10 @@ export function Dashboard() {
         </Link>
       </header>
 
-      {/* Today's Session */}
       <MarketIntelSection />
-      <SwedishResearch />
       <details className="rounded-xl bg-card ring-1 ring-border/60" data-testid="details-current-selection">
-        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Alternativa vyer: sparat urval inkl. USA, dagens session och aktuella versioner
-          <span className="ml-2 font-normal text-xs text-muted-foreground">separata data, inte huvud-Top 3 ovan</span></summary>
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Urval och sessioner
+          <span className="ml-2 font-normal text-xs text-muted-foreground">sparat officiellt urval, aktuella versioner och sessionens kandidater</span></summary>
         <div className="border-t border-border/50 p-2 sm:p-3 space-y-4">
       <SavedTop3 />
       <TodaySessionPanel />
@@ -110,7 +107,7 @@ export function Dashboard() {
         <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">GroundZero</summary>
         <div className="border-t border-border/50 p-2 sm:p-3"><GroundZero /></div>
       </details>
-      <details className="rounded-xl bg-card ring-1 ring-border/60" data-testid="details-historical-stats">
+      <details open className="rounded-xl bg-card ring-1 ring-border/60" data-testid="details-historical-stats">
         <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Historiska utfall och signalanalys
           <span className="ml-2 font-normal text-xs text-muted-foreground">avslutade signaler, inte aktuella rekommendationer</span></summary>
         <div className="border-t border-border/50 p-3 sm:p-4 space-y-8">
@@ -122,12 +119,12 @@ export function Dashboard() {
       {/* Top Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Total Sessions"
+          title="Sessioner totalt"
           value={summary.totalSessions.toString()}
           icon={<Activity className="h-4 w-4 text-muted-foreground" />}
         />
         <StatCard
-          title="Total Candidates"
+          title="Kandidater totalt"
           value={summary.totalCandidates.toString()}
           icon={<Target className="h-4 w-4 text-muted-foreground" />}
         />
@@ -138,7 +135,7 @@ export function Dashboard() {
           subtitle={`${summary.wins}V – ${summary.losses}F – ${summary.resolvedTrades - summary.wins - summary.losses} 0R`}
         />
         <StatCard
-          title="Overall Win Rate"
+          title="Träffsäkerhet totalt"
           value={
             summary.overallWinRate != null ? formatPercent(summary.overallWinRate) : "–"
           }
@@ -149,7 +146,7 @@ export function Dashboard() {
 
       {/* P&L / R-multiple stats */}
       <div>
-        <h3 className="text-lg font-semibold mb-4 border-b border-border pb-2">
+          <h3 className="text-lg font-semibold mb-4 border-b border-border pb-2">
           Edge-statistik — alla kandidater (R-multiplar)
         </h3>
         <p className="text-xs text-muted-foreground -mt-2 mb-4">

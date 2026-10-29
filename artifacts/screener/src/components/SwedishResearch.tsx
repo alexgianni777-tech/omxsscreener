@@ -14,9 +14,10 @@ export function researchPicks(selection: SavedTop3Display): DailyPick[] {
   return selection.revision.picks.map(p => ({ ...p, market: p.market ?? "", source: p.source ?? "okänd", signalDate: p.signalDate ?? null }));
 }
 
-export function SwedishResearchContent({ selection, signals = [], reports = [], quotes = {}, today, onRefresh, refreshing = false, quoteError = false }: {
+export function SwedishResearchContent({ selection, signals = [], reports = [], statusReports, quotes = {}, today, onRefresh, refreshing = false, quoteError = false }: {
   selection: SavedTop3Display; signals?: readonly ResearchSignal[]; reports?: readonly SessionSourceReport[]; quotes?: Record<string, QuoteResult>;
   today: string; onRefresh?: () => void; refreshing?: boolean; quoteError?: boolean;
+  statusReports?: readonly SessionSourceReport[];
 }) {
   const groups = swedishDailyPicks(researchPicks(selection));
   const stale = selection.date !== today || selection.dataDates.some(d => !d.dataDate || d.dataDate !== previousWeekday(today));
@@ -27,9 +28,9 @@ export function SwedishResearchContent({ selection, signals = [], reports = [], 
         <h2 className="text-xl font-semibold tracking-tight">Svensk research · Top 3</h2>
         <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span className="font-mono" data-testid="text-research-date">Session {selection.date}</span>
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-primary">
             {official ? "Officiellt fryst urval" : `Ändringsbar rekommendation v${selection.revision.revision}`}</span>
-          {stale && <span data-testid="status-research-stale" className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-700">STALE</span>}
+          {stale && <span data-testid="status-research-stale" className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-700">STALE</span>}
           <span>Long {groups[0].picks.length}/3 · Short {groups[1].picks.length}/3</span>
         </p>
       </div>
@@ -41,7 +42,7 @@ export function SwedishResearchContent({ selection, signals = [], reports = [], 
       Senast giltiga sparade urval behålls tills ett nytt giltigt finns. Underlag från föregående stängning; inte ett köpbesked.
       {stale && " Gammalt eller ej styrkt datadatum: inget nytt köp utan egen liveverifiering."}
     </p>
-    <SourceProvenance reports={reports} />
+    <SourceProvenance reports={statusReports ?? reports} context={statusReports ? "senaste sessionen" : "urvalet"} />
     {quoteError && <p role="alert" className="mt-2 text-xs text-destructive">Kurshämtningen misslyckades. Planerna är oförändrade; försök igen eller kontrollera Avanza.</p>}
     <div className="mt-5 grid gap-5 md:grid-cols-2">
       {groups.map(g => <section key={g.direction} data-testid={`research-${g.direction}`} className="min-w-0">
@@ -81,9 +82,9 @@ export function allowPreliminaryResearch(success: boolean, selection: unknown) {
 }
 
 /** Shown only when no saved valid selection exists. Existing ranked live selection, unchanged. */
-export function PreliminaryResearchContent({ picks, sessionDate, signals = [], quotes = {}, onRefresh, refreshing = false, quoteError = false }: {
+export function PreliminaryResearchContent({ picks, sessionDate, signals = [], statusReports, quotes = {}, onRefresh, refreshing = false, quoteError = false }: {
   picks: readonly DailyPick[]; sessionDate: string; signals?: readonly ResearchSignal[]; quotes?: Record<string, QuoteResult>;
-  onRefresh?: () => void; refreshing?: boolean; quoteError?: boolean;
+  statusReports?: readonly SessionSourceReport[]; onRefresh?: () => void; refreshing?: boolean; quoteError?: boolean;
 }) {
   const groups = swedishDailyPicks(picks);
   return <>
@@ -92,7 +93,7 @@ export function PreliminaryResearchContent({ picks, sessionDate, signals = [], q
         <h2 className="text-xl font-semibold tracking-tight">Svensk research · Top 3</h2>
         <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span className="font-mono">Session {sessionDate}</span>
-          <span data-testid="status-research-preliminary" className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-700">PRELIMINÄR</span>
+          <span data-testid="status-research-preliminary" className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-700">PRELIMINÄR</span>
           <span>Long {groups[0].picks.length}/3 · Short {groups[1].picks.length}/3</span>
         </p>
       </div>
@@ -101,6 +102,7 @@ export function PreliminaryResearchContent({ picks, sessionDate, signals = [], q
         {refreshing ? "Hämtar priser…" : "Uppdatera priser"}</button>
     </div>
     <p className="mt-2 text-xs text-muted-foreground">Ingen giltig sparad Top 3 finns. Preliminärt urval ur sessionens befintliga rankning; inte sparat, inte officiellt, inte ett köpbesked.</p>
+    {statusReports && <SourceProvenance reports={statusReports} context="senaste sessionen" />}
     {quoteError && <p role="alert" className="mt-2 text-xs text-destructive">Kurshämtningen misslyckades. Planerna är oförändrade.</p>}
     <div className="mt-5 grid gap-5 md:grid-cols-2">
       {groups.map(g => <section key={g.direction} data-testid={`research-${g.direction}`} className="min-w-0">
@@ -116,7 +118,7 @@ export function PreliminaryResearchContent({ picks, sessionDate, signals = [], q
 }
 
 /** The single prominent Swedish research surface on / and /dashboard. */
-export function SwedishResearch() {
+export function SwedishResearch({ latestReports }: { latestReports?: readonly SessionSourceReport[] } = {}) {
   const last = useGetLastValidTop3({ query: { queryKey: getGetLastValidTop3QueryKey(), retry: false } });
   const s = last.data?.selection ?? null;
   const canUsePreliminary = allowPreliminaryResearch(last.isSuccess, last.data?.selection);
@@ -135,14 +137,18 @@ export function SwedishResearch() {
   if (!quotes.isError) quotes.data?.forEach(q => { map[q.ticker] = q; });
   const loading = last.isLoading || (canUsePreliminary && (sessions.isLoading || detail.isLoading));
   return <section data-testid="swedish-research" aria-busy={loading} className="rounded-2xl bg-card p-4 sm:p-6 shadow-sm ring-1 ring-primary/20">
-    {s ? <SwedishResearchContent selection={s} signals={(detail.data?.candidates ?? []) as ResearchSignal[]} reports={detail.data?.sourceReports ?? []} quotes={map}
+    {s ? <SwedishResearchContent selection={s} signals={(detail.data?.candidates ?? []) as ResearchSignal[]} reports={detail.data?.sourceReports ?? []} statusReports={latestReports} quotes={map}
       today={stockholmToday()} onRefresh={params.tickers ? () => void quotes.refetch() : undefined}
       refreshing={quotes.isFetching} quoteError={quotes.isError} />
       : prelim.length && detail.data ? <PreliminaryResearchContent picks={prelim} sessionDate={detail.data.date}
-        signals={detail.data.candidates as ResearchSignal[]} quotes={map}
+        signals={detail.data.candidates as ResearchSignal[]} statusReports={latestReports} quotes={map}
         onRefresh={params.tickers ? () => void quotes.refetch() : undefined} refreshing={quotes.isFetching} quoteError={quotes.isError} />
       : loading ? <div className="space-y-2"><div className="h-5 w-48 rounded bg-muted" /><div className="h-32 rounded bg-muted" /></div>
       : <p className="text-sm">{last.isError ? "Inget urval kunde verifieras." : "Ingen giltig sparad Top 3 hittades. Inga picks gissas."}</p>}
+    {id > 0 && detail.isError && <p role="alert" className="mt-2 text-xs text-destructive">
+      Sessionsdetaljer och källkvitton kunde inte hämtas. Sparat urval ändras inte.{" "}
+      <button onClick={() => detail.refetch()} className="underline" data-testid="button-retry-session-details">Försök igen</button>
+    </p>}
     {last.isError && <p role="alert" className="mt-2 text-xs text-amber-700">Status kunde inte hämtas.{" "}
       <button onClick={() => last.refetch()} className="underline" data-testid="button-retry-research">Försök igen</button></p>}
     {last.data?.warnings.map(w => <p key={w} role="status" className="mt-2 text-xs text-amber-700">{w}</p>)}

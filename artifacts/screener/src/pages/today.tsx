@@ -175,6 +175,8 @@ export function Today() {
   const [session, setSession] = useState<Session | null>(null);
   const [challenge, setChallenge] = useState<ChallengeData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionLoadError, setSessionLoadError] = useState<string | null>(null);
+  const [challengeLoadError, setChallengeLoadError] = useState<string | null>(null);
   const refreshGuard = useRef(createLatestRequestGuard());
 
   // per-trade logging state
@@ -211,27 +213,51 @@ export function Today() {
   const load = async () => {
     const isCurrent = refreshGuard.current.begin();
     try {
-      const [sessionsRes, challengeRes] = await Promise.all([
-        fetch(api("/screener/sessions")).then(r => r.ok ? r.json() : []),
-        fetch(api("/survival")).then(r => r.ok ? r.json() : null).catch(() => null),
+      const [sessionsResponse, challengeResponse] = await Promise.all([
+        fetch(api("/screener/sessions")),
+        fetch(api("/survival")).catch(() => null),
       ]);
       if (!isCurrent()) return;
 
-      if (Array.isArray(sessionsRes) && sessionsRes.length > 0) {
-        const latest = sessionsRes[0];
-        const detail = await fetch(api(`/screener/sessions/${latest.id}`)).then(r => r.json());
-        if (!isCurrent()) return;
-        setSession(detail);
+      if (challengeResponse?.ok) {
+        try {
+          const challengeRes = await challengeResponse.json();
+          if (!isCurrent()) return;
+          if (challengeRes) {
+            setChallenge(challengeRes);
+            const serverRisk = challengeRes.config?.riskPct;
+            if (typeof serverRisk === "number" && serverRisk > 0) {
+              setRiskPct(serverRisk);
+              setRiskInput(String(serverRisk));
+            }
+          } else {
+            setChallenge(null);
+          }
+          setChallengeLoadError(null);
+        } catch {
+          setChallengeLoadError("Challenge-svaret kunde inte läsas; senast känt värde behålls.");
+        }
+      } else {
+        setChallengeLoadError("Challenge-status kunde inte hämtas; senast känt värde behålls.");
       }
 
-      if (challengeRes) {
-        setChallenge(challengeRes);
-        const serverRisk = challengeRes.config?.riskPct;
-        if (typeof serverRisk === "number" && serverRisk > 0) {
-          setRiskPct(serverRisk);
-          setRiskInput(String(serverRisk));
-        }
+      if (!sessionsResponse.ok) throw new Error(`Kunde inte hämta senaste sessionen (${sessionsResponse.status}).`);
+      const sessionsRes = await sessionsResponse.json();
+      if (!Array.isArray(sessionsRes)) throw new Error("Svaret för senaste sessionen var ogiltigt.");
+
+      if (sessionsRes.length > 0) {
+        const latest = sessionsRes[0];
+        const detailResponse = await fetch(api(`/screener/sessions/${latest.id}`));
+        if (!detailResponse.ok) throw new Error(`Kunde inte hämta sessionsdetaljer (${detailResponse.status}).`);
+        const detail = await detailResponse.json();
+        if (!isCurrent()) return;
+        setSession(detail);
+      } else {
+        setSession(null);
       }
+      setSessionLoadError(null);
+    } catch {
+      if (isCurrent()) setSessionLoadError("Senaste sessionen kunde inte uppdateras. Visat underlag kan vara äldre; kontrollera källstatus innan beslut.");
     } finally {
       if (isCurrent()) setLoading(false);
     }
@@ -426,12 +452,26 @@ export function Today() {
 
   return (
     <div className="max-w-5xl mx-auto min-w-0 space-y-5 pb-8">
-      <header>
-        <h2 className="text-2xl font-semibold tracking-tight">Dagens översikt</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Sparat officiellt urval, aktuella kandidater och utfall hålls isär.</p>
+      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border/80 pb-4">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[.18em] text-primary">Daglig briefing · Stockholm</p>
+          <h2 className="mt-1 text-2xl sm:text-3xl font-semibold tracking-tight">Dagens research</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Fryst urval, aktuella kandidater och registrerade utfall visas var för sig.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full border border-border bg-card px-3 py-1.5 font-mono text-xs text-muted-foreground">{todayISO()}</span>
+          <Link href="/sessions/today" data-testid="nav-dagens-session-→" className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/15">
+            Senaste session <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
       </header>
+      {sessionLoadError && <div role="alert" data-testid="status-session-load-error" className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="min-w-0 flex-1">{sessionLoadError}</div>
+        <button type="button" onClick={() => void load()} data-testid="button-retry-session-load" className="shrink-0 font-medium underline underline-offset-2">Försök igen</button>
+      </div>}
       <MarketIntelSection />
-      <SwedishResearch />
+      <SwedishResearch latestReports={session?.sourceReports ?? []} />
       <details className="rounded-xl border border-border bg-card" data-testid="details-saved-top3">
         <summary className="cursor-pointer p-4 text-sm font-medium">Fullt sparat urval inklusive USA</summary>
         <div className="border-t border-border p-2 sm:p-3"><SavedTop3 /></div>
@@ -449,6 +489,9 @@ export function Today() {
             Detaljer <ChevronRight className="w-3 h-3" />
           </Link>
         </div>
+        {challengeLoadError && <p role="alert" data-testid="status-challenge-load-error" className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+          {challengeLoadError}
+        </p>}
 
         {account != null ? (
           <>
@@ -479,6 +522,8 @@ export function Today() {
               ))}
             </div>
           </>
+        ) : challengeLoadError ? (
+          <div className="text-sm text-muted-foreground mt-3">Challenge-konfigurationen kan inte verifieras just nu.</div>
         ) : (
           <div className="text-sm text-muted-foreground mt-3">
             Challenge Tracker ej konfigurerad.{" "}

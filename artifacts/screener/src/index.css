@@ -80,29 +80,30 @@
   --elevate-1: rgba(0, 0, 0, 0.03);
   --elevate-2: rgba(0, 0, 0, 0.08);
 
-  --background: 40 20% 97%;
-  --foreground: 215 28% 14%;
+  --background: 38 24% 96%;
+  --app-glow: 39 25% 95%;
+  --foreground: 207 30% 15%;
 
-  --border: 35 14% 87%;
-  --input: 35 14% 84%;
-  --ring: 192 45% 30%;
+  --border: 34 18% 86%;
+  --input: 34 18% 82%;
+  --ring: 187 43% 31%;
 
-  --card: 40 25% 99%;
-  --card-foreground: 215 28% 14%;
-  --card-border: 35 14% 87%;
+  --card: 42 28% 99%;
+  --card-foreground: 207 30% 15%;
+  --card-border: 34 18% 86%;
 
-  --popover: 40 25% 99%;
-  --popover-foreground: 215 28% 14%;
-  --popover-border: 35 14% 85%;
+  --popover: 42 28% 99%;
+  --popover-foreground: 207 30% 15%;
+  --popover-border: 34 18% 84%;
 
-  --primary: 192 48% 26%;
+  --primary: 187 43% 28%;
   --primary-foreground: 40 30% 97%;
 
   --secondary: 38 18% 93%;
   --secondary-foreground: 215 28% 18%;
 
   --muted: 38 16% 93%;
-  --muted-foreground: 215 12% 42%;
+  --muted-foreground: 207 13% 40%;
 
   --accent: 192 25% 92%;
   --accent-foreground: 192 48% 20%;
@@ -113,14 +114,14 @@
   --success: 152 48% 30%;
   --success-foreground: 210 40% 98%;
 
-  --sidebar: 40 22% 98%;
-  --sidebar-foreground: 215 28% 14%;
-  --sidebar-border: 35 14% 87%;
-  --sidebar-primary: 192 48% 26%;
+  --sidebar: 39 25% 95%;
+  --sidebar-foreground: 207 30% 15%;
+  --sidebar-border: 34 18% 86%;
+  --sidebar-primary: 187 43% 28%;
   --sidebar-primary-foreground: 40 30% 97%;
   --sidebar-accent: 38 18% 93%;
-  --sidebar-accent-foreground: 215 28% 14%;
-  --sidebar-ring: 192 45% 30%;
+  --sidebar-accent-foreground: 207 30% 15%;
+  --sidebar-ring: 187 43% 31%;
 
   --chart-1: 192 48% 26%;
   --chart-2: 36 60% 46%;
@@ -162,7 +163,41 @@
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
+@layer base {
+  body {
+    background-image: linear-gradient(180deg, hsl(var(--app-glow) / 0.78), transparent 22rem);
+  }
+}
+
+@layer utilities {
+  .app-enter {
+    animation: app-enter 420ms cubic-bezier(.2,.75,.25,1) both;
+  }
+  .surface-lift {
+    transition: border-color 180ms ease, background-color 180ms ease, transform 180ms ease;
+  }
+  .surface-lift:hover {
+    transform: translateY(-1px);
+    border-color: hsl(var(--primary) / .28);
+  }
+}
+
+@keyframes app-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}
+
 .dark {
+  --app-glow: 222.2 84% 4.9%;
   --button-outline: rgba(255, 255, 255, 0.1);
   --badge-outline: rgba(255, 255, 255, 0.05);
 

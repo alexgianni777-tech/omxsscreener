@@ -64,6 +64,18 @@ test("max 3 long + existing shorts only, no invented signals, US excluded from p
   assert.ok(html.includes("Long 3/3 · Short 1/3"));
   assert.ok(html.includes("Köp / Long") && html.includes("Sälj / Short"));
 });
+test("latest-session source status is separate from the saved selection's signal evidence", () => {
+  const latestReceipt: any = {
+    source: "edgeai", status: "SUCCESS", reportDate: "2026-10-12", signalDate: "2026-10-12",
+    importedAt: "2026-10-12T08:05:00Z", dataDates: { SE: "2026-10-09", US: "2026-10-09" },
+    fingerprint: "latest", warnings: [],
+  };
+  const html = render({ statusReports: [latestReceipt], reports: [] });
+  assert.ok(html.includes("Källstatus · senaste sessionen"));
+  assert.ok(html.includes("Rapportdatum 2026-10-12"));
+  assert.ok(html.includes("Marknadsdag SE 2026-10-09 / USA 2026-10-09"));
+  assert.ok(html.includes("Senast lyckad import i sessionen"));
+});
 test("saved fallback keeps date, STALE and its own dataDate; unknown EdgeAI metrics labelled, not fabricated", () => {
   const html = render({ signals: [{ id: 1, signalSource: "edgeai", signalDate: "2026-10-09", entryPrice: 100, stopPrice: 95, targetPrice: 110, edgeWinRate: 0.472 }] });
   for (const s of ["Session 2026-10-09", "STALE", "Datadag D−1 2026-10-08", "47.2%", "okänd", "Uppdatera priser", "Originalplan"]) assert.ok(html.includes(s), s);
@@ -77,13 +89,18 @@ test("quote labels show actual quote fields, missing asOf is not verified, D-1 r
   for (const s of ["Tidpunkt ej verifierad", "REGULAR", "Yahoo Finance · T1.ST", "Planerad entry – inte stängningskurs"]) assert.ok(html.includes(s), s);
   assert.ok(quoteLabels({ ...q, asOf: "2026-10-12T08:00:00Z" })!.asOf.includes("Europe/Stockholm"));
 });
-test("pages mount exactly one prominent research surface; duplicates folded into disclosures", () => {
-  for (const f of ["../pages/today.tsx", "../pages/dashboard.tsx"]) {
-    const s = readFileSync(new URL(f, import.meta.url), "utf8");
-    assert.equal((s.match(/<SwedishResearch \/>/g) ?? []).length, 1);
-    const saved = s.indexOf("<SavedTop3 />");
-    assert.ok(s.lastIndexOf("<details", saved) > s.indexOf("<SwedishResearch />"));
-  }
+test("today is the single prominent research surface; historical dashboard stays separate", () => {
+  const home = readFileSync(new URL("../pages/today.tsx", import.meta.url), "utf8");
+  assert.equal((home.match(/<SwedishResearch\b/g) ?? []).length, 1);
+  assert.ok(home.includes("latestReports={session?.sourceReports ?? []}"));
+  const saved = home.indexOf("<SavedTop3 />");
+  assert.ok(home.lastIndexOf("<details", saved) > home.indexOf("<SwedishResearch />"));
+
+  const history = readFileSync(new URL("../pages/dashboard.tsx", import.meta.url), "utf8");
+  assert.equal((history.match(/<SwedishResearch\b/g) ?? []).length, 0);
+  assert.ok(history.includes("Historiska utfall"));
+  assert.ok(history.includes('data-testid="details-current-selection"'));
+  assert.ok(history.includes('data-testid="details-historical-stats"'));
 });
 
 test("guard visible outside disclosure, entry not called close, invalid asOf not verified", () => {
