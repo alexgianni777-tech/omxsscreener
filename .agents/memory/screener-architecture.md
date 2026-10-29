@@ -3,6 +3,13 @@ name: OMXS30 Screener Architecture
 description: Key decisions, bug fixes, and data flow for the trading screener system
 ---
 
+## Card-presentation contract
+Keep ticker, direction, source status, original Entry/Stop/Target/R:R and live-entry warning ahead of historical statistics. Keep stale and missing-data warnings visible; put secondary metrics behind existing disclosure. A visual-only cleanup must not change signal or trading behavior.
+
+**Why:** The user repeatedly reported that later dashboard updates made the Top 3 cards noisy and asked that trading rules, plans and safety statuses remain unchanged.
+
+**How to apply:** Reuse existing status and plan data in the UI; reduce repetition and borders before considering new surfaces, and verify narrow-screen rendering.
+
 # OMXS30 Screener — Architecture Notes
 
 ## Data flow

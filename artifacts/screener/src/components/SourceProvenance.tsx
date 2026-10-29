@@ -37,16 +37,30 @@ export function SourceProvenance({ reports = [] }: { reports?: readonly SessionS
     : a!.reportDate !== b!.reportDate || a!.dataDates.SE !== b!.dataDates.SE
       ? "Olika rapport-/datadagar – källorna är inte datumssynkroniserade."
       : "Rapport- och datadag överensstämmer; källorna kan ändå ha olika signaler.";
-  return <div data-testid="source-provenance" className="mt-2 space-y-1 text-[11px] leading-relaxed text-muted-foreground">
-    {sources.map(s => <p key={s.source} data-testid={`source-provenance-${s.source}`} className="break-words">
-      <span className={s.latest?.status === "FAILED" ? "font-medium text-destructive" : "font-medium text-foreground"}>
-        {s.source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"}: {s.status}
-      </span>
-      {" · "}{s.latest?.status === "FAILED" && s.accepted ? "Senast bevarade: " : ""}
-      Rapport {day(s.accepted?.reportDate)} · Marknadsdata as-of {day(s.accepted?.dataDates?.SE)} · Importerad {importTime(s.accepted?.importedAt)}
-      {s.latest?.status === "FAILED" && <> · Avvisat försök {importTime(s.latest.importedAt)}</>}
-    </p>)}
-    <p data-testid="source-date-alignment">{alignment}</p>
-    <p>Sparade kvitton för vald session, inte livekontroll av leverans eller kurs. Marknadsdatum avser Sverige; importtid visas i Stockholmstid.</p>
+  const alignWarn = !alignment.startsWith("Rapport- och datadag överensstämmer");
+  return <div data-testid="source-provenance" className="mt-3 rounded-lg bg-muted/40 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+    <div className="flex flex-wrap gap-x-4 gap-y-1">
+      {sources.map(s => <p key={s.source} data-testid={`source-provenance-${s.source}`} className="break-words">
+        <span className={s.latest?.status === "FAILED" ? "font-semibold text-destructive" : s.latest?.status === "SUCCESS" && !s.latest.warnings?.length ? "font-medium text-foreground" : "font-semibold text-amber-700"}>
+          {s.source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"}: {s.status}
+        </span>
+      </p>)}
+    </div>
+    <p data-testid="source-date-alignment" className={alignWarn ? "mt-1 font-semibold text-amber-700" : "mt-1"}>{alignment}</p>
+    {verified && completeDates && alignWarn && <p className="mt-1 text-amber-700 dark:text-amber-400">
+      Telegram: rapport {day(a!.reportDate)}, data {day(a!.dataDates.SE)} · EdgeAI: rapport {day(b!.reportDate)}, data {day(b!.dataDates.SE)}
+    </p>}
+    <details className="mt-1">
+      <summary className="cursor-pointer select-none hover:text-foreground">Rapport-, as-of- och importtider</summary>
+      <div className="mt-1 space-y-1">
+        {sources.map(s => <p key={s.source} className="break-words">
+          <span className="font-medium text-foreground">{s.source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"}</span>
+          {" · "}{s.latest?.status === "FAILED" && s.accepted ? "Senast bevarade: " : ""}
+          Rapport {day(s.accepted?.reportDate)} · Marknadsdata as-of {day(s.accepted?.dataDates?.SE)} · Importerad {importTime(s.accepted?.importedAt)}
+          {s.latest?.status === "FAILED" && <> · Avvisat försök {importTime(s.latest.importedAt)}</>}
+        </p>)}
+        <p>Sparade kvitton för vald session, inte livekontroll av leverans eller kurs. Marknadsdatum avser Sverige; importtid visas i Stockholmstid.</p>
+      </div>
+    </details>
   </div>;
 }

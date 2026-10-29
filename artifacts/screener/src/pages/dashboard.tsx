@@ -72,7 +72,7 @@ export function Dashboard() {
     : null;
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <header className="flex flex-wrap justify-between items-end gap-3">
         <div>
           <h2 className="text-2xl md:text-3xl font-semibold tracking-tight">Översikt</h2>
@@ -93,26 +93,27 @@ export function Dashboard() {
       {/* Today's Session */}
       <MarketIntelSection />
       <SwedishResearch />
-      <details className="rounded-lg border border-border bg-card" data-testid="details-current-selection">
-        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Sparat urval inkl. USA, dagens session och aktuella versioner</summary>
-        <div className="border-t border-border p-2 sm:p-3 space-y-4">
+      <details className="rounded-xl bg-card ring-1 ring-border/60" data-testid="details-current-selection">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Alternativa vyer: sparat urval inkl. USA, dagens session och aktuella versioner
+          <span className="ml-2 font-normal text-xs text-muted-foreground">separata data, inte huvud-Top 3 ovan</span></summary>
+        <div className="border-t border-border/50 p-2 sm:p-3 space-y-4">
       <SavedTop3 />
       <TodaySessionPanel />
       <DashboardLiveTop3 />
         </div>
       </details>
-      <details className="rounded-lg border border-border bg-card" data-testid="details-manual-catalysts">
+      <details className="rounded-xl bg-card ring-1 ring-border/60" data-testid="details-manual-catalysts">
         <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Manuella katalysatorer</summary>
-        <div className="border-t border-border p-2 sm:p-3"><ManualCatalysts /></div>
+        <div className="border-t border-border/50 p-2 sm:p-3"><ManualCatalysts /></div>
       </details>
-      <details className="rounded-lg border border-border bg-card" data-testid="details-groundzero">
+      <details className="rounded-xl bg-card ring-1 ring-border/60" data-testid="details-groundzero">
         <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">GroundZero</summary>
-        <div className="border-t border-border p-2 sm:p-3"><GroundZero /></div>
+        <div className="border-t border-border/50 p-2 sm:p-3"><GroundZero /></div>
       </details>
-      <details className="rounded-lg border border-border bg-card" data-testid="details-historical-stats">
+      <details className="rounded-xl bg-card ring-1 ring-border/60" data-testid="details-historical-stats">
         <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Historiska utfall och signalanalys
           <span className="ml-2 font-normal text-xs text-muted-foreground">avslutade signaler, inte aktuella rekommendationer</span></summary>
-        <div className="border-t border-border p-3 sm:p-4 space-y-8">
+        <div className="border-t border-border/50 p-3 sm:p-4 space-y-8">
 
       {/* Weekly Summary */}
       <WeekSummarySection equityCurve={summary.equityCurve} />
@@ -277,13 +278,13 @@ export function Dashboard() {
       <Top3Section />
         </div>
       </details>
-      <details className="rounded-lg border border-border bg-card" data-testid="details-trade-journal">
+      <details className="rounded-xl bg-card ring-1 ring-border/60" data-testid="details-trade-journal">
         <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Exekveringsjournal (avancerat)</summary>
-        <div className="border-t border-border p-2 sm:p-3"><TradeJournal /></div>
+        <div className="border-t border-border/50 p-2 sm:p-3"><TradeJournal /></div>
       </details>
 
       {/* Category Breakdown */}
-      <details className="rounded-lg border border-border bg-card p-3 sm:p-4" data-testid="details-category-stats">
+      <details className="rounded-xl bg-card ring-1 ring-border/60 p-3 sm:p-4" data-testid="details-category-stats">
         <summary className="cursor-pointer text-sm font-semibold">Kategori-prestanda (historik)</summary>
       <div className="mt-4">
         <h3 className="text-lg font-semibold mb-4 border-b border-border pb-2">
