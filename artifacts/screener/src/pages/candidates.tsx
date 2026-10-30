@@ -87,11 +87,11 @@ export function Candidates() {
                 <th className="px-4 py-3">Ticker</th>
                 <th className="px-4 py-3">Dir</th>
                 <th className="px-4 py-3">Category</th>
-                <th className="px-4 py-3 text-right">Screen Px</th>
+                <th className="px-4 py-3 text-right">Aktiekurs vid screening</th>
                 <th className="px-4 py-3 text-right">Live Px</th>
-                <th className="px-4 py-3 text-right">Entry</th>
-                <th className="px-4 py-3 text-right">Target</th>
-                <th className="px-4 py-3 text-right">Stop</th>
+                <th className="px-4 py-3 text-right">Aktie-entry</th>
+                <th className="px-4 py-3 text-right">Aktiemål</th>
+                <th className="px-4 py-3 text-right">Aktie-stop</th>
                 <th className="px-4 py-3 text-center">Outcome</th>
                 <th className="px-4 py-3"></th>
               </tr>
