@@ -146,6 +146,10 @@ export function SessionDetail() {
         </div>
       </div>
 
+      <div className="rounded-lg border border-blue-500/25 bg-blue-500/5 px-4 py-3 text-sm text-muted-foreground">
+        <strong className="text-foreground">Endast underliggande aktier.</strong> Alla kurser, entry, stop loss, kursmål och R/R på denna sida avser själva aktien – inte mini futures, turbos eller warranter. Derivatval och faktisk portföljrisk hanteras separat av AG Invest.
+      </div>
+
       {/* Market Weather Banner */}
       <div className="bg-card border-l-4 border-l-primary border-y border-r border-border rounded-r-lg p-6 shadow-sm">
         <div className="flex flex-col md:flex-row gap-6 md:items-center justify-between">
@@ -214,7 +218,7 @@ export function SessionDetail() {
             <span className="font-semibold text-amber-400 text-sm">Inga statistiskt kvalificerade EdgeAI-signaler</span>
             <p className="text-xs text-muted-foreground mt-0.5">
               Samtliga EdgeAI-kandidater i denna session är bevakning/forskning, inte godkända köp- eller säljorder.
-              Kontrollera aktuell kurs, rapportdatum och derivatvillkor.
+              Kontrollera aktuell aktiekurs, rapportdatum och att signalen fortfarande gäller.
             </p>
           </div>
         </div>
@@ -594,7 +598,7 @@ function CandidateRow({
         {/* Metrics grid — labels adapt to EdgeAI vs manual */}
         <div className="grid grid-cols-3 gap-y-2 gap-x-4 text-xs">
           <div>
-            <span className="text-muted-foreground block text-[10px]">SCREEN Px</span>
+            <span className="text-muted-foreground block text-[10px]">Aktiekurs vid screening</span>
             <span className="font-mono font-medium">{formatNumber(candidate.price)}</span>
           </div>
           <div>
@@ -646,7 +650,7 @@ function CandidateRow({
       {/* Live Price */}
       <div className="flex flex-col justify-center min-w-[140px] xl:border-r border-border xl:pr-4">
         <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1">
-          <Activity className="w-3 h-3" /> Live Price
+          <Activity className="w-3 h-3" /> Aktie · aktuell kurs
         </div>
         {livePrice != null ? (
           <div className="space-y-1">
@@ -691,19 +695,19 @@ function CandidateRow({
       {/* Trade Plan */}
       <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4 xl:border-r border-border xl:pr-4 py-2 xl:py-0 bg-muted/30 p-3 rounded-md xl:bg-transparent xl:p-0">
         <div className="flex flex-col justify-center">
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1"><Crosshair className="w-3 h-3"/> Entry</div>
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1"><Crosshair className="w-3 h-3"/> Aktie-entry</div>
           <div className="font-mono font-semibold text-base">{formatNumber(candidate.entryPrice)}</div>
         </div>
         <div className="flex flex-col justify-center">
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1"><ShieldAlert className="w-3 h-3"/> Stop</div>
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1"><ShieldAlert className="w-3 h-3"/> Aktie-stop</div>
           <div className="font-mono font-semibold text-destructive">{formatNumber(candidate.stopPrice)}</div>
         </div>
         <div className="flex flex-col justify-center">
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1"><Target className="w-3 h-3"/> Target</div>
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1"><Target className="w-3 h-3"/> Aktiemål</div>
           <div className="font-mono font-semibold text-success">{formatNumber(candidate.targetPrice)}</div>
         </div>
         <div className="flex flex-col justify-center">
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Risk / Reward</div>
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">R/R · aktien</div>
           <div className="font-mono font-bold">{formatNumber(candidate.rr)}R</div>
         </div>
       </div>
