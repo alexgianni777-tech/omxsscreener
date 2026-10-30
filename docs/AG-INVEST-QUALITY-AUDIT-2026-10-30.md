@@ -10,6 +10,7 @@ Denna granskning gäller kod i GitHub-repositoriet **omxsscreener**, plus EdgeAI
 - Okänd/äldre kandidatproveniens får inte automatiskt tolkas som verifierad EdgeAI-data.
 - Beskriv överlapp i signalkategorier som just överlapp; appen har inte beräknat verklig statistisk kurskorrelation.
 - Top3-analysens svar markerar sin metod som **EXPLORATORY_RESEARCH_ONLY**.
+- Aktiepriser, entry, stop, mål och R/R märks nu uttryckligen som **underliggande** i kandidattabellen och sessionsvyn.
 
 ## Fortsatta blockerare före beslutssystem/produktion
 
@@ -23,20 +24,21 @@ Denna granskning gäller kod i GitHub-repositoriet **omxsscreener**, plus EdgeAI
 - `EdgeAI`-setups är **WATCH** och får inte misstas för godkända affärer; `OMXS30`-screenerns Oraklet-kvalitet registreras för närvarande inte som en egen strukturerad kategori i parsern.
 - Rapportsidan bör kontrollera tidpunkt (före/efter USA-stängning) och verifierad källa för rapportdatum och kursreaktioner.
 
-### P0 – verklig derivatrisk
-- Ingen ingångskurs/stop i underliggande aktie är en ordernivå för mini future eller turbo.
-- Före varje verklig trade behövs aktuellt instrument-ID/ISIN, köp-/säljspread, finansierings- och knockoutnivå, hävstång, gapscenario samt korrelation.
-- 20 % av kontot gånger 20 % planerad stopp är *4 % planerad*, inte garanterad maximal risk. En innehavsinsats om 20 % kan i värsta fall gå helt förlorad.
-- Hårdgränser: en position max 20 % av kontot, ordinarie hävstång 4–8×, rapporttrade max 4×, planerad risk max 4 % per position nu; mål 1 % risk vid 800 000 kr. Ordermotor får inte byggas utan ny behörighetsprövning.
+### Beslutad avgränsning – enbart underliggande aktier
+- Asset Screen analyserar och visar **underliggande aktier**: kurs, trend, relativ styrka, signalens ursprung, entry, stop loss, mål och R/R räknat på själva aktien.
+- Appen ska **inte** välja, värdera, modellera eller föreslå mini futures, turbos, warranter, hävstång, knockout eller instrumentorder.
+- AG Invest/styrelsen och kontoägaren ansvarar **utanför Asset Screen** för derivatval, faktisk positionsstorlek, spread, knockout, hävstång och alla handelsbeslut.
+- Aktie-stop på skärmen är **inte** en garanterad stop i ett derivat. Detta ska stå tydligt i UI.
+- Asset Screen behåller forskningslogg och uppföljning av **underliggande aktiesignaler**. Det är inte samma sak som en journal över Avanzas faktiska derivathandel.
 
-### P1 – riktig handelsjournal
-- Importera Avanzas **faktiska** transaktioner/uttag/insättningar. Ingen förväntan eller P&L får härledas från skärmdumpar utan avstämning.
-- Länka genomförda affärer till den **ursprungliga signalen och dess versions-ID**, avslutsorsak, faktisk spread/courtage, riskbudget, portföljregim och regelavvikelser.
-- Rekonstruera historiken 11 000 → 22 000 → 10 000 kr. Redovisa nettoavkastning utan insättningar och uttag samt verkligt `R` efter kostnader.
+### Separat AG Invest-revision (utanför Asset Screen)
+- Stäm av Avanzas faktiska transaktioner, insättningar, uttag, affärsbeslut och portföljrisk separat, och håll kontodata borta från publika GitHub.
+- Rekonstruera historiken 11 000 → 22 000 → 10 000 kr utan att blanda in derivatexekvering i aktiescreenern.
+- Den tidigare föreslagna derivatriskmotorn och Avanza-integrationen är **inte längre planerade funktioner i Asset Screen**.
 
 ### P1 – framåtblickande validering
 - Frys modellversion och publicera alltid även *underkända* signaler och tomma dagar. Byt inte historiska signalnivåer efter kursutfall.
-- Jämför först med passiva index och enkla trendregler. Skilj såväl aktiemodell som derivatutfall, inklusive intradagsbarriärer.
+- Jämför underliggande aktiesignaler med passiva index och enkla trendregler. Derivatutfall analyseras separat inom AG Invest.
 - EdgeAI:s offentliggjorda ledger per 30 oktober 2026: USA 127 stängda modellaffärer, -43,38R; Sverige 39, +5,21R. Dessa är **inte** Avanzas verkliga P&L eller statistiskt bekräftad avkastningsfördel.
 - 0 / 155 aktuella EdgeAI-förslag kvalificerar enligt den striktaste out-of-sample-gaten.
 
