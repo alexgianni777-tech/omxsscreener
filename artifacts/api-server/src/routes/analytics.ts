@@ -2,8 +2,9 @@
  * GET /api/screener/analytics/top3
  *
  * Hypothetical "top 3 per session" strategy performance.
- * For every session, picks the 3 candidates with the highest edge score
- * (winRate × expectancyR), then tracks their logged outcomes as R-multiples.
+ * For every session, selects the 3 highest-tier candidates by historical
+ * expectancyR; this is an EXPLORATORY ranking, not a predicted probability,
+ * validated edge, or order recommendation. Logged outcomes are measured in R.
  * PENDING outcomes are excluded from running totals.
  */
 import { Router, type IRouter } from "express";
@@ -55,15 +56,15 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
       (candidate) => candidate.origin === "edgeai" || candidate.origin == null,
     );
 
-    // Rank by E[R] proxy, then keep only one position per ticker.
+    // Rank by evidence tier then historical E[R], one position per ticker.
+    // Do not multiply win rate by expectancy: this double-counts winners and
+    // is not a probability, Kelly fraction, or calibrated prediction.
     const sorted = [...candidates].sort((a, b) => {
       const evidenceDiff =
         evidencePriority(b.gapWarning) - evidencePriority(a.gapWarning);
       if (evidenceDiff !== 0) return evidenceDiff;
-      return (
-        normalizeStoredRate(b.perf1m) * ((b.rsi ?? 0) / 100) -
-        normalizeStoredRate(a.perf1m) * ((a.rsi ?? 0) / 100)
-      );
+      const expectancyDiff = ((b.rsi ?? 0) - (a.rsi ?? 0)) / 100;
+      return expectancyDiff !== 0 ? expectancyDiff : normalizeStoredRate(b.perf1m) - normalizeStoredRate(a.perf1m);
     });
 
     const top3 = [];
@@ -96,7 +97,7 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
         ticker: candidate.ticker,
         direction: candidate.direction,
         edgeScore: Number(
-          (normalizeStoredRate(candidate.perf1m) * ((candidate.rsi ?? 0) / 100)).toFixed(4),
+          ((candidate.rsi ?? 0) / 100).toFixed(4),
         ),
         outcome: candidate.outcome,
         r,
@@ -139,6 +140,7 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
   const avgRPerTrade = totalTrades > 0 ? cumulativeR / totalTrades : null;
 
   res.json({
+    methodology: "EXPLORATORY_RESEARCH_ONLY: historical expectancyR, evidence tier and logged outcomes. No predicted probabilities or automatic orders.",
     sessions: sessionResults,
     stats: {
       totalSessions: sessions.length,
