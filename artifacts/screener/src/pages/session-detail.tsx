@@ -665,7 +665,7 @@ function CandidateRow({
                 </span>
               )}
               {pastEntry && !nearStop && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/20 text-success font-bold">
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold">
                   NIVÅ PASSERAD · BEVAKA
                 </span>
               )}
