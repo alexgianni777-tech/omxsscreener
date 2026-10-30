@@ -36,7 +36,7 @@ function useSessionNews(tickers: string[]) {
 
 // ── Edge score helpers ────────────────────────────────────────────────────────
 // For EdgeAI sessions: rsi field stores expectancyR × 100; perf1m stores winRate.
-// compositeScore = winRate × expectancyR (Kelly-ish proxy).
+// Rank by historical expectancy in R. Win rate is separate; neither metric predicts probability.
 // Historical rows may contain winRate as either 0-1 or 0-100.
 function normalizeWinRate(value: number | null | undefined): number {
   const n = Number(value ?? 0);
@@ -46,7 +46,7 @@ function normalizeWinRate(value: number | null | undefined): number {
 
 function edgeScore(c: Candidate): number {
   const expectancyR = c.rsi / 100;
-  return normalizeWinRate(c.perf1m) * expectancyR;
+  return expectancyR;
 }
 
 type EvidenceLabel = "VALIDATED" | "PROMISING" | "WATCH" | "LEGACY";
@@ -134,8 +134,6 @@ export function SessionDetail() {
     if (count >= 2) correlationWarnings.push(`${count}× ${key}`);
   });
   const totalPending = pending.length;
-  const dominantCount = Math.max(0, ...Object.values(groups));
-  const isHighlyCorrelated = totalPending >= 2 && dominantCount === totalPending;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-12">
@@ -198,11 +196,25 @@ export function SessionDetail() {
           <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
           <div>
             <span className="font-semibold text-amber-400 text-sm">
-              {isHighlyCorrelated ? "Alla " : ""}{totalPending} pendande setups är korrelerade
+              {totalPending} bevakningssignaler – överlapp i grupper
             </span>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {correlationWarnings.join(", ")} — det är inte diversifiering, det är samma edge {isHighlyCorrelated ? "i " + totalPending + " positioner" : "upprepat"}.
-              Tar du alla tar du {isHighlyCorrelated ? "exakt" : "i princip"} samma risk flera gånger.
+              {correlationWarnings.join(", ")}. Samma signaltyp kan innebära liknande exponering, men faktisk kurskorrelation har inte beräknats.
+              Kontrollera sektor, underliggande bolag och samlad portföljrisk manuellt.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Non-qualified EdgeAI proposals are explicitly research-only. */}
+      {isEdgeAI && candidates.some(c => c.origin === "edgeai") && !candidates.some(c => c.origin === "edgeai" && evidenceLabel(c) === "VALIDATED") && (
+        <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-500/30 bg-amber-500/5">
+          <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-semibold text-amber-400 text-sm">Inga statistiskt kvalificerade EdgeAI-signaler</span>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Samtliga EdgeAI-kandidater i denna session är bevakning/forskning, inte godkända köp- eller säljorder.
+              Kontrollera aktuell kurs, rapportdatum och derivatvillkor.
             </p>
           </div>
         </div>
@@ -224,7 +236,12 @@ export function SessionDetail() {
               const aEdge = isEdgeAICandidate(a);
               const bEdge = isEdgeAICandidate(b);
               if (aEdge !== bEdge) return aEdge ? -1 : 1;
-              return aEdge ? edgeScore(b) - edgeScore(a) : a.rank - b.rank;
+              if (!aEdge) return a.rank - b.rank;
+              const priority = { VALIDATED: 3, PROMISING: 2, WATCH: 1, LEGACY: 0 };
+              const aTier = evidenceLabel(a);
+              const bTier = evidenceLabel(b);
+              if (priority[aTier] !== priority[bTier]) return priority[bTier] - priority[aTier];
+              return edgeScore(b) - edgeScore(a);
             });
           } else {
             catCandidates = catCandidates.sort((a, b) => a.rank - b.rank);
@@ -237,7 +254,7 @@ export function SessionDetail() {
                 <div className="w-2 h-2 rounded-full bg-primary"></div>
                 {cat}
                 <span className="ml-2 text-sm font-normal text-muted-foreground px-2 py-0.5 bg-muted rounded-full">{catCandidates.length}</span>
-                {isEdgeAI && <span className="ml-1 text-[10px] text-muted-foreground">sorterat efter sannolikhet</span>}
+                {isEdgeAI && <span className="ml-1 text-[10px] text-muted-foreground">sorterat efter historiskt E[R], ej sannolikhet</span>}
               </h3>
               
               <div className="grid gap-4">
@@ -564,7 +581,7 @@ function CandidateRow({
             {/* Edge probability score badge — only for EdgeAI-origin candidates */}
             {edgeCandidate && (
               <div className={`flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold font-mono ${edgeScoreColor(score)}`}
-                   title={`Sannolikhet = WR × E[R] = ${winRatePct}% × ${expectancyR.toFixed(2)}R`}>
+                   title={`Historiskt E[R]: ${expectancyR.toFixed(2)}R per modellaffär. Inte sannolikhet eller prognos.`}>
                 E[R] {expectancyR >= 0 ? "+" : ""}{expectancyR.toFixed(2)}
               </div>
             )}
@@ -649,7 +666,7 @@ function CandidateRow({
               )}
               {pastEntry && !nearStop && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/20 text-success font-bold">
-                  TRIGGERED
+                  NIVÅ PASSERAD · BEVAKA
                 </span>
               )}
               {entryStale && (
