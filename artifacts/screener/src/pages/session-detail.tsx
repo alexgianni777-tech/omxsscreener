@@ -52,11 +52,11 @@ function edgeScore(c: Candidate): number {
 type EvidenceLabel = "VALIDATED" | "PROMISING" | "WATCH" | "LEGACY";
 
 function isEdgeAICandidate(candidate: Candidate): boolean {
-  return candidate.origin !== "legacy" && candidate.origin !== "manual";
+  return candidate.origin === "edgeai";
 }
 
 function evidenceLabel(candidate: Candidate): EvidenceLabel {
-  if (candidate.origin === "legacy") return "LEGACY";
+  if (candidate.origin !== "edgeai") return "LEGACY";
   if (candidate.gapWarning == null) return "VALIDATED";
   return candidate.gapWarning > -0.75 ? "PROMISING" : "WATCH";
 }
