@@ -52,12 +52,20 @@ export function SourceProvenance({ reports = [], context }: { reports?: readonly
         <span className="font-medium text-foreground">{s.source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"}</span>
         {" · "}Rapportdatum {day(s.accepted?.reportDate)}
         {" · "}Marknadsdag SE {day(s.accepted?.dataDates?.SE)} / USA {day(s.accepted?.dataDates?.US)}
-        {" · "}Senast lyckad import i sessionen {importTime(s.accepted?.importedAt)}
+         {" · "}Senast lyckad import: {importTime(s.accepted?.importedAt)}
       </p>)}
     </div>
     {sources.filter(s => s.latest?.status === "FAILED").map(s => <p key={`${s.source}-error`} role="alert" className="mt-1 break-words font-medium text-destructive">
       {s.source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"} · import avvisad: {s.latest?.error || "orsak okänd"}. Tidigare lyckat kvitto används endast som historik.
     </p>)}
+    {sources.filter(s => !!s.latest?.warnings?.length).map(s => <details key={`${s.source}-warnings`} className="mt-1">
+      <summary className="cursor-pointer select-none text-amber-700 dark:text-amber-400">
+        {s.source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"} · {s.latest?.warnings?.length} datavarning(ar)
+      </summary>
+      <ul className="mt-1 list-inside list-disc space-y-1 break-words">
+        {s.latest?.warnings?.map((warning, index) => <li key={`${s.source}-warning-${index}`}>{warning}</li>)}
+      </ul>
+    </details>)}
     <p data-testid="source-date-alignment" className={alignWarn ? "mt-1 font-semibold text-amber-700" : "mt-1"}>{alignment}</p>
     {verified && completeDates && alignWarn && <p className="mt-1 text-amber-700 dark:text-amber-400">
       Telegram: rapport {day(a!.reportDate)}, data {day(a!.dataDates.SE)} · EdgeAI: rapport {day(b!.reportDate)}, data {day(b!.dataDates.SE)}
@@ -67,11 +75,11 @@ export function SourceProvenance({ reports = [], context }: { reports?: readonly
       <div className="mt-1 space-y-1">
         {sources.map(s => <p key={s.source} className="break-words">
           <span className="font-medium text-foreground">{s.source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"}</span>
-          {" · "}{s.latest?.status === "FAILED" && s.accepted ? "Senast lyckad import i sessionen: " : ""}
+          {" · "}{s.latest?.status === "FAILED" && s.accepted ? "Senast lyckad import: " : ""}
           Rapportdatum {day(s.accepted?.reportDate)} · Marknadsdag Sverige {day(s.accepted?.dataDates?.SE)} · Marknadsdag USA {day(s.accepted?.dataDates?.US)} · Importerad {importTime(s.accepted?.importedAt)}
-          {s.latest?.status === "FAILED" && <> · Avvisat försök {importTime(s.latest.importedAt)}</>}
+          {s.latest?.status === "FAILED" && <> · Senaste avvisade försök {importTime(s.latest.importedAt)}</>}
         </p>)}
-        <p>Sparade kvitton för vald session, inte livekontroll av leverans eller kurs. Importtid visas i Stockholmstid. Datum utan verifierat kvitto visas som okända.</p>
+        <p>Sparade kvitton, inte livekontroll av leverans eller kurs. Importtid visas i Stockholmstid. Datum utan verifierat kvitto visas som okända.</p>
       </div>
     </details>
   </div>;

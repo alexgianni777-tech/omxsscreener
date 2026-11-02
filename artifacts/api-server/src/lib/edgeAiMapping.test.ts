@@ -3,13 +3,22 @@ import test from "node:test";
 
 import { mapEdgeAiSetup } from "./edgeAiMapping.ts";
 
+const validSetup = {
+  ticker: "TEST",
+  setup: "Momentum",
+  dir: "long",
+  entry: 100,
+  stop: 95,
+  target: 110,
+  signalT: "2026-10-01T14:00:00Z",
+  barsAgo: 0,
+  rs: 0.25,
+  edge: { winRate: 55, expectancyR: 0.2, sample: 100 },
+};
+
 test("EdgeAI R:R is calculated from entry, stop and target", () => {
   const candidate = mapEdgeAiSetup({
-    ticker: "TEST",
-    dir: "long",
-    entry: 100,
-    stop: 95,
-    target: 110,
+    ...validSetup,
     rr: 99,
     edge: { winRate: 55, expectancyR: 0.2, sample: 100 },
     chart: [],
@@ -29,11 +38,7 @@ test("EdgeAI R:R is calculated from entry, stop and target", () => {
 
 test("EdgeAI signal age and statistics use dedicated fields", () => {
   const candidate = mapEdgeAiSetup({
-    ticker: "TEST",
-    dir: "long",
-    entry: 100,
-    stop: 95,
-    target: 110,
+    ...validSetup,
     barsAgo: 3,
     edge: { winRate: 55, expectancyR: 0.35, sample: 40 },
     chart: [],
@@ -51,11 +56,7 @@ test("EdgeAI signal age and statistics use dedicated fields", () => {
 
 test("EdgeAI candidates use the setup signalT market date, never the report date or server-local fallback", () => {
   const base = {
-    ticker: "TEST",
-    dir: "long",
-    entry: 100,
-    stop: 95,
-    target: 110,
+    ...validSetup,
     chart: [],
   };
   assert.equal(
@@ -66,8 +67,8 @@ test("EdgeAI candidates use the setup signalT market date, never the report date
     mapEdgeAiSetup({ ...base, signalT: "Tue Oct 27 2026 08:00:00 GMT+0000 (Coordinated Universal Time)" }, "SE", {}).signalDate,
     "2026-10-27",
   );
-  assert.equal(mapEdgeAiSetup({ ...base, signalT: "2026-10-27T08:00:00" }, "SE", {}).signalDate, null);
-  assert.equal(mapEdgeAiSetup({ ...base, signalT: "not-a-date" }, "SE", {}).signalDate, null);
+  assert.throws(() => mapEdgeAiSetup({ ...base, signalT: "2026-10-27T08:00:00" }, "SE", {}), /signalT/);
+  assert.throws(() => mapEdgeAiSetup({ ...base, signalT: "not-a-date" }, "SE", {}), /signalT/);
 });
 
 test("signal indicators exclude bars after the trigger", () => {
@@ -77,7 +78,7 @@ test("signal indicators exclude bars after the trigger", () => {
   }));
   chart[30] = { o: 200, c: 200 };
   const candidate = mapEdgeAiSetup({
-    ticker: "TEST",
+    ...validSetup,
     dir: "short",
     entry: 100,
     stop: 105,
@@ -88,4 +89,21 @@ test("signal indicators exclude bars after the trigger", () => {
   }, "SE", {});
 
   assert.equal(candidate.signalGapPct, 0);
+});
+
+test("missing direction or plan levels fail closed instead of becoming a LONG or zero", () => {
+  const { dir: _dir, ...noDirection } = validSetup;
+  assert.throws(() => mapEdgeAiSetup({ ...noDirection, edge: { winRate: 55, expectancyR: 1, sample: 12 } }, "SE", {}), /riktning/);
+  const { entry: _entry, ...noEntry } = validSetup;
+  assert.throws(() => mapEdgeAiSetup({ ...noEntry, edge: { winRate: 55, expectancyR: 1, sample: 12 } }, "SE", {}), /entry/);
+});
+
+test("EdgeAI SHORT plan direction and calibrated edge fields remain distinct", () => {
+  const candidate = mapEdgeAiSetup({
+    ...validSetup, dir: "short", stop: 105, target: 90,
+    edge: { winRate: 56, expectancyR: 0.35, n: 40 },
+  }, "US", {});
+  assert.equal(candidate.direction, "SHORT");
+  assert.equal(candidate.rr, 2);
+  assert.equal(candidate.edgeSampleN, 40);
 });

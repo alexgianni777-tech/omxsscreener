@@ -33,8 +33,21 @@ test("comparison of alternative plans does not replace a usable quote with a fab
       marketState: "REGULAR", asOf: now.toISOString() } as any,
   }));
   assert.ok(html.includes("Flera planer/riktningar"));
-  assert.ok(html.includes('data-entry-status="READY"'));
-  assert.ok(html.includes("inte köpbesked"));
+  assert.ok(html.includes('data-entry-status="UNKNOWN"'));
+  assert.ok(html.includes("NO TRADE · ingen entrybekräftelse"));
+  assert.ok(html.includes("NO TRADE · ingen entrybekräftelse"));
+});
+
+test("decision brief fails closed on missing market date, stale data, non-TRADEABLE screening and missing quote", () => {
+  const html = renderToStaticMarkup(React.createElement(ResearchCard, {
+    pick: pick(20, "LONG"), dataDate: null, stale: true,
+  }));
+  assert.ok(html.includes("NO TRADE · ingen entrybekräftelse"));
+  assert.ok(html.includes("Screeningstatus är inte verifierat TRADEABLE"));
+  assert.ok(html.includes("Signal eller marknadsdag är STALE"));
+  assert.ok(html.includes("Verifierat marknadsdatadatum saknas"));
+  assert.ok(html.includes("Rapportdatum ska kontrolleras manuellt före beslut"));
+  assert.ok(!html.includes('data-entry-status="READY"'));
 });
 test("a US Yahoo symbol cannot be shown as a verified current price for a Swedish EQT plan", () => {
   const quote: any = { ticker: "EQT", yahooTicker: "EQT", livePrice: 53.82,
@@ -71,10 +84,10 @@ test("latest-session source status is separate from the saved selection's signal
     fingerprint: "latest", warnings: [],
   };
   const html = render({ statusReports: [latestReceipt], reports: [] });
-  assert.ok(html.includes("Källstatus · senaste sessionen"));
+  assert.ok(html.includes("Källstatus · senaste kvitton per källa"));
   assert.ok(html.includes("Rapportdatum 2026-10-12"));
   assert.ok(html.includes("Marknadsdag SE 2026-10-09 / USA 2026-10-09"));
-  assert.ok(html.includes("Senast lyckad import i sessionen"));
+  assert.ok(html.includes("Senast lyckad import"));
 });
 test("saved fallback keeps date, STALE and its own dataDate; unknown EdgeAI metrics labelled, not fabricated", () => {
   const html = render({ signals: [{ id: 1, signalSource: "edgeai", signalDate: "2026-10-09", entryPrice: 100, stopPrice: 95, targetPrice: 110, edgeWinRate: 0.472 }] });
@@ -110,7 +123,9 @@ test("guard visible outside disclosure, entry not called close, invalid asOf not
   assert.ok(!html.includes("Invalid Date") && !html.includes("D−1-referens"));
   const card = readFileSync(new URL("./ResearchCard.tsx", import.meta.url), "utf8");
   const guard = card.indexOf("<LiveEntryGuard");
-  assert.ok(guard > 0 && card.lastIndexOf("<details", guard) < 0);
+  const beforeGuard = card.slice(0, guard);
+  assert.ok(guard > 0);
+  assert.equal((beforeGuard.match(/<details\b/g) ?? []).length, (beforeGuard.match(/<\/details>/g) ?? []).length);
   assert.ok(html.includes("data-entry-status="));
 });
 

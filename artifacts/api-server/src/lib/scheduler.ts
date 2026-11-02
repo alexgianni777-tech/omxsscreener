@@ -93,10 +93,15 @@ async function sessionHasReport(
 async function runImport(date: string): Promise<boolean> {
   logger.info({ date }, "[scheduler] Fetching EdgeAI data.json");
 
-  const edgeData = await fetchFreshEdgeAiData(15_000);
+  const fetched = await fetchFreshEdgeAiData(15_000);
+  const edgeData = fetched.data;
   const signalDate = edgeAiSessionDate(edgeData);
-  const importReport = makeImportReport("edgeai", signalDate, edgeData, edgeData.generatedAt ?? null,
-    { SE: edgeData.markets?.SE?.dataAsOf ?? null, US: edgeData.markets?.US?.dataAsOf ?? null });
+  const importReport = makeImportReport("edgeai", signalDate, fetched.rawData, edgeData.generatedAt ?? null, fetched.quality.dataDates);
+  importReport.warnings = fetched.quality.warnings;
+  importReport.quarantinedIdentities = fetched.quality.quarantinedIdentities;
+  if (fetched.quality.errors.length > 0) {
+    throw new ImportDataError(`EdgeAI-import avvisad: ${fetched.quality.errors.join(" ")}`, importReport);
+  }
   if (await sessionHasReport(date, importReport)) {
     logger.debug({ date, signalDate }, "[scheduler] Accepted report unchanged — no enrichment or reimport");
     return false;
@@ -108,8 +113,7 @@ async function runImport(date: string): Promise<boolean> {
   const allSetups = [...seSetups, ...usSetups];
 
   if (allSetups.length === 0) {
-    logger.info({ date, generatedAt: edgeData.generatedAt }, "[scheduler] No setups today — skipping");
-    return false;
+    throw new ImportDataError("EdgeAI-rapporten innehåller inga setups. Befintliga kandidater lämnades orörda.", importReport);
   }
 
   // The SE data date may be yesterday even when EdgeAI was generated today.
@@ -314,6 +318,15 @@ async function runCheck(): Promise<EdgeAiCheckResult> {
          return { status: imported ? "IMPORTED" : "UNCHANGED" };
       } catch (err: any) {
         schedulerStatus.lastError = err.message ?? String(err);
+        const message = err instanceof Error ? err.message : "EdgeAI auto-import failed";
+        const report = err instanceof ImportDataError && err.report
+          ? err.report
+          : makeImportReport("edgeai", stockholm.date, { failure: message });
+        try {
+          await recordImportFailure(stockholm.date, report, message);
+        } catch (recordError: any) {
+          logger.warn({ err: recordError?.message ?? "unknown" }, "[scheduler] Could not record failed import receipt");
+        }
         logger.warn({ err: err.message }, "[scheduler] Auto-import failed");
          return { status: "FAILED" };
       }

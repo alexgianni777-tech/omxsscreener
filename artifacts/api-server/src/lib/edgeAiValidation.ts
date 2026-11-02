@@ -22,6 +22,12 @@ function validIsoDate(value: unknown): value is string {
     new Date(`${value}T12:00:00Z`).toISOString().slice(0, 10) === value;
 }
 
+export function isZonedTimestamp(value: unknown): value is string {
+  return typeof value === "string" &&
+    /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value.trim()) &&
+    Number.isFinite(Date.parse(value));
+}
+
 export function edgeAiSignalDate(signalT: unknown, market: EdgeAiMarket): string | null {
   if (typeof signalT !== "string" || !signalT.trim()) return null;
   const value = signalT.trim();
@@ -112,6 +118,15 @@ export function validateEdgeAiPayload(value: unknown, reportDate: string): EdgeA
     return { reportDate, dataDates, errors: ["GitHub-data måste vara ett JSON-objekt."], warnings, quarantinedIdentities };
   }
   const root = value as Record<string, unknown>;
+  if (!isZonedTimestamp(root.generatedAt)) {
+    errors.push("generatedAt saknas, är ogiltig eller saknar verifierbar tidszon.");
+  } else {
+    const generatedReportDate = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm" })
+      .format(new Date(root.generatedAt));
+    if (generatedReportDate !== reportDate) {
+      errors.push(`generatedAt anger rapportdagen ${generatedReportDate}, inte ${reportDate}.`);
+    }
+  }
   const markets = root.markets && typeof root.markets === "object" && !Array.isArray(root.markets)
     ? root.markets as Record<string, unknown>
     : null;
@@ -120,10 +135,11 @@ export function validateEdgeAiPayload(value: unknown, reportDate: string): EdgeA
     return { reportDate, dataDates, errors, warnings, quarantinedIdentities };
   }
 
-  const presentMarkets = (["SE", "US"] as const).filter((market) => Object.hasOwn(markets, market));
-  if (presentMarkets.length === 0) errors.push("markets saknar både SE och US.");
   for (const market of ["SE", "US"] as const) {
-    if (!Object.hasOwn(markets, market)) continue;
+    if (!Object.hasOwn(markets, market)) {
+      errors.push(`markets.${market} saknas.`);
+      continue;
+    }
     const entry = markets[market];
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       errors.push(`markets.${market} måste vara ett objekt.`);
@@ -139,15 +155,15 @@ export function validateEdgeAiPayload(value: unknown, reportDate: string): EdgeA
     if (dataAsOf != null && !validIsoDate(dataAsOf)) {
       errors.push(`markets.${market}.dataAsOf är inte ett giltigt YYYY-MM-DD-datum.`);
     } else if (typeof dataAsOf === "string") {
-      dataDates[market] = dataAsOf;
       if (dataAsOf > reportDate) errors.push(`markets.${market}.dataAsOf ligger efter rapportdagen.`);
-      else if (dataAsOf !== previousTradingDate(reportDate)) {
+      else {
+        dataDates[market] = dataAsOf;
+      }
+      if (dataAsOf <= reportDate && dataAsOf !== previousTradingDate(reportDate)) {
         warnings.push(`${market}: dataAsOf ${dataAsOf} avviker från föregående vardag ${previousTradingDate(reportDate)}; kontrollera börshelgdag och D−1-underlag.`);
       }
-    } else if (marketData.setups.length > 0) {
-      errors.push(`markets.${market}.dataAsOf saknas trots att marknaden har setups.`);
     } else {
-      warnings.push(`${market}: dataAsOf saknas.`);
+      errors.push(`markets.${market}.dataAsOf saknas.`);
     }
 
     for (const [index, setup] of marketData.setups.entries()) {
@@ -163,10 +179,10 @@ export function validateEdgeAiPayload(value: unknown, reportDate: string): EdgeA
         if (!setup || typeof setup !== "object" || Array.isArray(setup)) continue;
         const edge = (setup as Record<string, unknown>).edge;
         if (!edge || typeof edge !== "object" || Array.isArray(edge)) continue;
-        warnings.push(...edgeAiMetricWarnings(edge as Record<string, unknown>));
+        const sample = numberValue((edge as Record<string, unknown>).sample ?? (edge as Record<string, unknown>).n);
+        if (sample === 0) warnings.push("EdgeAI sample size is 0; historical edge is not established.");
       }
     }
-    if (marketData.setups.length === 0) warnings.push(`${market}: inga setups i rapporten.`);
   }
 
   return { reportDate, dataDates, errors, warnings, quarantinedIdentities };

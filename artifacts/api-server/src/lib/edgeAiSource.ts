@@ -1,6 +1,6 @@
 import { isAcceptedSignalDate, stockholmSignalDate } from "./signalDatePolicy";
 import { isE2ETestMode } from "./e2eTestSafety";
-import { validateEdgeAiPayload, type EdgeAiPayloadQuality } from "./edgeAiValidation";
+import { isZonedTimestamp, validateEdgeAiPayload, type EdgeAiPayloadQuality } from "./edgeAiValidation";
 
 const EDGEAI_CONTENTS_API_URL =
   "https://api.github.com/repos/alexgianni777-tech/edgeai/contents/public/data.json?ref=main";
@@ -58,7 +58,7 @@ export async function fetchFreshEdgeAiData(
     throw new Error("EdgeAI GitHub Contents API returned invalid JSON.");
   }
   const generatedAt = typeof data?.generatedAt === "string" ? data.generatedAt : null;
-  const generatedAtMs = generatedAt ? Date.parse(generatedAt) : Number.NaN;
+  const generatedAtMs = isZonedTimestamp(generatedAt) ? Date.parse(generatedAt) : Number.NaN;
 
   if (!Number.isFinite(generatedAtMs)) {
     throw new EdgeAiDataFreshnessError(

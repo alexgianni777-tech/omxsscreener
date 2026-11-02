@@ -23,12 +23,25 @@ jobs:
     steps:
       - name: Skicka till dashboard-API
         id: import
+        env:
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
+          DASHBOARD_IMPORT_SECRET: ${{ secrets.DASHBOARD_IMPORT_SECRET }}
+          SCREENER_TEXT: ${{ inputs.screener_text }}
         run: |
-          RESPONSE=$(curl -s -w "\n%{http_code}" \
-            -X POST "${{ secrets.DASHBOARD_URL }}/api/telegram-import" \
-            -H "Authorization: Bearer ${{ secrets.DASHBOARD_IMPORT_SECRET }}" \
+          set -euo pipefail
+          test -n "$DASHBOARD_URL" && test -n "$DASHBOARD_IMPORT_SECRET" || {
+            echo "DASHBOARD_URL/DASHBOARD_IMPORT_SECRET måste konfigureras."
+            exit 1
+          }
+          [[ "$DASHBOARD_URL" == https://* ]] || {
+            echo "DASHBOARD_URL måste använda HTTPS."
+            exit 1
+          }
+          RESPONSE=$(curl -sS --connect-timeout 5 --max-time 30 -w "\n%{http_code}" \
+            -X POST "${DASHBOARD_URL%/}/api/telegram-import" \
+            -H "Authorization: Bearer $DASHBOARD_IMPORT_SECRET" \
             -H "Content-Type: application/json" \
-            --data-raw "$(jq -n --arg text "${{ inputs.screener_text }}" '{"text":$text}')")
+            --data-binary "$(jq -n --arg text "$SCREENER_TEXT" '{text:$text}')")
 
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           BODY=$(echo "$RESPONSE" | head -n-1)
@@ -50,4 +63,4 @@ jobs:
         run: |
           echo "### ✅ Screener importerad" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Dashboard: ${{ secrets.DASHBOARD_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "Importkvittens togs emot av dashboard-API." >> $GITHUB_STEP_SUMMARY

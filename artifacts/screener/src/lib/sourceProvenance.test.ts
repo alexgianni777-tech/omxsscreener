@@ -17,7 +17,7 @@ test("compact source lines show separate report/data/import times and do not equ
   const before = JSON.stringify(reports);
   const html = render(reports);
   for (const text of ["Telegram: Importerad", "GitHub/EdgeAI: Importerad", "Rapportdatum 2026-10-12",
-    "Marknadsdag SE 2026-10-09 / USA okänd", "Senast lyckad import i sessionen 2026-10-12 10:05", "överensstämmer", "olika signaler", "vald session"]) {
+     "Marknadsdag SE 2026-10-09 / USA okänd", "Senast lyckad import: 2026-10-12 10:05", "överensstämmer", "olika signaler", "Sparade kvitton"]) {
     assert.ok(html.includes(text), text);
   }
   assert.equal(JSON.stringify(reports), before);
@@ -40,8 +40,8 @@ test("latest failure remains visible beside retained successful receipt, not fal
     status:"FAILED",reportDate:"2026-10-13",importedAt:"2026-10-13T08:00:00Z", dataDates:{SE:"2026-10-12",US:null},
   })]);
   assert.ok(html.includes("GitHub/EdgeAI: Import avvisad"));
-  assert.ok(html.includes("Senast lyckad import i sessionen: Rapportdatum 2026-10-12"));
-  assert.ok(html.includes("Avvisat försök 2026-10-13 10:00"));
+  assert.ok(html.includes("Senast lyckad import: Rapportdatum 2026-10-12"));
+  assert.ok(html.includes("Senaste avvisade försök 2026-10-13 10:00"));
   assert.ok(html.includes("Synkronisering ej verifierad"));
 });
 test("legacy status and a date-only import time remain unverified", () => {

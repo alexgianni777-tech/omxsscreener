@@ -27,6 +27,8 @@ import { resolveYahooTicker } from "../lib/omxs30TickerMap";
 import { fetchCompletedVolumeBatch } from "../lib/completedVolumeBatch";
 import { calendarDaysBetween } from "../lib/marketCalendar";
 import { validImportBearer } from "../lib/importBearer";
+import { recordImportFailure } from "../lib/importFailure";
+import { latestSourceReceipts } from "../lib/sourceReportStatus";
 import {
   deduplicateCandidates,
   lockScreenerSession,
@@ -128,9 +130,13 @@ router.get("/telegram-import/status", requireAdministrator, async (_req, res: Re
     .from(screenerSessionsTable)
     .orderBy(desc(screenerSessionsTable.createdAt))
     .limit(1);
+  const sessions = await db
+    .select({ sourceReports: screenerSessionsTable.sourceReports })
+    .from(screenerSessionsTable);
   res.json({
     secretConfigured,
     latestSession: latest ?? null,
+    sourceReports: latestSourceReceipts(sessions),
     note: secretConfigured
       ? "Token configured — ensure DASHBOARD_IMPORT_SECRET in GitHub matches TELEGRAM_IMPORT_SECRET in Replit"
       : "TELEGRAM_IMPORT_SECRET not set — set it in Replit Secrets",
@@ -152,6 +158,14 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
   // ── Body ────────────────────────────────────────────────────────────────────
   const rawText: unknown = req.body?.text;
   if (typeof rawText !== "string" || rawText.trim().length === 0) {
+    const date = stockholmSignalDate();
+    const message = 'Body must be JSON with a non-empty "text" string';
+    const report = makeImportReport("telegram", date, { failure: "invalid-body", receivedType: typeof rawText });
+    try {
+      await recordImportFailure(date, report, message);
+    } catch (recordError) {
+      logger.warn({ err: recordError instanceof Error ? recordError.message : "unknown" }, "Could not save Telegram failure receipt");
+    }
     res.status(400).json({ error: 'Body must be JSON with a non-empty "text" string' });
     return;
   }
@@ -163,6 +177,12 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
   } catch (err) {
     if (err instanceof ScreenerParseError) {
       logger.warn({ err: err.message }, "[telegram-import] Parse error");
+      const report = makeImportReport("telegram", stockholmSignalDate(), { text: rawText });
+      try {
+        await recordImportFailure(report.signalDate, report, err.message);
+      } catch (recordError) {
+        logger.warn({ err: recordError instanceof Error ? recordError.message : "unknown" }, "Could not save Telegram parse-failure receipt");
+      }
       res.status(400).json({ error: err.message });
       return;
     }
@@ -191,8 +211,14 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
       candidate.signalDate !== reportDate,
     );
     if (mismatch) {
+      const message = `Signal date mismatch for ${mismatch.ticker}: stored ${mismatch.signalDate}, incoming ${reportDate}`;
+      try {
+        await recordImportFailure(date, importReport, message);
+      } catch (recordError) {
+        logger.warn({ err: recordError instanceof Error ? recordError.message : "unknown" }, "Could not save Telegram mismatch receipt");
+      }
       res.status(409).json({
-        error: `Signal date mismatch for ${mismatch.ticker}: stored ${mismatch.signalDate}, incoming ${reportDate}`,
+        error: message,
       });
       return;
     }

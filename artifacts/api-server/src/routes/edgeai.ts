@@ -1,6 +1,7 @@
 import { makeImportReport } from "../lib/importReport";
 import { isolateEdgeAiPlans } from "../lib/edgeAiPlanIsolation";
 import { approveImportedTop3 } from "../lib/persistentTop3";
+import { recordImportFailure } from "../lib/importFailure";
 /**
  * POST /screener/sessions/import-from-edgeai
  *
@@ -55,42 +56,67 @@ router.post(
   "/screener/sessions/import-from-edgeai",
   async (req, res): Promise<void> => {
     // 1. Fetch latest EdgeAI data
-    let edgeData: any;
+    let fetched: Awaited<ReturnType<typeof fetchFreshEdgeAiData>>;
     try {
       // Manual and scheduled imports share the same one-previous-close limit.
-      edgeData = await fetchFreshEdgeAiData(10_000);
+      fetched = await fetchFreshEdgeAiData(10_000);
     } catch (err: any) {
+      const failureDate = stockholmSignalDate();
+      const message = err instanceof Error ? err.message : "EdgeAI fetch failed";
+      const report = makeImportReport("edgeai", failureDate, { failure: message });
+      try {
+        await recordImportFailure(failureDate, report, message);
+      } catch (recordError) {
+        logger.warn({ err: recordError instanceof Error ? recordError.message : "unknown" }, "Could not save EdgeAI failure receipt");
+      }
       if (err instanceof EdgeAiDataFreshnessError) {
         res.status(422).json({ error: err.message, generatedAt: err.generatedAt });
         return;
       }
-      res.status(502).json({ error: `Could not reach EdgeAI: ${err.message}` });
+      res.status(502).json({ error: `Could not reach EdgeAI: ${message}` });
       return;
     }
+    const edgeData = fetched.data;
 
     const markets = edgeData?.markets;
     const se = markets?.SE ?? {};
     const us = markets?.US ?? {};
-    if (!markets || (!markets.SE && !markets.US)) {
-      res.status(502).json({ error: "EdgeAI response missing SE market data" });
-      return;
-    }
-
     const setups: any[] = Array.isArray(se.setups) ? se.setups : [];
     const usRaw: any[] = Array.isArray(us.setups) ? us.setups : [];
-    if (setups.length === 0 && usRaw.length === 0) {
-      res.status(422).json({
-        error: "EdgeAI has no SE or US setups in the latest snapshot.",
-        generatedAt: edgeData.generatedAt,
-      });
-      return;
-    }
 
     // The stored session date is the EdgeAI signal day, never the browser/server
     // clock. A manual import may intentionally use the latest prior trading day.
     const signalDate = edgeAiSessionDate(edgeData);
-    const importReport = makeImportReport("edgeai", signalDate, edgeData, edgeData.generatedAt ?? null,
-      { SE: se.dataAsOf ?? null, US: us.dataAsOf ?? null });
+    const importReport = makeImportReport(
+      "edgeai",
+      signalDate,
+      fetched.rawData,
+      edgeData.generatedAt ?? null,
+      fetched.quality.dataDates,
+    );
+    importReport.warnings = fetched.quality.warnings;
+    importReport.quarantinedIdentities = fetched.quality.quarantinedIdentities;
+    if (fetched.quality.errors.length > 0) {
+      const message = `EdgeAI-import avvisad: ${fetched.quality.errors.join(" ")}`;
+      try {
+        await recordImportFailure(signalDate, importReport, message);
+      } catch (recordError) {
+        logger.warn({ err: recordError instanceof Error ? recordError.message : "unknown" }, "Could not save EdgeAI validation receipt");
+      }
+      res.status(422).json({ error: message, generatedAt: edgeData.generatedAt });
+      return;
+    }
+    if (setups.length === 0 && usRaw.length === 0) {
+      const message = "EdgeAI-rapporten innehåller inga setups. Befintliga kandidater lämnades orörda.";
+      try {
+        await recordImportFailure(signalDate, importReport, message);
+      } catch (recordError) {
+        logger.warn({ err: recordError instanceof Error ? recordError.message : "unknown" }, "Could not save EdgeAI empty-report receipt");
+      }
+      res.status(422).json({ error: message, generatedAt: edgeData.generatedAt });
+      return;
+    }
+
     const sessionDate = stockholmSignalDate();
     const freshness = edgeAiDataFreshness(edgeData);
 

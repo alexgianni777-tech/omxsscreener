@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import {
   useGetLastValidTop3, getGetLastValidTop3QueryKey, useGetSession, getGetSessionQueryKey,
   useGetQuotes, getGetQuotesQueryKey, useListSessions, type QuoteResult, type SavedTop3Display, type SessionSourceReport,
@@ -42,7 +43,7 @@ export function SwedishResearchContent({ selection, signals = [], reports = [], 
       Senast giltiga sparade urval behålls tills ett nytt giltigt finns. Underlag från föregående stängning; inte ett köpbesked.
       {stale && " Gammalt eller ej styrkt datadatum: inget nytt köp utan egen liveverifiering."}
     </p>
-    <SourceProvenance reports={statusReports ?? reports} context={statusReports ? "senaste sessionen" : "urvalet"} />
+    <SourceProvenance reports={statusReports ?? reports} context={statusReports ? "senaste kvitton per källa" : "urvalets session"} />
     {quoteError && <p role="alert" className="mt-2 text-xs text-destructive">Kurshämtningen misslyckades. Planerna är oförändrade; försök igen eller kontrollera Avanza.</p>}
     <div className="mt-5 grid gap-5 md:grid-cols-2">
       {groups.map(g => <section key={g.direction} data-testid={`research-${g.direction}`} className="min-w-0">
@@ -52,7 +53,7 @@ export function SwedishResearchContent({ selection, signals = [], reports = [], 
           signal={signals.find(c => c.id === p.candidateId && (c.signalDate ?? null) === (p.signalDate ?? null) &&
             c.entryPrice === p.entryPrice && c.stopPrice === p.stopPrice && c.targetPrice === p.targetPrice)}
           dataDate={savedDataDate(selection.dataDates, p.source, p.signalDate)} quote={quotes[p.ticker]}
-          warnings={pickWarnings(p, reports, signals as Conflictable[])} />)}</ul>
+          warnings={pickWarnings(p, reports, signals as Conflictable[], statusReports ?? reports)} stale={stale} />)}</ul>
       </section>)}
     </div>
     <Link href={`/sessions/${selection.sessionId}`} className="mt-4 inline-block text-xs font-medium text-primary hover:underline" data-testid="link-research-session">
@@ -62,7 +63,12 @@ export function SwedishResearchContent({ selection, signals = [], reports = [], 
 
 type Conflictable = ResearchSignal & { ticker?: string; market?: string | null; direction?: string };
 /** Reuses existing quarantine helper and DailyCandidates' plan-conflict check; no new rules. */
-export function pickWarnings(p: DailyPick, reports: readonly SessionSourceReport[], signals: readonly Conflictable[]) {
+export function pickWarnings(
+  p: DailyPick,
+  reports: readonly SessionSourceReport[],
+  signals: readonly Conflictable[],
+  sourceStatusReports: readonly SessionSourceReport[] = reports,
+) {
   const out: string[] = [];
   const matching = reports.filter(r => r.status !== "FAILED" && r.source === p.source && r.signalDate === p.signalDate);
   const identity = [p.market, p.category, dailySymbol(p.ticker, p.market), p.direction, ...(p.signalDate ? [p.signalDate] : []), p.source].join("|");
@@ -72,6 +78,9 @@ export function pickWarnings(p: DailyPick, reports: readonly SessionSourceReport
   if (signals.some(c => (c.market ?? "SE") === "SE" && c.ticker && dailySymbol(c.ticker) === dailySymbol(p.ticker) &&
     (c.direction !== p.direction || c.entryPrice !== p.entryPrice || c.stopPrice !== p.stopPrice || c.targetPrice !== p.targetPrice)))
     out.push("Flera planer/riktningar för aktien – jämför innan beslut");
+  const latestSourceReceipt = sourceStatusReports.filter(r => r.source === p.source).at(-1);
+  if (latestSourceReceipt?.status === "FAILED") out.push(`Senaste ${p.source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"}-import avvisades: ${latestSourceReceipt.error || "orsak okänd"}`);
+  out.push(...(latestSourceReceipt?.warnings ?? []));
   return out;
 }
 const HEAD = (d: string) => d === "LONG" ? "Köp / Long" : "Sälj / Short";
@@ -102,7 +111,7 @@ export function PreliminaryResearchContent({ picks, sessionDate, signals = [], s
         {refreshing ? "Hämtar priser…" : "Uppdatera priser"}</button>
     </div>
     <p className="mt-2 text-xs text-muted-foreground">Ingen giltig sparad Top 3 finns. Preliminärt urval ur sessionens befintliga rankning; inte sparat, inte officiellt, inte ett köpbesked.</p>
-    {statusReports && <SourceProvenance reports={statusReports} context="senaste sessionen" />}
+    {statusReports && <SourceProvenance reports={statusReports} context="senaste kvitton per källa" />}
     {quoteError && <p role="alert" className="mt-2 text-xs text-destructive">Kurshämtningen misslyckades. Planerna är oförändrade.</p>}
     <div className="mt-5 grid gap-5 md:grid-cols-2">
       {groups.map(g => <section key={g.direction} data-testid={`research-${g.direction}`} className="min-w-0">
@@ -111,7 +120,7 @@ export function PreliminaryResearchContent({ picks, sessionDate, signals = [], s
         <ul className="space-y-3">{g.picks.map(p => <ResearchCard key={p.candidateId} pick={p}
           signal={signals.find(c => c.id === p.candidateId && (c.signalDate ?? null) === (p.signalDate ?? null) &&
             c.entryPrice === p.entryPrice && c.stopPrice === p.stopPrice && c.targetPrice === p.targetPrice)}
-          dataDate={null} quote={quotes[p.ticker]} warnings={pickWarnings(p, [], signals as Conflictable[])} />)}</ul>
+          dataDate={null} quote={quotes[p.ticker]} warnings={pickWarnings(p, [], signals as Conflictable[], statusReports ?? [])} stale />)}</ul>
       </section>)}
     </div>
   </>;
@@ -125,6 +134,19 @@ export function SwedishResearch({ latestReports }: { latestReports?: readonly Se
   const sessions = useListSessions({ query: { queryKey: ["/api/screener/sessions"], enabled: canUsePreliminary } });
   const id = s?.sessionId ?? (canUsePreliminary ? sessions.data?.[0]?.id ?? 0 : 0);
   const detail = useGetSession(id, { query: { enabled: id > 0, queryKey: getGetSessionQueryKey(id) } });
+  const sourceStatus = useQuery<{ sourceReports?: SessionSourceReport[] }>({
+    queryKey: ["/api/telegram-import/status"],
+    enabled: !!s || canUsePreliminary,
+    staleTime: 60_000,
+    retry: false,
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const response = await fetch("/api/telegram-import/status", { credentials: "include" });
+      if (!response.ok) throw new Error(`Importstatus HTTP ${response.status}`);
+      return response.json() as Promise<{ sourceReports?: SessionSourceReport[] }>;
+    },
+  });
+  const sourceReports = sourceStatus.data?.sourceReports ?? latestReports;
   const prelim: DailyPick[] = canUsePreliminary && detail.data ? (detail.data.top3LiveSelection?.picks ?? []).flatMap(p => {
     const c = detail.data!.candidates.find(x => x.id === p.candidateId);
     return c ? [{ candidateId: p.candidateId, rank: p.rank, market: p.market ?? "", direction: p.direction, source: p.signalSource ?? "okänd",
@@ -137,11 +159,11 @@ export function SwedishResearch({ latestReports }: { latestReports?: readonly Se
   if (!quotes.isError) quotes.data?.forEach(q => { map[q.ticker] = q; });
   const loading = last.isLoading || (canUsePreliminary && (sessions.isLoading || detail.isLoading));
   return <section data-testid="swedish-research" aria-busy={loading} className="rounded-2xl bg-card p-4 sm:p-6 shadow-sm ring-1 ring-primary/20">
-    {s ? <SwedishResearchContent selection={s} signals={(detail.data?.candidates ?? []) as ResearchSignal[]} reports={detail.data?.sourceReports ?? []} statusReports={latestReports} quotes={map}
+    {s ? <SwedishResearchContent selection={s} signals={(detail.data?.candidates ?? []) as ResearchSignal[]} reports={detail.data?.sourceReports ?? []} statusReports={sourceReports} quotes={map}
       today={stockholmToday()} onRefresh={params.tickers ? () => void quotes.refetch() : undefined}
       refreshing={quotes.isFetching} quoteError={quotes.isError} />
       : prelim.length && detail.data ? <PreliminaryResearchContent picks={prelim} sessionDate={detail.data.date}
-        signals={detail.data.candidates as ResearchSignal[]} statusReports={latestReports} quotes={map}
+        signals={detail.data.candidates as ResearchSignal[]} statusReports={sourceReports} quotes={map}
         onRefresh={params.tickers ? () => void quotes.refetch() : undefined} refreshing={quotes.isFetching} quoteError={quotes.isError} />
       : loading ? <div className="space-y-2"><div className="h-5 w-48 rounded bg-muted" /><div className="h-32 rounded bg-muted" /></div>
       : <p className="text-sm">{last.isError ? "Inget urval kunde verifieras." : "Ingen giltig sparad Top 3 hittades. Inga picks gissas."}</p>}
