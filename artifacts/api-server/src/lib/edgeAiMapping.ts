@@ -11,7 +11,7 @@
  * checked whether a session existed for that date. Keep this the only copy.
  */
 import { calculateOpeningGapPct, calculateWilderRsi } from "./marketIndicators.ts";
-import { edgeAiDirection } from "./edgeAiSource.ts";
+import { edgeAiDirection, edgeAiSampleN, edgeAiSignalDate, validateEdgeAiSetup } from "./edgeAiValidation.ts";
 
 export type EdgeAiCategory = "MOMENTUM" | "SQUEEZE" | "STUDS" | "WEAKEST";
 export type EdgeAiMarket = "SE" | "US";
@@ -63,17 +63,19 @@ export function mapEdgeAiSetup(
   market: EdgeAiMarket,
   rankCounter: Record<string, number>,
 ) {
+  const setupErrors = validateEdgeAiSetup(s, market);
+  if (setupErrors.length) throw new Error(`Invalid EdgeAI setup: ${setupErrors.join("; ")}`);
   const direction = edgeAiDirection(s.dir);
   const category = mapEdgeAiCategory(direction, s.setup ?? "");
   const rankKey = `${market}:${category}`;
   rankCounter[rankKey] = (rankCounter[rankKey] ?? 0) + 1;
 
-  const entry = Number(s.entry ?? 0);
-  const stop = Number(s.stop ?? 0);
+  const entry = Number(s.entry);
+  const stop = Number(s.stop);
   const oneR = Math.abs(entry - stop);
   // Use EdgeAI's own calibrated target — it reflects the system's actual back-tested level.
   // Forcing a fixed R:R would reduce win rate below the system's calibration.
-  const targetPrice = Number(s.target ?? 0);
+  const targetPrice = Number(s.target);
   const reward = direction === "SHORT" ? entry - targetPrice : targetPrice - entry;
   const rr = oneR > 0 && reward > 0 ? reward / oneR : 0;
   // Strip .ST so resolveYahooTicker can re-add it correctly for SE stocks;
@@ -87,20 +89,20 @@ export function mapEdgeAiSetup(
     : chart;
   const signalRsi = calculateWilderRsi(signalChart.map((bar: any) => Number(bar?.c)));
   const signalGapPct = calculateOpeningGapPct(signalChart);
-  const edgeWinRateRaw = Number(s.edge?.winRate ?? 0);
+  const edgeWinRateRaw = Number(s.edge.winRate);
   const edgeWinRate = edgeWinRateRaw > 1 ? edgeWinRateRaw / 100 : edgeWinRateRaw;
-  const edgeExpectancyR = Number(s.edge?.expectancyR ?? 0);
-  const edgeSampleN = Math.max(0, Math.floor(Number(s.edge?.sample ?? 0)));
+  const edgeExpectancyR = Number(s.edge.expectancyR);
+  const edgeSampleN = edgeAiSampleN(s.edge);
   const maxHoldDays = category === "SQUEEZE" ? 15 : category === "STUDS" ? 5 : 10;
 
   return {
     market,
-    signalDate: setupSignalDate(s.signalT, market),
+    signalDate: edgeAiSignalDate(s.signalT, market),
     category,
     rank: rankCounter[rankKey],
     ticker,
     price: entry,
-    rs3m: Number(s.rs ?? 0),
+    rs3m: Number(s.rs),
     // These conventional screener columns do not describe EdgeAI statistics.
     // Keep schema-required fields neutral; use the dedicated fields below.
     perf1m: 0,
@@ -118,7 +120,7 @@ export function mapEdgeAiSetup(
     edgeWinRate,
     edgeExpectancyR,
     edgeSampleN,
-    signalAgeBars: Math.max(0, Math.floor(barsAgo)),
+    signalAgeBars: Math.floor(barsAgo),
     maxHoldDays,
     gapWarning: signalGapPct != null && Math.abs(signalGapPct) >= 2.5 ? signalGapPct : null,
     direction,

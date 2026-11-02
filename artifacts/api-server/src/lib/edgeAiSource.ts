@@ -1,10 +1,15 @@
 import { isAcceptedSignalDate, stockholmSignalDate } from "./signalDatePolicy";
 import { isE2ETestMode } from "./e2eTestSafety";
+import { validateEdgeAiPayload, type EdgeAiPayloadQuality } from "./edgeAiValidation";
 
 const EDGEAI_CONTENTS_API_URL =
   "https://api.github.com/repos/alexgianni777-tech/edgeai/contents/public/data.json?ref=main";
-const EDGEAI_RAW_URL =
-  "https://raw.githubusercontent.com/alexgianni777-tech/edgeai/main/public/data.json";
+
+export type EdgeAiFetchResult = {
+  data: any;
+  rawData: unknown;
+  quality: EdgeAiPayloadQuality;
+};
 
 export class EdgeAiDataFreshnessError extends Error {
   public readonly generatedAt: string | null;
@@ -28,11 +33,11 @@ export class EdgeAiDataFreshnessError extends Error {
 export async function fetchFreshEdgeAiData(
   timeoutMs: number,
   options: { now?: Date } = {},
-): Promise<any> {
+): Promise<EdgeAiFetchResult> {
   if (isE2ETestMode()) {
     throw new Error("External EdgeAI fetch is disabled in isolated E2E_TEST mode.");
   }
-  let response = await fetch(EDGEAI_CONTENTS_API_URL, {
+  const response = await fetch(EDGEAI_CONTENTS_API_URL, {
     headers: {
       Accept: "application/vnd.github.raw+json",
       "Cache-Control": "no-cache",
@@ -43,23 +48,15 @@ export async function fetchFreshEdgeAiData(
   });
 
   if (!response.ok) {
-    const contentsStatus = response.status;
-    response = await fetch(`${EDGEAI_RAW_URL}?fallback=${Date.now()}`, {
-      headers: {
-        Accept: "application/json",
-        "Cache-Control": "no-cache",
-        "User-Agent": "omxs30-screener",
-      },
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    if (!response.ok) {
-      throw new Error(
-        `EdgeAI fetch failed (GitHub API HTTP ${contentsStatus}, raw fallback HTTP ${response.status})`,
-      );
-    }
+    throw new Error(`EdgeAI GitHub Contents API failed (HTTP ${response.status}); no CDN fallback was used.`);
   }
 
-  const data: any = await response.json();
+  let data: any;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error("EdgeAI GitHub Contents API returned invalid JSON.");
+  }
   const generatedAt = typeof data?.generatedAt === "string" ? data.generatedAt : null;
   const generatedAtMs = generatedAt ? Date.parse(generatedAt) : Number.NaN;
 
@@ -84,7 +81,9 @@ export async function fetchFreshEdgeAiData(
     );
   }
 
-  return data;
+  const reportDate = edgeAiSessionDate(data);
+  const quality = validateEdgeAiPayload(data, reportDate);
+  return { data, rawData: data, quality };
 }
 
 function generatedDateLabel(timestamp: number): string {
@@ -136,8 +135,4 @@ export function edgeAiSessionDate(data: { generatedAt?: unknown }): string {
     throw new EdgeAiDataFreshnessError("EdgeAI response has no valid generatedAt timestamp", generatedAt || null);
   }
   return stockholmSignalDate(new Date(timestamp));
-}
-
-export function edgeAiDirection(value: unknown): "LONG" | "SHORT" {
-  return String(value ?? "").trim().toLowerCase() === "short" ? "SHORT" : "LONG";
 }
