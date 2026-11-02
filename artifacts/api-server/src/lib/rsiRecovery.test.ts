@@ -22,6 +22,7 @@ test("insufficient or invalid closes are missing, never a guessed zero/100 or br
 
 test("22-bar EdgeAI chart yields genuine signal RSI without rewriting financial plans or legacy placeholders", () => {
   const input = {ticker:"EQT.ST",dir:"short",setup:"short",entry:100,stop:105,target:90,barsAgo:0,
+    signalT:"2026-10-23T08:00:00Z",rs:1,edge:{winRate:45,expectancyR:0.2,sample:117},
     chart:Array.from({length:22}, (_,i) => ({c:100+i%3-i/20}))};
   const original = JSON.stringify(input);
   const mapped = mapEdgeAiSetup(input,"SE",{});

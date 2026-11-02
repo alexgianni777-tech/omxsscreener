@@ -13,7 +13,7 @@ const raw = (
   dir = "long",
   signalT = "Wed Oct 07 2026 08:00:00 GMT+0000 (Coordinated Universal Time)",
   entry = 251,
-) => ({ ticker, setup, entry, stop, target, dir, signalT, barsAgo: 6, edge: { winRate: 45, sample: 117 } });
+) => ({ ticker, setup, entry, stop, target, dir, signalT, barsAgo: 6, rs: 1, edge: { winRate: 45, expectancyR: 0.2, sample: 117 } });
 function prepare(input: ReturnType<typeof raw>[]) {
   const rank = {};
   const rows = input.map(s => ({ ...mapEdgeAiSetup(s, "SE", rank), signalSource: "edgeai" }));
@@ -33,14 +33,15 @@ test("GETI-B setups collide in the legacy bucket; neither plan is guessed and an
   const reversed = prepare([...input].reverse());
   assert.deepEqual(reversed.report.quarantinedIdentities, result.report.quarantinedIdentities);
 });
-test("same-plan duplicates and separate buckets/sides remain valid; invalid short geometry is isolated only locally", () => {
+test("same-plan duplicates and separate buckets/sides remain valid; invalid short geometry fails closed before mapping", () => {
   const a = raw("AZN.ST", "Breakout", 240, 270);
   const valid = prepare([a, a, raw("AZN.ST", "Squeeze", 230, 290), raw("AZN.ST", "Burry", 260, 230, "short")]);
   assert.equal(valid.safe.length, 4);
   assert.deepEqual(valid.report.quarantinedIdentities, []);
-  const invalid = prepare([a, raw("ERIC-B.ST", "Burry", 230, 260, "short")]);
-  assert.equal(invalid.safe.length, 1);
-  assert.match(invalid.report.warnings![0], /ogiltig riskplan/);
+  assert.throws(
+    () => prepare([a, raw("ERIC-B.ST", "Burry", 230, 260, "short")]),
+    /entry\/stop\/target stämmer inte med riktningen/,
+  );
 });
 
 test("different setup signalT dates do not collide for ERIC-B, ADBE, BKNG or XOM", () => {
@@ -76,12 +77,12 @@ test("same-date conflicts across the eleven warned tickers remain isolated and v
   ] as const;
   const input = conflicting.flatMap(([ticker, direction]) => direction === "long"
     ? [
-        raw(ticker, "Breakout", 95, 110, direction),
-        raw(ticker, "Momentum flag", 90, 115, direction),
+        raw(ticker, "Breakout", 95, 110, direction, undefined, 100),
+        raw(ticker, "Momentum flag", 90, 115, direction, undefined, 100),
       ]
     : [
-        raw(ticker, "Burry", 105, 90, direction),
-        raw(ticker, "Big Short", 110, 85, direction),
+        raw(ticker, "Burry", 105, 90, direction, undefined, 100),
+        raw(ticker, "Big Short", 110, 85, direction, undefined, 100),
       ]);
   const result = prepare(input);
 

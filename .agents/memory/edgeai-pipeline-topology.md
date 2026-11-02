@@ -76,13 +76,13 @@ This app's daily screener data comes from **three separate GitHub repos**, each 
 
 **Why:** the raw CDN can serve yesterday's file after a successful commit, and cache-busting query parameters do not reliably bypass that stale copy.
 
-**How to apply:** use the Contents endpoint with GitHub's raw-media Accept header whenever the app or diagnostics need the canonical current file.
+**How to apply:** use the Contents endpoint with GitHub's raw-media Accept header whenever the app or diagnostics need the canonical current file. A Contents failure must remain a visible failure; do not silently fall back to the raw CDN.
 
-**Manual EdgeAI import rule:** a user-triggered import may use the latest valid prior trading-day snapshot and must visibly retain its original signal date; the automatic scheduler remains strict about today's data.
+**EdgeAI import rule:** manual and automatic imports accept the same valid previous-weekday report and retain the actual report, market-data and setup dates. Unknown holiday coverage must be disclosed, not guessed.
 
-**Why:** weekend and delayed upstream runs make “not today” normal, and the manual button is explicitly used to retrieve both SE and US alternatives. Silently relabeling old signals as today would corrupt history.
+**Why:** the user requires D−1 research to remain valid across restarts and weekends. Different freshness rules for automatic and manual import could reject the same otherwise valid snapshot; relabeling old signals as today would corrupt history.
 
-**How to apply:** warn when the snapshot is older, accept reasonably recent data (including weekends), reject invalid or excessively old timestamps, and permit US-only snapshots when SE has no setups.
+**How to apply:** keep both import paths on the same freshness policy. Require both market envelopes, allowing an empty setup list for a market. Missing direction, levels, edge metrics or inconsistent dates are explicit validation failures, not invented defaults. Keep conflict isolation for separately valid but contradictory plans and preserve the existing list after rejected reports.
 
 **Workflow-edit permission rule:** the ordinary GitHub connection can edit source files in the external repositories but cannot update `.github/workflows/`. Workflow edits require a separately authorized workflow-write credential.
 
