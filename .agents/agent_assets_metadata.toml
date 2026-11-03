@@ -112,3 +112,17 @@ mtime_ms = 1790587692853
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/65978ba7-a7bd-4a89-bd84-ef9f914cb890/b5ce1cd1-2929-4191-afb4-02d9bbf86627"
 storage_version_token = "1790587710645277"
 content_type = "text/plain"
+
+[[outputs]]
+id = "5IPEMHQFioGKL8VmSLhYD"
+uri = "file://generated-artifacts/qa/usa-mobile.jpg"
+type = "image"
+title = "USA på mobil – isolerad visuell kontroll"
+description = "402×874. Renderade produktionskomponenter med tydligt isolerade testdata: USA Long och Short, tomt urval, verklighetstrogna datumspärrar och STALE. Inte en inloggad produktionssession."
+logical_id = "71af4bba-0256-4559-a4f2-f83941c74327"
+content_hash = "sha256:949b2b192bfc4f0e03ab4d0678c89098feba1c3af87ecd9144eb63b640224c49"
+size = 60086
+mtime_ms = 1793699531402
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/71af4bba-0256-4559-a4f2-f83941c74327/56a604c5-1b4d-4267-9946-60df84287a55"
+storage_version_token = "1793699666985671"
+content_type = "image/jpeg"

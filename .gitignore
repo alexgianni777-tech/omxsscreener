@@ -47,3 +47,5 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+/artifacts/screener/public/generated-artifacts/
+/generated-artifacts/

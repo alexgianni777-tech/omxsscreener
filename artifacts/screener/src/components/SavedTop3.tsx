@@ -4,6 +4,7 @@ import { useGetLastValidTop3, getGetLastValidTop3QueryKey, type SavedTop3Display
 import { stockholmToday } from "../lib/persistentTop3Display";
 import { previousWeekday } from "../lib/dailyCandidates";
 import { PlanGrid } from "./PlanGrid";
+import { savedDataDate } from "../lib/researchQuote";
 
 export function SavedTop3Content({ selection: s, today }: { selection: SavedTop3Display; today: string }) {
   const stale = s.date !== today || s.dataDates.some(d => !d.dataDate || d.dataDate !== previousWeekday(today));
@@ -21,13 +22,13 @@ export function SavedTop3Content({ selection: s, today }: { selection: SavedTop3
         return picks.length ? <section key={`${market}-${direction}`} className="rounded-md border border-border bg-background/60 p-2.5 min-w-0">
           <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{market === "SE" ? "Sverige" : "USA"} · {direction === "LONG" ? "Long" : "Short"}</h4>
           {picks.map(p => {
-            const date = s.dataDates.find(d => d.source === p.source && d.signalDate === p.signalDate);
+            const dataDate = savedDataDate(s.dataDates, p.source, p.signalDate, p.market);
             return <div key={p.candidateId} className="mt-2 text-xs">
               <div className="flex flex-wrap items-center gap-2"><strong>{p.ticker}</strong>
                 <span className="font-mono text-[11px] text-muted-foreground">{p.signalDate ?? "okänd"}</span></div>
               <PlanGrid plan={p} caption="Originalplan · D−1-underlag" />
               <details className="mt-1 text-[11px] text-muted-foreground"><summary className="cursor-pointer">Visa detaljer</summary>
-                <p className="mt-1">{p.source ?? "okänd källa"} · rapport/signal {p.signalDate ?? "okänd"} · datadag {date?.dataDate ?? "okänd"}</p></details>
+                <p className="mt-1">{p.source ?? "okänd källa"} · rapport/signal {p.signalDate ?? "okänd"} · datadag {dataDate ?? "okänd"}</p></details>
             </div>;
           })}
         </section> : null;

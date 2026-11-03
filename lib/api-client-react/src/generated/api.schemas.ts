@@ -1420,7 +1420,16 @@ export const SavedTop3DisplayKind = {
   RECOMMENDATION: 'RECOMMENDATION',
 } as const;
 
+export type Top3DisplayDataDateMarket = typeof Top3DisplayDataDateMarket[keyof typeof Top3DisplayDataDateMarket];
+
+
+export const Top3DisplayDataDateMarket = {
+  SE: 'SE',
+  US: 'US',
+} as const;
+
 export interface Top3DisplayDataDate {
+  market?: Top3DisplayDataDateMarket;
   source: string;
   /** @nullable */
   signalDate: string | null;

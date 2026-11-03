@@ -600,6 +600,7 @@ export const GetLastValidTop3Response = zod.object({
 }))
 }).describe('Saved recommendation version; displayEligible excludes automatic-only updates from persistent display.'),
   "dataDates": zod.array(zod.object({
+  "market": zod.enum(['SE', 'US']).optional(),
   "source": zod.string(),
   "signalDate": zod.string().nullable(),
   "dataDate": zod.string().nullable()

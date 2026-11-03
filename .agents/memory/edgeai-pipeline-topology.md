@@ -72,6 +72,12 @@ This app's daily screener data comes from **three separate GitHub repos**, each 
 
 **How to apply:** check the `edgeai` workflow and `data.json` timestamp independently before diagnosing the import button.
 
+**Per-market timing:** a single generated report can legitimately carry different Swedish and US market dates. The upstream builder's completed-session cutoff is 19:00 Stockholm time for SE and 17:30 New York time for US.
+
+**Why:** a report built after the Swedish cutoff but before the US cutoff contained Monday's Swedish data and Friday's US data. A fresh report timestamp was not evidence of fresh US bars or new US setups.
+
+**How to apply:** inspect each market's `dataAsOf`, each setup's actual `signalT`, and the upstream build time independently. Never refresh signal dates to match an import or borrow Sweden's market date for USA. Only a successful upstream build with verified completed bars can advance that market's data.
+
 **Rule:** consume and verify `edgeai/public/data.json` through the GitHub Contents API, not `raw.githubusercontent.com`.
 
 **Why:** the raw CDN can serve yesterday's file after a successful commit, and cache-busting query parameters do not reliably bypass that stale copy.

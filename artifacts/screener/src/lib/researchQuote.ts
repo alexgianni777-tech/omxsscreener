@@ -3,8 +3,13 @@ import { formatPrice } from "./presentationNumbers";
 
 /** UI safety only: keep the fetched price/mapping intact, but flag a different quote market. */
 export function researchQuoteForMarket(market: string, quote: QuoteResult | null | undefined) {
-  if (!quote || market !== "SE") return quote;
+  if (!quote) return quote;
   const yahoo = quote.yahooTicker?.trim().toUpperCase();
+  if (market === "US" && (!yahoo || yahoo.endsWith(".ST"))) {
+    const warning = `Kurskoppling ej verifierad för USA: ${yahoo || "instrumentsymbol saknas"}. Ingen entrybekräftelse.`;
+    return { ...quote, error: [quote.error, warning].filter(Boolean).join(" ") };
+  }
+  if (market !== "SE") return quote;
   if (!yahoo?.endsWith(".ST")) {
     const warning = yahoo
       ? `Kurskoppling ej verifierad: Yahoo-symbol ${yahoo} saknar Stockholmsmarknad (.ST). Ingen entrybekräftelse.`
@@ -30,7 +35,17 @@ export function quoteLabels(quote: QuoteResult | null | undefined) {
 }
 
 /** Saved fallback evidence: only the saved selection's own dataDates, never newest reports. */
-export function savedDataDate(dataDates: readonly { source: string; signalDate: string | null; dataDate: string | null }[],
-  source: string | null | undefined, signalDate: string | null | undefined) {
-  return dataDates.find(d => d.source === source && d.signalDate === (signalDate ?? null))?.dataDate ?? null;
+export function savedDataDate(dataDates: readonly { market?: string; source: string; signalDate: string | null; dataDate: string | null }[],
+  source: string | null | undefined, signalDate: string | null | undefined, market?: string) {
+  const matches = dataDates.filter(d => d.source === source && d.signalDate === (signalDate ?? null));
+  if (market) {
+    const exact = matches.find(d => d.market === market);
+    if (exact) return exact.dataDate;
+    // Legacy receipts were SE-first and did not identify the market. Never
+    // lend that date to US, or choose between conflicting legacy dates.
+    if (market === "SE" && matches.length && matches.every(d => !d.market && d.dataDate === matches[0].dataDate))
+      return matches[0].dataDate;
+    return null;
+  }
+  return matches[0]?.dataDate ?? null;
 }

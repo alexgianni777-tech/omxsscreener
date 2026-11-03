@@ -5,8 +5,10 @@
  * OMXS30 Screener API
  * OpenAPI spec version: 0.1.0
  */
+import type { Top3DisplayDataDateMarket } from './top3DisplayDataDateMarket';
 
 export interface Top3DisplayDataDate {
+  market?: Top3DisplayDataDateMarket;
   source: string;
   /** @nullable */
   signalDate: string | null;

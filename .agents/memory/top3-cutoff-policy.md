@@ -57,6 +57,12 @@ changes, weekends and holidays. Mark the retained list STALE and require live
 verification before a new entry. Empty, failed, preliminary or incomplete
 versions must never displace it; show their warnings separately.
 
+**Market visibility rule:** Sverige och USA Top 3 Long och Top 3 Short ska synas lika tydligt direkt på startsidan. Visa USA-sektionerna även när giltiga kandidater saknas, med faktiska datum och blockeringsorsaker.
+
+**Why:** The user explicitly requested equal visibility after US research was hidden in disclosures and its stale source dates were mistaken for a missing import.
+
+**How to apply:** Keep four visible groups and mobile shortcuts. Preserve stale saved plans as historical research, never as a verified entry. Missing data must remain unknown; visibility must not relax screening, source-completeness or date guards.
+
 **Why:** The user confirmed that the homepage was hiding a still-valid saved
 list before a replacement screening had been imported.
 

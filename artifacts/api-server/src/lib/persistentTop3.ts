@@ -36,7 +36,7 @@ export async function readSavedTop3(tx: any) {
       const receipt = [...(session.sourceReports ?? [])].reverse().find((r: any) =>
         r.status !== "FAILED" && r.source === p.source && r.signalDate === p.signalDate &&
         r.importedAt && Date.parse(r.importedAt) <= Date.parse(revision.selectedAt));
-      return { source: p.source ?? "unknown", signalDate: p.signalDate ?? null,
+      return { market: p.market, source: p.source ?? "unknown", signalDate: p.signalDate ?? null,
         dataDate: receipt?.dataDates?.[p.market] ?? null };
     });
     for (const row of revisions.filter((r: any) => r.sessionId === session.id)) {

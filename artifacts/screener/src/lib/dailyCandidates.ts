@@ -16,11 +16,14 @@ export function isolatedDailyPick(p: DailyPick, reports: readonly SessionSourceR
 }
 /** Only trim the existing recommendation list; no new ranking, scoring or position selection. */
 export function swedishDailyPicks(picks: readonly DailyPick[]) {
+  return marketDailyPicks(picks, "SE");
+}
+export function marketDailyPicks(picks: readonly DailyPick[], market: "SE" | "US") {
   return (["LONG", "SHORT"] as const).map(direction => ({
     direction,
-    picks: picks.filter(p => p.market === "SE" && p.direction === direction)
+    picks: picks.filter(p => p.market === market && p.direction === direction)
       .slice().sort((a, b) => a.rank - b.rank)
-      .filter((p, i, rows) => rows.findIndex(row => dailySymbol(row.ticker) === dailySymbol(p.ticker)) === i).slice(0, 3),
+      .filter((p, i, rows) => rows.findIndex(row => dailySymbol(row.ticker, market) === dailySymbol(p.ticker, market)) === i).slice(0, 3),
   }));
 }
 export function previousWeekday(date: string) {

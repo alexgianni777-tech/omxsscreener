@@ -7,6 +7,8 @@ import { Router } from "wouter";
 import { SwedishResearchContent, allowPreliminaryResearch } from "./SwedishResearch";
 import { quoteLabels, researchQuoteForMarket } from "../lib/researchQuote";
 import { ResearchCard } from "./ResearchCard";
+import { ResearchMarketSections, marketEvidence } from "./ResearchMarketSections";
+import { savedDataDate } from "../lib/researchQuote";
 const pick = (id: number, direction: string, market = "SE") => ({ candidateId: id, ticker: `T${id}`, source: "edgeai", market, direction,
   category: "MOMENTUM", rank: id, score: 1, signalDate: "2026-10-09", entryPrice: 100, stopPrice: 95, targetPrice: 110, rr: 2,
   decision: { status: "WAIT", reasons: [] } });
@@ -61,6 +63,8 @@ test("a US Yahoo symbol cannot be shown as a verified current price for a Swedis
   assert.equal(researchQuoteForMarket("US", quote), quote);
   const swedish = { ...quote, yahooTicker: "EQT.ST" };
   assert.equal(researchQuoteForMarket("SE", swedish), swedish);
+  assert.ok(researchQuoteForMarket("US", swedish)?.error?.includes("för USA"));
+  assert.equal(researchQuoteForMarket("US", swedish)?.livePrice, swedish.livePrice);
   const sel = { ...selection, revision: { ...selection.revision, picks: [{
     ...pick(8, "SHORT"), ticker: "EQT", entryPrice: 289.5, stopPrice: 296.48, targetPrice: 272.04,
   }] } };
@@ -70,12 +74,59 @@ test("a US Yahoo symbol cannot be shown as a verified current price for a Swedis
   assert.ok(html.includes('data-entry-status="UNKNOWN"'));
   assert.ok(!html.includes("53,82"));
 });
-test("max 3 long + existing shorts only, no invented signals, US excluded from prominent surface", () => {
+test("both markets are prominent, max 3 per side, and all four groups remain visible", () => {
   const html = render({});
-  assert.equal((html.match(/data-testid="research-card-/g) ?? []).length, 4);
-  assert.ok(!html.includes("research-card-4") && !html.includes("research-card-6"));
+  assert.equal((html.match(/data-testid="research-card-/g) ?? []).length, 5);
+  assert.ok(!html.includes("research-card-4") && html.includes("research-card-6"));
   assert.ok(html.includes("Long 3/3 · Short 1/3"));
   assert.ok(html.includes("Köp / Long") && html.includes("Sälj / Short"));
+  for (const market of ["SE", "US"]) for (const direction of ["LONG", "SHORT"])
+    assert.ok(html.includes(`data-testid="research-${market}-${direction}"`));
+});
+test("November 3 US empty sections explain October 30 signal and market dates without promoting old cases", () => {
+  const reports: any[] = [{ source: "edgeai", status: "SUCCESS", reportDate: "2026-11-02",
+    importedAt: "2026-11-03T08:58:08Z", dataDates: { SE: "2026-11-02", US: "2026-10-30" } }];
+  const signals = [{ market: "US", direction: "LONG", signalDate: "2026-10-30" },
+    { market: "US", direction: "SHORT", signalDate: "2026-10-29" }];
+  const evidence = marketEvidence("US", "LONG", signals, reports, "2026-11-03");
+  assert.equal(evidence.blockedDates, 1);
+  assert.equal(evidence.staleData, true);
+  assert.equal(evidence.newestSignal, "2026-10-30");
+  const html = renderToStaticMarkup(React.createElement(ResearchMarketSections, {
+    picks: [], signals, reports, sessionDate: "2026-11-03", renderPick: () => null,
+  }));
+  assert.ok(html.includes("empty-US-LONG") && html.includes("empty-US-SHORT"));
+  assert.ok(html.includes("2026-10-30") && html.includes("2026-11-02") && html.includes("Datumspärr"));
+  assert.ok(html.includes("STALE") && html.includes("NO TRADE"));
+  assert.ok(!html.includes("TRADEABLE") && !html.includes('data-entry-status="READY"'));
+});
+test("previous-weekday dates remain valid across a weekend; unknown/future signal dates stay blocked", () => {
+  const reports: any[] = [{ source: "edgeai", status: "SUCCESS", dataDates: { US: "2026-10-30" } }];
+  assert.equal(marketEvidence("US", "LONG", [{ market: "US", direction: "LONG", signalDate: "2026-10-30" }], reports, "2026-11-02").blockedDates, 0);
+  const result = marketEvidence("US", "SHORT", [
+    { market: "US", direction: "SHORT", signalDate: null },
+    { market: "US", direction: "SHORT", signalDate: "2026-11-04" },
+  ], reports, "2026-11-03");
+  assert.equal(result.blockedDates, 2);
+});
+test("US and SE data days cannot be borrowed from each other in a shared source report", () => {
+  const dates = [{ source: "edgeai", signalDate: "2026-11-02", market: "SE", dataDate: "2026-11-02" },
+    { source: "edgeai", signalDate: "2026-11-02", market: "US", dataDate: "2026-10-30" }];
+  assert.equal(savedDataDate(dates, "edgeai", "2026-11-02", "SE"), "2026-11-02");
+  assert.equal(savedDataDate(dates, "edgeai", "2026-11-02", "US"), "2026-10-30");
+  assert.equal(savedDataDate([dates[0]], "edgeai", "2026-11-02", "US"), null);
+  assert.equal(savedDataDate([{ source: "edgeai", signalDate: "2026-11-02", dataDate: "2026-11-02" }], "edgeai", "2026-11-02", "US"), null);
+});
+test("old US and SE saved TRADEABLE statuses are historical, never verified entry", () => {
+  for (const market of ["US", "SE"]) {
+    const html = renderToStaticMarkup(React.createElement(ResearchCard, {
+      pick: { ...pick(30, "LONG", market), decision: { status: "TRADEABLE", reasons: [] } },
+      dataDate: "2026-10-30", stale: true,
+    }));
+    assert.ok(html.includes("STALE · historiskt urval"));
+    assert.ok(!html.includes("TRADEABLE · screening") && !html.includes('data-entry-status="READY"'));
+    assert.ok(html.includes("NO TRADE"));
+  }
 });
 test("latest-session source status is separate from the saved selection's signal evidence", () => {
   const latestReceipt: any = {

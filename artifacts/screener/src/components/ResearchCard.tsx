@@ -49,10 +49,10 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
     guard?.status === "READY" && reportVerified;
   return <li data-testid={`research-card-${pick.candidateId}`} className="surface-lift min-w-0 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-      <strong className="font-mono text-lg font-semibold tracking-tight">{dailySymbol(pick.ticker)}</strong>
+      <strong className="font-mono text-lg font-semibold tracking-tight">{dailySymbol(pick.ticker, pick.market)}</strong>
       <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${long ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>{long ? "Long" : "Short"}</span>
       <span aria-label="Screeningstatus" className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-        {pick.decision?.status ?? unknown} · screening
+        {stale ? "STALE · historiskt urval" : `${pick.decision?.status ?? unknown} · screening`}
       </span>
       <span className="text-xs text-muted-foreground">{SOURCE[pick.source] ?? pick.source} · {pick.category}</span>
     </div>

@@ -133,6 +133,7 @@ export * from './top3AnalyticsStats';
 export * from './top3AnalyticsStatsByDirection';
 export * from './top3DirectionStats';
 export * from './top3DisplayDataDate';
+export * from './top3DisplayDataDateMarket';
 export * from './top3LiveSelection';
 export * from './top3LiveSelectionPick';
 export * from './top3LiveSelectionPickDirection';
