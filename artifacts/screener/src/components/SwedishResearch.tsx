@@ -63,7 +63,7 @@ export function SwedishResearchContent({ selection, signals = [], reports = [], 
   </>;
 }
 
-type Conflictable = ResearchSignal & { ticker?: string; market?: string | null; direction?: string };
+type Conflictable = ResearchSignal & { ticker?: string; market?: string | null; direction?: string; category?: string; signalSource?: string | null };
 /** Reuses existing quarantine helper and DailyCandidates' plan-conflict check; no new rules. */
 export function pickWarnings(
   p: DailyPick,
@@ -77,14 +77,19 @@ export function pickWarnings(
   const quarantinedSomewhere = matching.some(r => r.quarantinedIdentities?.includes(identity));
   if (isolatedDailyPick(p, reports)) out.push("Källkonflikt – ingen entrybekräftelse");
   else if (quarantinedSomewhere) out.push("Källkonflikt osäker – rapportversion kan inte kopplas entydigt; ingen entrybekräftelse");
-  if (signals.some(c => (c.market ?? "SE") === p.market && c.ticker &&
-    (c.signalDate ?? null) === (p.signalDate ?? null) &&
-    dailySymbol(c.ticker, p.market) === dailySymbol(p.ticker, p.market) &&
-    (c.direction !== p.direction || c.entryPrice !== p.entryPrice || c.stopPrice !== p.stopPrice || c.targetPrice !== p.targetPrice)))
+  const alternatives = signals.filter(c => c.market === p.market && c.ticker &&
+    c.signalDate === p.signalDate && dailySymbol(c.ticker, p.market) === dailySymbol(p.ticker, p.market) &&
+    (c.entryPrice !== p.entryPrice || c.stopPrice !== p.stopPrice || c.targetPrice !== p.targetPrice));
+  if (alternatives.some(c => c.signalSource === p.source && c.category === p.category && c.direction === p.direction))
     out.push("Flera planer/riktningar för aktien – jämför innan beslut");
+  else if (alternatives.some(c => !c.signalSource || !c.category || !c.direction))
+    out.push("Planernas signalidentitet är ofullständig – omfattningen är osäker; kontrollera sessionen.");
   const latestSourceReceipt = sourceStatusReports.filter(r => r.source === p.source).at(-1);
-  if (latestSourceReceipt?.status === "FAILED") out.push(`Senaste ${p.source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"}-import avvisades: ${latestSourceReceipt.error || "orsak okänd"}`);
-  out.push(...(latestSourceReceipt?.warnings ?? []));
+  if (latestSourceReceipt?.status === "FAILED") out.push("Senaste källimporten avvisades – se källstatus; sparad plan är oförändrad.");
+  // Receipt warnings describe the whole import, not this signal. Never attach
+  // their raw text (or infer identities from it) to an unrelated card.
+  if (latestSourceReceipt?.warnings?.length)
+    out.push("Källan har datavarningar med ej fullständigt verifierad omfattning – se källstatus.");
   return out;
 }
 

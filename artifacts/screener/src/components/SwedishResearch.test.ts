@@ -36,19 +36,19 @@ test("comparison of alternative plans does not replace a usable quote with a fab
   }));
   assert.ok(html.includes("Flera planer/riktningar"));
   assert.ok(html.includes('data-entry-status="UNKNOWN"'));
-  assert.ok(html.includes("NO TRADE · ingen entrybekräftelse"));
-  assert.ok(html.includes("NO TRADE · ingen entrybekräftelse"));
+  assert.ok(html.includes("BLOCKERAD – ingen ny entry"));
+  assert.equal((html.match(/Flera planer\/riktningar/g) ?? []).length, 1);
 });
 
 test("decision brief fails closed on missing market date, stale data, non-TRADEABLE screening and missing quote", () => {
   const html = renderToStaticMarkup(React.createElement(ResearchCard, {
     pick: pick(20, "LONG"), dataDate: null, stale: true,
   }));
-  assert.ok(html.includes("NO TRADE · ingen entrybekräftelse"));
-  assert.ok(html.includes("Screeningstatus är inte verifierat TRADEABLE"));
+  assert.ok(html.includes("BLOCKERAD – ingen ny entry"));
+  assert.ok(html.includes("Screeningkvalificering är inte verifierad"));
   assert.ok(html.includes("Signal eller marknadsdag är STALE"));
   assert.ok(html.includes("Verifierat marknadsdatadatum saknas"));
-  assert.ok(html.includes("Rapportdatum ska kontrolleras manuellt före beslut"));
+  assert.ok(html.includes("Rapportdatum ej verifierat – kontrollera manuellt"));
   assert.ok(!html.includes('data-entry-status="READY"'));
 });
 test("a US Yahoo symbol cannot be shown as a verified current price for a Swedish EQT plan", () => {
@@ -125,7 +125,7 @@ test("old US and SE saved TRADEABLE statuses are historical, never verified entr
     }));
     assert.ok(html.includes("STALE · historiskt urval"));
     assert.ok(!html.includes("TRADEABLE · screening") && !html.includes('data-entry-status="READY"'));
-    assert.ok(html.includes("NO TRADE"));
+    assert.ok(html.includes("BLOCKERAD"));
   }
 });
 test("latest-session source status is separate from the saved selection's signal evidence", () => {
@@ -167,7 +167,7 @@ test("today is the single prominent research surface; historical dashboard stays
   assert.ok(history.includes('data-testid="details-historical-stats"'));
 });
 
-test("guard visible outside disclosure, entry not called close, invalid asOf not verified", () => {
+test("single entry verdict remains visible; technical guard is disclosed; invalid asOf not verified", () => {
   const q: any = { ticker: "T1", yahooTicker: "T1.ST", livePrice: 101, marketState: "REGULAR", asOf: "garbage" };
   assert.equal(quoteLabels(q)!.asOf, "Tidpunkt ej verifierad");
   const html = render({ quotes: { T1: q } });
@@ -176,7 +176,8 @@ test("guard visible outside disclosure, entry not called close, invalid asOf not
   const guard = card.indexOf("<LiveEntryGuard");
   const beforeGuard = card.slice(0, guard);
   assert.ok(guard > 0);
-  assert.equal((beforeGuard.match(/<details\b/g) ?? []).length, (beforeGuard.match(/<\/details>/g) ?? []).length);
+  assert.ok((beforeGuard.match(/<details\b/g) ?? []).length > (beforeGuard.match(/<\/details>/g) ?? []).length);
+  assert.ok(html.includes('data-testid="entry-status-1"'));
   assert.ok(html.includes("data-entry-status="));
 });
 

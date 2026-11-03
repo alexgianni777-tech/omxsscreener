@@ -126,3 +126,17 @@ mtime_ms = 1793699531402
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/71af4bba-0256-4559-a4f2-f83941c74327/56a604c5-1b4d-4267-9946-60df84287a55"
 storage_version_token = "1793699666985671"
 content_type = "image/jpeg"
+
+[[outputs]]
+id = "I3WQV3VKB20VeFx7HqyT_"
+uri = "file://generated-artifacts/qa/warnings-mobile.jpg"
+type = "image"
+title = "Mobilkontroll – renare varningshantering"
+description = "Isolerad DEMO-rendering av riktiga komponenter vid 402×874. EVO visar AVVAKTA utan ELUX-B:s råvarning; berört ELUX-B-kort visar BLOCKERAD. Inte en inloggad produktionskontroll."
+logical_id = "12b1dbe0-b5e5-43c8-89a0-87bb0addf700"
+content_hash = "sha256:2f31d0bac032c9dbf519e3cb985c975415334bc1856ce33d60a6d43f3b819cd4"
+size = 141390
+mtime_ms = 1793709527028
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/12b1dbe0-b5e5-43c8-89a0-87bb0addf700/bfcc5c1f-787f-4a96-8adf-9986737e23c4"
+storage_version_token = "1793709554515248"
+content_type = "image/jpeg"

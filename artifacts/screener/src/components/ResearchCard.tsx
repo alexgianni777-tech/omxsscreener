@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useReducer } from "react";
 import type { QuoteResult } from "@workspace/api-client-react";
 import { PlanGrid } from "./PlanGrid";
 import { LiveEntryGuard } from "./LiveEntryGuard";
@@ -6,7 +6,7 @@ import { dailySymbol, type DailyPick } from "../lib/dailyCandidates";
 import { edgeAiMetrics, type EdgeAICandidateMetrics } from "../lib/edgeAiMetrics";
 import { formatPrice } from "../lib/presentationNumbers";
 import { quoteLabels, researchQuoteForMarket } from "../lib/researchQuote";
-import { assessLiveEntry } from "../lib/liveEntryGuard";
+import { assessLiveEntry, LIVE_ENTRY_MAX_PRICE_AGE_MS } from "../lib/liveEntryGuard";
 
 export type ResearchSignal = EdgeAICandidateMetrics & {
   id: number; signalDate?: string | null; entryPrice: number; stopPrice: number; targetPrice: number;
@@ -24,7 +24,16 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
   pick: DailyPick & { decision?: { status?: string | null; reasons?: readonly string[] | null } }; signal?: ResearchSignal;
   dataDate: string | null; quote?: QuoteResult; warnings?: readonly string[]; stale?: boolean;
 }) {
-  // Comparing alternative plans is informational, not proof of a failed import.
+  const [, expireQuote] = useReducer(n => n + 1, 0);
+  useEffect(() => {
+    if (!quote?.asOf) return;
+    const remaining = Date.parse(quote.asOf) + LIVE_ENTRY_MAX_PRICE_AGE_MS - Date.now();
+    if (!Number.isFinite(remaining) || remaining < 0 || remaining > LIVE_ENTRY_MAX_PRICE_AGE_MS + 60_000) return;
+    const timer = setTimeout(expireQuote, remaining + 1);
+    return () => clearTimeout(timer);
+  }, [quote?.asOf]);
+  // Warnings passed here are identity-linked or concise source-uncertainty
+  // notices; receipt-level raw diagnostics belong only in SourceProvenance.
   const warningList = [...new Set([...warnings, signal?.importWarning].filter((value): value is string => !!value))];
   const screeningReady = pick.decision?.status === "TRADEABLE";
   const importWarning = warningList.join(" ") ||
@@ -38,42 +47,44 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
     : assessLiveEntry(pick, checkedQuote ?? null);
   const reportVerified = signal?.earningsKnowledge === "SIGNAL_TIME" && signal.earningsInDays != null;
   const noTradeReasons = [
-    !screeningReady ? "Screeningstatus är inte verifierat TRADEABLE." : null,
+    warningList[0] ?? null,
     stale ? "Signal eller marknadsdag är STALE." : null,
     !dataDate ? "Verifierat marknadsdatadatum saknas." : null,
-    warningList[0] ?? null,
-    guard && guard.status !== "READY" ? `Live Entry Guard: ${guard.status}.` : null,
+    !screeningReady ? "Screeningkvalificering är inte verifierad; inget entrybesked." : null,
+    guard && guard.status !== "READY" ? guard.reason : null,
     !reportVerified ? "Rapportdatum ej verifierat – kontrollera manuellt." : null,
   ].filter((reason): reason is string => !!reason);
   const decisionSafe = screeningReady && !stale && !!dataDate && warningList.length === 0 &&
     guard?.status === "READY" && reportVerified;
+  const blocked = stale || warningList.some(w => w.startsWith("Källkonflikt") || w.startsWith("Flera planer/")) ||
+    (!!pick.decision?.status && !screeningReady) ||
+    guard?.status === "PLAN_BROKEN" || guard?.status === "MISSED_ENTRY";
+  const entryLabel = decisionSafe ? "READY – entryvillkor verifierade, inte en order"
+    : blocked ? "BLOCKERAD – ingen ny entry" : "AVVAKTA – entry ej bekräftad";
+  const reasons = [...new Set([...noTradeReasons, ...warningList.slice(1)])];
   return <li data-testid={`research-card-${pick.candidateId}`} className="surface-lift min-w-0 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
       <strong className="font-mono text-lg font-semibold tracking-tight">{dailySymbol(pick.ticker, pick.market)}</strong>
       <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${long ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>{long ? "Long" : "Short"}</span>
       <span aria-label="Screeningstatus" className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-        {stale ? "STALE · historiskt urval" : `${pick.decision?.status ?? unknown} · screening`}
+        {stale ? "STALE · historiskt urval" : screeningReady ? "Screeningkvalificerad · ej entrybesked" : `Screening: ${pick.decision?.status ?? unknown}`}
       </span>
       <span className="text-xs text-muted-foreground">{SOURCE[pick.source] ?? pick.source} · {pick.category}</span>
     </div>
     <p className="mt-1 text-xs text-muted-foreground" data-testid={`text-basis-${pick.candidateId}`}>
       Signal {pick.signalDate ?? unknown} · Datadag D−1 {dataDate ?? unknown}
     </p>
-    {warningList.length > 0 && <p role="alert" data-testid={`status-research-warning-${pick.candidateId}`} className="mt-2 rounded-md bg-amber-500/10 px-2 py-1 text-xs font-semibold text-amber-700">
-      {warningList[0]}{warningList.length > 1 ? ` · ${warningList.length - 1} ytterligare varning(ar) i källstatus` : ""}
-    </p>}
     <PlanGrid plan={pick} caption="Originalplan · D−1-underlag" />
     <div role={decisionSafe ? "status" : "alert"} data-testid={`decision-brief-${pick.candidateId}`}
       className={`mt-3 rounded-lg px-3 py-2 text-xs ${decisionSafe ? "bg-success/10 text-success" : "bg-amber-500/10 text-amber-800 dark:text-amber-300"}`}>
-      <p className="font-semibold">{decisionSafe ? "Klar för manuell granskning · inte en order" : "NO TRADE · ingen entrybekräftelse"}</p>
+      <p className="font-semibold" data-testid={`entry-status-${pick.candidateId}`}>{entryLabel}</p>
       {!decisionSafe && <>
-        <p className="mt-1 leading-relaxed">{noTradeReasons.slice(0, 3).join(" ") || "Kontrollera datakvalitet och livekurs före eget beslut."}</p>
-        {noTradeReasons.length > 3 && <details className="mt-1">
-          <summary className="cursor-pointer text-[11px] underline">Visa fler orsaker</summary>
-          <ul className="mt-1 list-inside list-disc">{noTradeReasons.slice(3).map(reason => <li key={reason}>{reason}</li>)}</ul>
+        <p className="mt-1 leading-relaxed">{reasons[0] || "Kontrollera datakvalitet och livekurs före eget beslut."}</p>
+        {reasons.length > 1 && <details className="mt-1">
+          <summary className="cursor-pointer text-xs underline">Visa fler orsaker</summary>
+          <ul className="mt-1 list-inside list-disc">{reasons.slice(1).map(reason => <li key={reason}>{reason}</li>)}</ul>
         </details>}
       </>}
-      <p className="mt-1 text-[11px]">Rapportdatum ska kontrolleras manuellt före beslut.</p>
     </div>
     <div className="mt-2 flex items-center justify-between gap-3 border-b border-border/70 pb-3 text-xs" data-testid={`holding-${pick.candidateId}`}>
       <span className="text-muted-foreground">Max hålltid</span>
@@ -87,18 +98,18 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
         <div className="text-muted-foreground">{q.source} · {q.status}</div>
       </> : <div className="mt-0.5 text-muted-foreground">As-of: okänd · ingen kurs hämtad</div>}
     </div>
-    <div className="mt-3 text-xs" data-testid={`guard-${pick.candidateId}`}>
-    <LiveEntryGuard plan={pick} quote={checkedQuote?.error ? null : checkedQuote ?? null}
-        signal={{ signalDate: pick.signalDate, signalSource: pick.source, signalAgeBars: signal?.signalAgeBars, importWarning }} />
-    </div>
     <details className="group mt-3 text-xs">
       <summary className="cursor-pointer select-none text-muted-foreground hover:text-foreground">Beslutsunderlag och datadetaljer</summary>
+      <div data-testid={`guard-${pick.candidateId}`}>
+        <LiveEntryGuard plan={pick} quote={checkedQuote?.error ? null : checkedQuote ?? null}
+          signal={{ signalDate: pick.signalDate, signalSource: pick.source, signalAgeBars: signal?.signalAgeBars,
+            importWarning: importWarning ? "Entry ej verifierad; se kortets orsaker och källstatus." : undefined }} />
+      </div>
       <p className="mt-2 text-sm leading-relaxed text-foreground">{WHY[pick.category] ?? `Setup ${pick.category} enligt källan`}.</p>
       <p className="mt-1 text-muted-foreground">Invalidation enligt ursprungsplan: stop {formatPrice(pick.stopPrice)}. Ingen planändring har gjorts.</p>
       <p className="mt-1 text-muted-foreground">{signal?.earningsKnowledge === "SIGNAL_TIME" && signal.earningsInDays != null
         ? `Källans rapportavstånd: ${signal.earningsInDays} dagar; verifiera rapporttid manuellt.`
         : "Rapportdatum ej verifierat här; kontrollera manuellt före beslut."}</p>
-      {warningList.map(w => <p key={w} className="mt-1 text-amber-700">{w}</p>)}
       {!q && <p className="mt-2 text-muted-foreground">Inget pris hämtat. Tryck Uppdatera priser och jämför med Avanza.</p>}
       <p className="mt-2 text-muted-foreground">Planerad entry – inte stängningskurs: {formatPrice(pick.entryPrice)}</p>
       {signal?.price != null && <p className="text-muted-foreground">Screeningens referenskurs: {formatPrice(signal.price)} · datadag {dataDate ?? unknown}</p>}

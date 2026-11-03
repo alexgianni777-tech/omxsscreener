@@ -26,7 +26,7 @@ export function SourceProvenance({ reports = [], context }: { reports?: readonly
       : !latest ? "Importkvittens saknas"
       : latest.status !== "SUCCESS" ? "Kvittens · status ej verifierad"
       : latest.warnings?.length ? "Importerad · varningar" : "Importerad";
-    return { source, latest, accepted, status };
+    return { source, latest, accepted, status, warnings: [...new Set(latest?.warnings ?? [])] };
   });
   const verified = sources.every(s => s.latest?.status === "SUCCESS");
   const completeDates = sources.every(s => day(s.latest?.reportDate) !== "okänd" && day(s.latest?.dataDates?.SE) !== "okänd");
@@ -58,13 +58,14 @@ export function SourceProvenance({ reports = [], context }: { reports?: readonly
     {sources.filter(s => s.latest?.status === "FAILED").map(s => <p key={`${s.source}-error`} role="alert" className="mt-1 break-words font-medium text-destructive">
       {s.source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"} · import avvisad: {s.latest?.error || "orsak okänd"}. Tidigare lyckat kvitto används endast som historik.
     </p>)}
-    {sources.filter(s => !!s.latest?.warnings?.length).map(s => <details key={`${s.source}-warnings`} className="mt-1">
+    {sources.filter(s => s.warnings.length > 0).map(s => <details key={`${s.source}-warnings`} className="mt-1">
       <summary className="cursor-pointer select-none text-amber-700 dark:text-amber-400">
-        {s.source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"} · {s.latest?.warnings?.length} datavarning(ar)
+        {s.source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"} · {s.warnings.length} datavarning(ar)
       </summary>
       <ul className="mt-1 list-inside list-disc space-y-1 break-words">
-        {s.latest?.warnings?.map((warning, index) => <li key={`${s.source}-warning-${index}`}>{warning}</li>)}
+        {s.warnings.map((warning, index) => <li key={`${s.source}-warning-${index}`}>{warning}</li>)}
       </ul>
+      <p className="mt-1">Importens varningar gäller inte automatiskt varje aktie. Ej verifierad omfattning kräver försiktighet; endast säkert kopplade konflikter märks på kortet.</p>
     </details>)}
     <p data-testid="source-date-alignment" className={alignWarn ? "mt-1 font-semibold text-amber-700" : "mt-1"}>{alignment}</p>
     {verified && completeDates && alignWarn && <p className="mt-1 text-amber-700 dark:text-amber-400">
