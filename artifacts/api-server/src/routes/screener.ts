@@ -71,7 +71,8 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
 
   const reportDate = session.date;
   const signalSource = pastedSignalSource(parsed.data.confirmedTelegram);
-  const importReport = makeImportReport(signalSource, reportDate, session);
+  const importReport = makeImportReport(signalSource, reportDate, session, null, { SE: session.dataAsOf ?? null, US: null });
+  importReport.warnings = session.dataWarnings ?? [];
   if (parsed.data.targetDate) {
     const targetDate = parsed.data.targetDate instanceof Date
       ? parsed.data.targetDate.toISOString().slice(0, 10)
@@ -174,7 +175,9 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
   // ---------- helpers shared by both insert and force-update paths ----------
   // The parsed report date remains the source date even when a manual paste
   // is explicitly assigned to today's session for trading.
-  const volMap = await enrichVolMultiplier(session.candidates.map((c) => c.ticker), _yf, reportDate);
+  const volMap = session.dataAsOf
+    ? await enrichVolMultiplier(session.candidates.map((c) => c.ticker), _yf, session.dataAsOf)
+    : new Map<string, { multiplier: number; asOf: string }>();
 
   const buildCandidateRow = (
     sessionId: number,
@@ -189,6 +192,7 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
   ) => ({
     sessionId,
     signalDate: reportDate,
+    dataQuality: c.dataQuality ? { ...c.dataQuality, source: signalSource } : null,
     market: "SE" as const,   // screener text is always SE stocks
     signalSource,
     origin: "manual" as const,
@@ -799,6 +803,7 @@ async function validatedImportResponse(
 }
 
 function mapCandidate(c: {
+  dataQuality?: import("@workspace/db").CandidateDataQuality | null;
   id: number;
   sessionId: number;
     signalDate: string | null;
@@ -848,6 +853,7 @@ function mapCandidate(c: {
   return {
     id: c.id,
     sessionId: c.sessionId,
+    dataQuality: c.dataQuality ?? null,
     signalDate: c.signalDate ?? null,
     category: c.category,
     rank: c.rank,

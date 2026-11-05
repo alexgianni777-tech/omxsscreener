@@ -3,6 +3,8 @@ import { EntrySafety } from "./EntrySafety";
 import { DataFreshness } from "./DataFreshness";
 import { QuotePresentation } from "./QuotePresentation";
 import { formatRR } from "../lib/presentationNumbers";
+import type { CandidateDataQuality } from "@workspace/api-client-react";
+import { sourceQualityReasons } from "../lib/sourceQuality";
 import { assessLiveEntry, LIVE_ENTRY_MAX_PRICE_AGE_MS, type EntryPlan, type EntryQuote, type EntryStatus } from "../lib/liveEntryGuard";
 
 const STYLES: Record<EntryStatus, string> = {
@@ -13,6 +15,7 @@ const STYLES: Record<EntryStatus, string> = {
   UNKNOWN: "text-muted-foreground",
 };
 export type SignalMetadata = {
+  dataQuality?: CandidateDataQuality | null;
   importWarning?: string | null;
   signalDate?: string | null;
   signalSource?: string | null;
@@ -34,8 +37,10 @@ export function LiveEntryGuard({ plan, quote, signal, now }: {
     const timer = setTimeout(expirePrice, remaining + 1);
     return () => clearTimeout(timer);
   }, [quote?.asOf, now]);
-  const assessment = signal?.importWarning
-    ? { ...assessLiveEntry(plan, null, now), status: "UNKNOWN" as const, reason: signal.importWarning }
+  const qualityWarning = sourceQualityReasons(signal?.signalSource, signal?.dataQuality)[0];
+  const warning = qualityWarning || signal?.importWarning;
+  const assessment = warning
+    ? { ...assessLiveEntry(plan, null, now), status: "UNKNOWN" as const, reason: warning }
     : assessLiveEntry(plan, quote, now);
   const age = signal?.signalAgeBars;
   const hasPrice = quote?.livePrice != null && Number.isFinite(quote.livePrice) && quote.livePrice > 0;
@@ -45,9 +50,9 @@ export function LiveEntryGuard({ plan, quote, signal, now }: {
     MISSED_ENTRY: "Entry passerad – ingen entrybekräftelse",
     PLAN_BROKEN: "Plan bruten – ingen entrybekräftelse",
     STALE_PRICE: "För gammal kurs eller stängd marknad – ingen entrybekräftelse",
-    UNKNOWN: signal?.importWarning ? "Signaldata behöver kontrolleras – ingen entrybekräftelse"
-      : hasPrice ? "Livekurs ej verifierad – ingen entrybekräftelse"
-      : "Livekurs saknas – ingen entrybekräftelse",
+    UNKNOWN: !hasPrice ? "Livekurs saknas – ingen entrybekräftelse"
+      : warning ? "Signaldata behöver kontrolleras – ingen entrybekräftelse"
+      : "Livekurs ej verifierad – ingen entrybekräftelse",
   }[assessment.status];
   return (
     <div data-testid="live-entry-guard" data-entry-status={assessment.status}
@@ -76,7 +81,7 @@ export function LiveEntryGuard({ plan, quote, signal, now }: {
       </p>
       <DataFreshness reportDate={signal?.signalDate} source={signal?.signalSource}
         manual={signal?.signalSource === "manual"} />
-      <EntrySafety plan={plan} quote={signal?.importWarning ? null : quote} now={now} />
+      <EntrySafety plan={plan} quote={warning ? null : quote} now={now} />
         </div>
       </details>
     </div>

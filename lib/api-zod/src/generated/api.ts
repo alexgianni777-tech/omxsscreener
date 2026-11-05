@@ -390,6 +390,18 @@ export const ImportSessionResponse = zod.object({
 }),
   "candidates": zod.array(zod.object({
   "importWarning": zod.string().nullish(),
+  "dataQuality": zod.union([zod.object({
+  "source": zod.string(),
+  "dataAsOf": zod.string().nullable(),
+  "evidenceStatus": zod.string().nullable(),
+  "eliteStatus": zod.string().nullable(),
+  "eliteQualified": zod.boolean().nullable(),
+  "validatedEdge": zod.boolean().nullable(),
+  "barSource": zod.enum(['PROVIDER_DAILY', 'RECONSTRUCTED_INTRADAY', 'UNKNOWN']),
+  "fullSessionVerified": zod.boolean(),
+  "entryEligible": zod.boolean(),
+  "reasons": zod.array(zod.string())
+}),zod.null()]).optional(),
   "id": zod.number(),
   "sessionId": zod.number(),
   "signalDate": zod.string().nullable().describe('YYYY-MM-DD immutable date supplied by the signal source; null for legacy rows where source date is unknown'),
@@ -696,6 +708,18 @@ export const ReimportSessionResponse = zod.object({
 }),
   "candidates": zod.array(zod.object({
   "importWarning": zod.string().nullish(),
+  "dataQuality": zod.union([zod.object({
+  "source": zod.string(),
+  "dataAsOf": zod.string().nullable(),
+  "evidenceStatus": zod.string().nullable(),
+  "eliteStatus": zod.string().nullable(),
+  "eliteQualified": zod.boolean().nullable(),
+  "validatedEdge": zod.boolean().nullable(),
+  "barSource": zod.enum(['PROVIDER_DAILY', 'RECONSTRUCTED_INTRADAY', 'UNKNOWN']),
+  "fullSessionVerified": zod.boolean(),
+  "entryEligible": zod.boolean(),
+  "reasons": zod.array(zod.string())
+}),zod.null()]).optional(),
   "id": zod.number(),
   "sessionId": zod.number(),
   "signalDate": zod.string().nullable().describe('YYYY-MM-DD immutable date supplied by the signal source; null for legacy rows where source date is unknown'),
@@ -926,6 +950,18 @@ export const GetSessionResponse = zod.object({
 }),
   "candidates": zod.array(zod.object({
   "importWarning": zod.string().nullish(),
+  "dataQuality": zod.union([zod.object({
+  "source": zod.string(),
+  "dataAsOf": zod.string().nullable(),
+  "evidenceStatus": zod.string().nullable(),
+  "eliteStatus": zod.string().nullable(),
+  "eliteQualified": zod.boolean().nullable(),
+  "validatedEdge": zod.boolean().nullable(),
+  "barSource": zod.enum(['PROVIDER_DAILY', 'RECONSTRUCTED_INTRADAY', 'UNKNOWN']),
+  "fullSessionVerified": zod.boolean(),
+  "entryEligible": zod.boolean(),
+  "reasons": zod.array(zod.string())
+}),zod.null()]).optional(),
   "id": zod.number(),
   "sessionId": zod.number(),
   "signalDate": zod.string().nullable().describe('YYYY-MM-DD immutable date supplied by the signal source; null for legacy rows where source date is unknown'),
@@ -1264,6 +1300,18 @@ export const ListCandidatesQueryParams = zod.object({
 
 export const ListCandidatesResponseItem = zod.object({
   "importWarning": zod.string().nullish(),
+  "dataQuality": zod.union([zod.object({
+  "source": zod.string(),
+  "dataAsOf": zod.string().nullable(),
+  "evidenceStatus": zod.string().nullable(),
+  "eliteStatus": zod.string().nullable(),
+  "eliteQualified": zod.boolean().nullable(),
+  "validatedEdge": zod.boolean().nullable(),
+  "barSource": zod.enum(['PROVIDER_DAILY', 'RECONSTRUCTED_INTRADAY', 'UNKNOWN']),
+  "fullSessionVerified": zod.boolean(),
+  "entryEligible": zod.boolean(),
+  "reasons": zod.array(zod.string())
+}),zod.null()]).optional(),
   "id": zod.number(),
   "sessionId": zod.number(),
   "signalDate": zod.string().nullable().describe('YYYY-MM-DD immutable date supplied by the signal source; null for legacy rows where source date is unknown'),
@@ -1379,6 +1427,18 @@ export const UpdateCandidateOutcomeBody = zod.object({
 
 export const UpdateCandidateOutcomeResponse = zod.object({
   "importWarning": zod.string().nullish(),
+  "dataQuality": zod.union([zod.object({
+  "source": zod.string(),
+  "dataAsOf": zod.string().nullable(),
+  "evidenceStatus": zod.string().nullable(),
+  "eliteStatus": zod.string().nullable(),
+  "eliteQualified": zod.boolean().nullable(),
+  "validatedEdge": zod.boolean().nullable(),
+  "barSource": zod.enum(['PROVIDER_DAILY', 'RECONSTRUCTED_INTRADAY', 'UNKNOWN']),
+  "fullSessionVerified": zod.boolean(),
+  "entryEligible": zod.boolean(),
+  "reasons": zod.array(zod.string())
+}),zod.null()]).optional(),
   "id": zod.number(),
   "sessionId": zod.number(),
   "signalDate": zod.string().nullable().describe('YYYY-MM-DD immutable date supplied by the signal source; null for legacy rows where source date is unknown'),

@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ResearchCard } from "./ResearchCard";
 import { SourceProvenance } from "./SourceProvenance";
 import { pickWarnings } from "./SwedishResearch";
+import { qualifiedEdgeQuality } from "../lib/sourceQuality.fixtures";
 
 const pick = { candidateId: 1, ticker: "EVO", market: "SE", direction: "LONG", category: "MOMENTUM",
   source: "edgeai", signalDate: "2026-11-03", rank: 1, entryPrice: 100, stopPrice: 95, targetPrice: 110, rr: 2,
@@ -14,7 +15,7 @@ const receipt: any = { source: "edgeai", status: "SUCCESS", signalDate: pick.sig
   reportDate: pick.signalDate, fingerprint: "DEMO", importedAt: "2026-11-03T10:00:00Z",
   dataDates: { SE: "2026-11-02", US: "2026-11-02" }, warnings: [raw, raw],
   quarantinedIdentities: ["SE|WEAKEST|ELUX-B|SHORT|2026-11-03|edgeai"] };
-const signal = { id: 1, earningsKnowledge: "SIGNAL_TIME" as const, earningsInDays: 20,
+const signal = { id: 1, dataQuality: qualifiedEdgeQuality, earningsKnowledge: "SIGNAL_TIME" as const, earningsInDays: 20,
   entryPrice: 100, stopPrice: 95, targetPrice: 110 };
 const quote: any = { ticker: "EVO", yahooTicker: "EVO.ST", livePrice: 100, marketState: "REGULAR",
   asOf: new Date().toISOString() };

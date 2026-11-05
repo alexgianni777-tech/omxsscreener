@@ -1219,12 +1219,43 @@ components:
         trendLabel:
           type: string
 
+    CandidateDataQuality:
+      type: object
+      required: [source, dataAsOf, evidenceStatus, eliteStatus, eliteQualified, validatedEdge, barSource, fullSessionVerified, entryEligible, reasons]
+      properties:
+        source:
+          type: string
+        dataAsOf:
+          type: [string, "null"]
+        evidenceStatus:
+          type: [string, "null"]
+        eliteStatus:
+          type: [string, "null"]
+        eliteQualified:
+          type: [boolean, "null"]
+        validatedEdge:
+          type: [boolean, "null"]
+        barSource:
+          type: string
+          enum: [PROVIDER_DAILY, RECONSTRUCTED_INTRADAY, UNKNOWN]
+        fullSessionVerified:
+          type: boolean
+        entryEligible:
+          type: boolean
+        reasons:
+          type: array
+          items:
+            type: string
     Candidate:
       type: object
       required: [id, sessionId, signalDate, category, rank, ticker, price, rs3m, perf1m, rsi, pctB, atr, volMultiplier, distFrom20dH, direction, entryPrice, stopPrice, targetPrice, rr, oneR, outcome]
       properties:
         importWarning:
           type: [string, "null"]
+        dataQuality:
+          anyOf:
+            - $ref: "#/components/schemas/CandidateDataQuality"
+            - type: "null"
         id:
           type: number
         sessionId:

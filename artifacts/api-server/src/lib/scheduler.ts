@@ -11,6 +11,7 @@ import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { makeImportReport, ImportDataError } from "./importReport";
 import { recordImportFailure } from "./importFailure";
+import { respectStoredEdgeAiBackoff, attachFetchDiagnostic } from "./storedSourceBackoff";
 import { isolateEdgeAiPlans } from "./edgeAiPlanIsolation";
 import { logger } from "./logger";
 import YahooFinance from "yahoo-finance2";
@@ -93,6 +94,7 @@ async function sessionHasReport(
 async function runImport(date: string): Promise<boolean> {
   logger.info({ date }, "[scheduler] Fetching EdgeAI data.json");
 
+  await respectStoredEdgeAiBackoff();
   const fetched = await fetchFreshEdgeAiData(15_000);
   const edgeData = fetched.data;
   const signalDate = edgeAiSessionDate(edgeData);
@@ -124,8 +126,8 @@ async function runImport(date: string): Promise<boolean> {
 
   const rankCounterSE: Record<string, number> = {};
   const rankCounterUS: Record<string, number> = {};
-  const seMapped = seSetups.map((s) => mapEdgeAiSetup(s, "SE", rankCounterSE));
-  const usMapped = usSetups.map((s) => mapEdgeAiSetup(s, "US", rankCounterUS));
+  const seMapped = seSetups.map((s) => mapEdgeAiSetup(s, "SE", rankCounterSE, fetched.quality.dataDates.SE));
+  const usMapped = usSetups.map((s) => mapEdgeAiSetup(s, "US", rankCounterUS, fetched.quality.dataDates.US));
   const allMapped = [...seMapped, ...usMapped];
   allMapped.forEach((candidate) => {
     Object.assign(candidate, { signalSource: "edgeai" as const, origin: "edgeai" as const });
@@ -322,6 +324,7 @@ async function runCheck(): Promise<EdgeAiCheckResult> {
         const report = err instanceof ImportDataError && err.report
           ? err.report
           : makeImportReport("edgeai", stockholm.date, { failure: message });
+        attachFetchDiagnostic(report, err);
         try {
           await recordImportFailure(stockholm.date, report, message);
         } catch (recordError: any) {

@@ -14,6 +14,8 @@ export interface EarningsReactionData {
   status: "UPCOMING" | "AVAILABLE" | "MISSING" | "CONFLICT";
   reportDate: string | null;
   reportTimestamp: string | null;
+  reactionDate?: string | null;
+  releaseSession?: string;
   timezone: string;
   dataAsOf: string | null;
   previousClose: { date: string; close: number } | null;
@@ -103,7 +105,7 @@ export function EarningsReaction({
   return (
     <details className="mt-3 rounded-lg border border-border/70 bg-muted/20" data-testid={`earnings-reaction-${ticker}`}>
       <summary className="flex cursor-pointer flex-wrap items-center gap-2 px-3 py-2.5 text-sm font-medium">
-        <span>Verifierad kursrörelse</span>
+        <span>Kursrörelse enligt källdata</span>
         <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
           reaction.status === "CONFLICT"
             ? "bg-destructive/10 text-destructive"
@@ -122,6 +124,9 @@ export function EarningsReaction({
         <div className="grid gap-1 sm:grid-cols-2">
           <p>Rapportdag ({market}): <strong className="font-mono">{reaction.reportDate ?? "datum ej verifierat"}</strong></p>
           <p>Rapporttidpunkt från källan: <strong>{formatTimestamp(reaction.reportTimestamp, reaction.timezone)}</strong></p>
+          <p className="text-muted-foreground">Rapporttid från Yahoo, inte självständigt verifierad mot bolagets publicering.</p>
+          <p>Reaktionsdag: <strong>{reaction.reactionDate ?? "ej verifierad"}</strong>
+            {" · "}{reaction.releaseSession === "AFTER_CLOSE" ? "Efter stängning – nästa handelsdag" : reaction.releaseSession === "PRE_MARKET" ? "Före öppning" : reaction.releaseSession === "INTRADAY" ? "Under handel – minutdata krävs" : "Tidpunkt ej verifierad"}</p>
           <p>Senaste kursobservation: <strong>{formatTimestamp(reaction.marketDataAsOf, reaction.timezone)}</strong></p>
           <p>Källa: <strong>{reaction.source || "okänd"}</strong></p>
           <p>Kursdata as-of: <strong className="font-mono">{reaction.dataAsOf ?? "okänt"}</strong></p>
@@ -130,12 +135,12 @@ export function EarningsReaction({
 
         {reaction.priceHistoryStatus === "STALE" && (
           <p role="status" className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-amber-800 dark:text-amber-300">
-            STALE: dagsserien slutar före senaste angivna kursdatum. Rörelsen visas endast där källdata finns.
+            STALE: kurs eller dagsserie är äldre än väntad avslutad handelssession. Rörelsen visas endast där källdata finns.
           </p>
         )}
         {reaction.priceHistoryStatus === "UNKNOWN" && (
           <p role="status" className="rounded-md bg-muted px-2.5 py-2 text-muted-foreground">
-            Färskhetsstatus okänd: jämförande kurs-tidsstämpel saknas.
+            Färskhetsstatus okänd: tidsstämpel eller fullständig börskalender kan inte verifieras.
           </p>
         )}
         {reaction.priceHistoryStatus === "CURRENT" && (
@@ -170,8 +175,8 @@ export function EarningsReaction({
               <PriceMetric label="Stängning" value={reaction.reportDay.close} sub={`vs föreg. stängning ${formatPercent(reaction.changePct?.close)}`} />
             </div>
             <p className="text-muted-foreground">
-              Volym rapportdagen: <strong className="font-mono text-foreground">{formatVolume(reaction.reportDay.volume)}</strong>
-              {" · "}1/3/5 handelsdagar räknas från rapportdagens stängning.
+              Volym reaktionsdagen {reaction.reportDay.date}: <strong className="font-mono text-foreground">{formatVolume(reaction.reportDay.volume)}</strong>
+              {" · "}1/3/5 handelsdagar räknas från reaktionsdagens stängning.
             </p>
             <div className="grid grid-cols-3 gap-2">
               {reaction.postReport.map((move) => (

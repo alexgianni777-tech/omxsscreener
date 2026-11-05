@@ -190,7 +190,8 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
   }
 
   const { date: reportDate, marketWeather, candidates } = session;
-  const importReport = makeImportReport("telegram", reportDate, session);
+  const importReport = makeImportReport("telegram", reportDate, session, null, { SE: session.dataAsOf ?? null, US: null });
+  importReport.warnings = session.dataWarnings ?? [];
   const today = stockholmSignalDate();
   const date = isAcceptedSignalDate(reportDate, today) ? today : reportDate;
   const [existingSessionForDate] = await db
@@ -233,7 +234,9 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
   }
 
   // The report date, not import time, is the provenance of its daily signal.
-  const verifiedVolumes = await enrichVolMultiplier(candidates, reportDate);
+  const verifiedVolumes = session.dataAsOf
+    ? await enrichVolMultiplier(candidates, session.dataAsOf)
+    : new Map<string, { multiplier: number; asOf: string }>();
   const earningsBatch = await fetchEarningsBatch(candidates.map((candidate) => candidate.ticker), reportDate);
 
   const buildRow = (
@@ -249,6 +252,7 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
   ) => ({
     sessionId,
     signalDate: reportDate,
+    dataQuality: c.dataQuality,
     market: "SE" as const,   // Telegram screener always imports SE stocks
     signalSource: "telegram" as const,
     origin: "legacy" as const,

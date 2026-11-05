@@ -128,6 +128,7 @@ export function pendingCandidatesToRemove(
  * isTop3Pick, so they are deliberately excluded — those never change on
  * re-import. */
 const DIFF_TRACKED_FIELDS = [
+  "dataQuality",
   "entryPrice",
   "stopPrice",
   "targetPrice",
@@ -194,7 +195,7 @@ function diffFields(current: any, incoming: any): { field: string; from: unknown
     const same =
       typeof from === "number" && typeof to === "number"
         ? Math.abs(from - to) < 0.005
-        : from === to;
+        : field === "dataQuality" ? JSON.stringify(from) === JSON.stringify(to) : from === to;
     if (!same) changes.push({ field, from, to });
   }
   return changes;

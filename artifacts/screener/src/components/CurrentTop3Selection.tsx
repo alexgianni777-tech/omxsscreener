@@ -38,6 +38,10 @@ function Picks({ revision, quotes, candidates }: { revision: Top3Revision } & Gu
                   <LiveEntryGuard plan={pick} quote={quotes?.[pick.ticker]} signal={{
                     importWarning: candidates?.find(c => c.id === pick.candidateId)?.importWarning,
                     signalDate: pick.signalDate, signalSource: pick.source,
+                    dataQuality: candidates?.find((c) => c.id === pick.candidateId &&
+                      c.signalDate === pick.signalDate && c.signalSource === pick.source &&
+                      c.entryPrice === pick.entryPrice && c.stopPrice === pick.stopPrice &&
+                      c.targetPrice === pick.targetPrice)?.dataQuality,
                     // Do not attach newer or trade-frozen metadata to a different revision plan.
                     signalAgeBars: candidates?.find((c) => c.id === pick.candidateId &&
                       c.signalDate === pick.signalDate && c.signalSource === pick.source &&

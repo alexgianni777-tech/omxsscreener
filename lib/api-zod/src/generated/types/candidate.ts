@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CandidateCategory } from './candidateCategory';
+import type { CandidateDataQuality } from './candidateDataQuality';
 import type { CandidateDecision } from './candidateDecision';
 import type { CandidateDirection } from './candidateDirection';
 import type { CandidateEarningsKnowledge } from './candidateEarningsKnowledge';
@@ -22,6 +23,7 @@ import type { SignalReview } from './signalReview';
 export interface Candidate {
   /** @nullable */
   importWarning?: string | null;
+  dataQuality?: CandidateDataQuality | null;
   id: number;
   sessionId: number;
   /**

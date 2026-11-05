@@ -10,6 +10,7 @@ export type ImportReport = {
   source: string; fingerprint: string; signalDate: string; reportDate: string;
   generatedAt: string | null; dataDates: { SE: string | null; US: string | null };
   status?: "SUCCESS" | "FAILED"; error?: string | null;
+  httpStatus?: number | null; retryAt?: string | null;
   quarantinedIdentities?: string[]; warnings?: string[];
 };
 function canonical(value: unknown, market = "SE", field = ""): unknown {

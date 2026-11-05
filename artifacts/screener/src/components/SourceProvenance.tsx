@@ -22,11 +22,12 @@ export function SourceProvenance({ reports = [], context }: { reports?: readonly
     const history = reports.filter(r => r.source === source);
     const latest = history.at(-1);
     const accepted = [...history].reverse().find(r => r.status === "SUCCESS");
+    const failed = [...history].reverse().find(r => r.status === "FAILED");
     const status = latest?.status === "FAILED" ? "Import avvisad"
       : !latest ? "Importkvittens saknas"
       : latest.status !== "SUCCESS" ? "Kvittens · status ej verifierad"
       : latest.warnings?.length ? "Importerad · varningar" : "Importerad";
-    return { source, latest, accepted, status, warnings: [...new Set(latest?.warnings ?? [])] };
+    return { source, latest, accepted, failed, status, warnings: [...new Set([...(accepted?.warnings ?? []), ...(latest?.warnings ?? [])])] };
   });
   const verified = sources.every(s => s.latest?.status === "SUCCESS");
   const completeDates = sources.every(s => day(s.latest?.reportDate) !== "okänd" && day(s.latest?.dataDates?.SE) !== "okänd");
@@ -74,6 +75,10 @@ export function SourceProvenance({ reports = [], context }: { reports?: readonly
     <details className="mt-1">
       <summary className="cursor-pointer select-none hover:text-foreground">Rapportdatum, marknadsdata as-of och importtider</summary>
       <div className="mt-1 space-y-1">
+        {sources.filter(s => s.failed).map(s => <p key={`${s.source}-last-failure`} className="break-words">
+          {s.source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"} · Senaste misslyckade import {importTime(s.failed?.importedAt)}
+          {" · "}{s.failed?.error ?? "orsak ej verifierad"}
+        </p>)}
         {sources.map(s => <p key={s.source} className="break-words">
           <span className="font-medium text-foreground">{s.source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"}</span>
           {" · "}{s.latest?.status === "FAILED" && s.accepted ? "Senast lyckad import: " : ""}

@@ -243,10 +243,80 @@ export function isDailyHistoryStale(
   priceDataAsOf: string | null,
   marketQuoteAsOf: Date | string | null,
   market: EarningsMarket,
+  now = new Date(),
 ): boolean | null {
   if (!priceDataAsOf || !marketQuoteAsOf) return null;
   const quoteDate = marketDate(marketQuoteAsOf, market);
-  return quoteDate ? priceDataAsOf < quoteDate : null;
+  const today = marketDate(now, market);
+  if (!quoteDate || !today || priceDataAsOf > today || quoteDate > today) return null;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: earningsTimezone(market), hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(now);
+  const minute = Number(parts.find(p => p.type === "hour")?.value) * 60 + Number(parts.find(p => p.type === "minute")?.value);
+  const weekday = new Date(`${today}T12:00:00Z`).getUTCDay();
+  // Allow providers one hour after regular close to finalize the daily bar.
+  const expected = weekday !== 0 && weekday !== 6 && minute >= (market === "US" ? 17 * 60 : 18 * 60 + 30)
+    ? today : adjacentWeekday(today, -1);
+  const oldest = priceDataAsOf < quoteDate ? priceDataAsOf : quoteDate;
+  if (oldest >= expected) return false;
+  // Without a full exchange holiday calendar a single missing weekday may be
+  // a holiday: UNKNOWN, never CURRENT. Two missing weekdays are plainly stale.
+  return oldest < adjacentWeekday(expected, -1) ? true : null;
+}
+
+function adjacentWeekday(date: string, direction: 1 | -1): string {
+  const value = new Date(`${date}T12:00:00Z`);
+  do { value.setUTCDate(value.getUTCDate() + direction); }
+  while (value.getUTCDay() === 0 || value.getUTCDay() === 6);
+  return value.toISOString().slice(0, 10);
+}
+
+/** A period end or date-only provider placeholder is not a publication time. */
+export function publicationTimestamp(value: unknown): string | null {
+  if (!(value instanceof Date) && (typeof value !== "string" || !/(Z|[+-]\d{2}:?\d{2})$/i.test(value))) return null;
+  const date = value instanceof Date ? value : new Date(value as string);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(11, 19) === "00:00:00") return null;
+  return date.toISOString();
+}
+
+export function buildPublicationReaction(
+  input: readonly OhlcvBar[], publication: unknown, market: EarningsMarket, now = new Date(),
+) {
+  const timestamp = publicationTimestamp(publication);
+  const reportDate = timestamp ? marketDate(timestamp, market) : null;
+  const dataAsOf = normalizeDailyBars(input, market).bars.at(-1)?.date ?? null;
+  const empty = {
+    reportDate, reportTimestamp: timestamp, reactionDate: null as string | null, releaseSession: "UNKNOWN",
+    timezone: earningsTimezone(market), dataAsOf, previousClose: null, reportDay: null, changePct: null,
+    postReport: ([1, 3, 5] as const).map(sessions => ({ sessions, date: null, close: null, returnPct: null })),
+  };
+  if (!timestamp || !reportDate) return { ...empty, status: "MISSING" as const, reason: "Verklig publiceringstid saknas; kvartalsslut eller datum utan tid används inte som rapportreaktion." };
+  if (Date.parse(timestamp) > now.getTime()) return { ...empty, status: "UPCOMING" as const, reason: "Rapportens publiceringstid ligger framåt i tiden." };
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: earningsTimezone(market), hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date(timestamp));
+  const minute = Number(parts.find(p => p.type === "hour")?.value) * 60 + Number(parts.find(p => p.type === "minute")?.value);
+  const opening = market === "US" ? 9 * 60 + 30 : 9 * 60;
+  const closing = market === "US" ? 16 * 60 : 17 * 60 + 30;
+  const weekday = new Date(`${reportDate}T12:00:00Z`).getUTCDay();
+  const afterClose = minute >= closing || weekday === 0 || weekday === 6;
+  const releaseSession = afterClose ? "AFTER_CLOSE" : minute < opening ? "PRE_MARKET" : "INTRADAY";
+  if (releaseSession === "INTRADAY") return {
+    ...empty, releaseSession, status: "MISSING" as const,
+    reason: "Rapport under handel: dags-OHLC innehåller priser före publicering. Använd tidsstämplad minutdata; ingen dagsreaktion uppskattas.",
+  };
+  const reactionDate = afterClose ? adjacentWeekday(reportDate, 1) : reportDate;
+  // A historical bar must itself be completed, not the current partial day.
+  const today = marketDate(now, market);
+  const nowParts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: earningsTimezone(market), hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(now);
+  const nowMinute = Number(nowParts.find(p => p.type === "hour")?.value) * 60 + Number(nowParts.find(p => p.type === "minute")?.value);
+  if (reactionDate > (today ?? "") || reactionDate === today && nowMinute < closing + 60) return {
+    ...empty, releaseSession, reactionDate, status: "MISSING" as const,
+    reason: "Reaktionsdagens fullständiga stängningsstapel är inte tillgänglig ännu.",
+  };
+  return { ...buildEarningsDailyReaction(input, reactionDate, market), reportDate, reportTimestamp: timestamp, reactionDate, releaseSession };
 }
 
 function exchangeMidnightUtc(date: string, timezone: string): Date | null {

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildEarningsDailyReaction,
+  buildPublicationReaction,
   isDailyHistoryStale,
   marketDayUtcBounds,
   marketDate,
@@ -90,9 +91,35 @@ test("minute data is timestamped, market-date filtered and conflicts fail closed
 test("market date follows exchange timezone and stale compares only actual source dates", () => {
   assert.equal(marketDate("2026-10-29T02:00:00Z", "US"), "2026-10-28");
   assert.equal(marketDate("2026-10-28T23:30:00Z", "SE"), "2026-10-29");
-  assert.equal(isDailyHistoryStale("2026-10-27", "2026-10-28T20:00:00Z", "US"), true);
-  assert.equal(isDailyHistoryStale("2026-10-28", "2026-10-28T20:00:00Z", "US"), false);
+  assert.equal(isDailyHistoryStale("2026-10-26", "2026-10-28T20:00:00Z", "US", new Date("2026-10-28T22:00:00Z")), true);
+  assert.equal(isDailyHistoryStale("2026-10-28", "2026-10-28T20:00:00Z", "US", new Date("2026-10-28T22:00:00Z")), false);
   assert.equal(isDailyHistoryStale("2026-10-28", null, "US"), null);
+});
+
+test("equally old Yahoo series cannot approve freshness; D-1 during trading and weekends are valid", () => {
+  assert.equal(isDailyHistoryStale("2026-10-30", "2026-10-30T20:00:00Z", "US", new Date("2026-11-04T18:00:00Z")), true);
+  assert.equal(isDailyHistoryStale("2026-11-03", "2026-11-04T15:00:00Z", "US", new Date("2026-11-04T15:00:00Z")), false);
+  assert.equal(isDailyHistoryStale("2026-10-30", "2026-10-30T20:00:00Z", "US", new Date("2026-11-01T15:00:00Z")), false);
+  assert.equal(isDailyHistoryStale("2026-10-30", "2026-10-30T20:00:00Z", "US", new Date("2026-11-03T15:00:00Z")), null);
+});
+
+test("actual publication before opening vs after closing controls reaction day, never quarter-end", () => {
+  const now = new Date("2026-11-04T18:00:00Z");
+  const before = buildPublicationReaction(bars(), "2026-10-22T05:00:00Z", "SE", now);
+  assert.equal(before.releaseSession, "PRE_MARKET");
+  assert.equal(before.reportDay?.date, "2026-10-22");
+  const after = buildPublicationReaction(bars(), "2026-10-22T18:00:00Z", "SE", now);
+  assert.equal(after.releaseSession, "AFTER_CLOSE");
+  assert.equal(after.reportDate, "2026-10-22");
+  assert.equal(after.reportDay?.date, "2026-10-23");
+  assert.equal(after.previousClose?.close, 108);
+  for (const timestamp of ["2026-09-30", "2026-09-30T00:00:00Z", null]) {
+    const missing = buildPublicationReaction(bars(), timestamp, "SE", now);
+    assert.equal(missing.status, "MISSING");
+    assert.equal(missing.changePct, null);
+  }
+  assert.equal(buildPublicationReaction(bars(), "2026-10-22T10:00:00Z", "SE", now).status, "MISSING");
+  assert.equal(buildPublicationReaction(bars(), "2026-11-05T18:00:00Z", "SE", now).status, "UPCOMING");
 });
 
 test("intraday request bounds cover the full exchange-local day including after-hours", () => {

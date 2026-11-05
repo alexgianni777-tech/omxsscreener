@@ -14,6 +14,8 @@ interface HistoricalEarning {
   actual: number | null;
   surprisePct: number | null;
   dayPlusOneReturn: number | null;
+  reportTimestamp?: string | null;
+  reactionReason?: string | null;
   beat: boolean | null;
 }
 interface EarningsStock {
@@ -377,9 +379,11 @@ function EarningsCard({ stock, pageFetchedAt }: { stock: EarningsStock; pageFetc
                 </div>
                 {h.dayPlusOneReturn != null && (
                   <div className={`text-[10px] font-mono mt-0.5 ${h.dayPlusOneReturn >= 0 ? "text-success" : "text-destructive"}`}>
-                    dag+1: {h.dayPlusOneReturn >= 0 ? "+" : ""}{formatNumber(h.dayPlusOneReturn, 1)}%
+                    Första reaktionsdag: {h.dayPlusOneReturn >= 0 ? "+" : ""}{formatNumber(h.dayPlusOneReturn, 1)}%
                   </div>
                 )}
+                {h.dayPlusOneReturn == null && <p className="mt-1 text-xs text-muted-foreground"
+                  title={h.reactionReason ?? undefined}>Kursreaktion saknas – publiceringstid/data ej verifierad.</p>}
               </div>
             ))}
           </div>

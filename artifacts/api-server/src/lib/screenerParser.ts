@@ -1,3 +1,5 @@
+import { textReportQuality } from "./candidateDataQuality";
+import type { CandidateDataQuality } from "@workspace/db";
 /**
  * Parses the raw screener text output into structured data.
  */
@@ -12,6 +14,7 @@ export interface ParsedMarketWeather {
 }
 
 export interface ParsedCandidate {
+  dataQuality?: CandidateDataQuality;
   category: "MOMENTUM" | "SQUEEZE" | "STUDS" | "WEAKEST";
   rank: number;
   ticker: string;
@@ -33,6 +36,8 @@ export interface ParsedCandidate {
 }
 
 export interface ParsedSession {
+  dataAsOf?: string | null;
+  dataWarnings?: string[];
   date: string; // YYYY-MM-DD
   marketWeather: ParsedMarketWeather;
   candidates: ParsedCandidate[];
@@ -250,5 +255,12 @@ export function parseScreenerText(rawText: string): ParsedSession {
     throw new ScreenerParseError("No candidates found in screener text. Please check the format.");
   }
 
-  return { date, marketWeather, candidates };
+  let quality: ReturnType<typeof textReportQuality>;
+  try {
+    quality = textReportQuality(rawText, date, candidates.map(c => c.ticker));
+  } catch (error) {
+    throw new ScreenerParseError(error instanceof Error ? error.message : "Rapportens datakvalitet kan inte verifieras.");
+  }
+  for (const candidate of candidates) candidate.dataQuality = quality.byTicker.get(candidate.ticker);
+  return { date, marketWeather, candidates, dataAsOf: quality.dataAsOf, dataWarnings: quality.warnings };
 }

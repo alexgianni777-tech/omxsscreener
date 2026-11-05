@@ -1,9 +1,11 @@
 import { isAcceptedSignalDate, stockholmSignalDate } from "./signalDatePolicy";
 import { isE2ETestMode } from "./e2eTestSafety";
 import { isZonedTimestamp, validateEdgeAiPayload, type EdgeAiPayloadQuality } from "./edgeAiValidation";
+import { GitHubContentsClient } from "./githubContents";
 
 const EDGEAI_CONTENTS_API_URL =
   "https://api.github.com/repos/alexgianni777-tech/edgeai/contents/public/data.json?ref=main";
+const contentsClient = new GitHubContentsClient(EDGEAI_CONTENTS_API_URL);
 
 export type EdgeAiFetchResult = {
   data: any;
@@ -32,31 +34,17 @@ export class EdgeAiDataFreshnessError extends Error {
  */
 export async function fetchFreshEdgeAiData(
   timeoutMs: number,
-  options: { now?: Date } = {},
+  options: { now?: Date; client?: GitHubContentsClient } = {},
 ): Promise<EdgeAiFetchResult> {
   if (isE2ETestMode()) {
     throw new Error("External EdgeAI fetch is disabled in isolated E2E_TEST mode.");
   }
-  const response = await fetch(EDGEAI_CONTENTS_API_URL, {
-    headers: {
-      Accept: "application/vnd.github.raw+json",
-      "Cache-Control": "no-cache",
-      "User-Agent": "omxs30-screener",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  return (options.client ?? contentsClient).load(timeoutMs, raw => validateFetchedData(raw, options.now ?? new Date()),
+    result => result.quality.errors.length === 0);
+}
 
-  if (!response.ok) {
-    throw new Error(`EdgeAI GitHub Contents API failed (HTTP ${response.status}); no CDN fallback was used.`);
-  }
-
-  let data: any;
-  try {
-    data = await response.json();
-  } catch {
-    throw new Error("EdgeAI GitHub Contents API returned invalid JSON.");
-  }
+function validateFetchedData(raw: unknown, now: Date): EdgeAiFetchResult {
+  const data: any = raw;
   const generatedAt = typeof data?.generatedAt === "string" ? data.generatedAt : null;
   const generatedAtMs = isZonedTimestamp(generatedAt) ? Date.parse(generatedAt) : Number.NaN;
 
@@ -67,7 +55,6 @@ export async function fetchFreshEdgeAiData(
     );
   }
 
-  const now = options.now ?? new Date();
   const freshness = edgeAiDataFreshness(data, now);
   const tooFarInFuture = freshness.ageMs < -5 * 60 * 1_000;
   const accepted = isAcceptedSignalDate(edgeAiSessionDate(data), stockholmSignalDate(now));

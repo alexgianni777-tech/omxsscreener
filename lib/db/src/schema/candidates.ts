@@ -1,4 +1,5 @@
-import { pgTable, serial, integer, text, real, boolean, timestamp, date } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, real, boolean, timestamp, date, jsonb } from "drizzle-orm/pg-core";
+import type { CandidateDataQuality } from "./candidateDataQuality";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { screenerSessionsTable } from "./screenerSessions";
@@ -11,6 +12,8 @@ export const candidatesTable = pgTable("candidates", {
   // Immutable calendar day on which this source emitted the signal. Unlike
   // session.date, this is provenance, not a display/trading-session choice.
   signalDate: date("signal_date", { mode: "string" }),
+  // NULL is deliberately UNKNOWN for old rows; never backfill historical evidence.
+  dataQuality: jsonb("data_quality").$type<CandidateDataQuality>(),
   category: text("category", { enum: ["MOMENTUM", "SQUEEZE", "STUDS", "WEAKEST"] }).notNull(),
   rank: integer("rank").notNull(),
   ticker: text("ticker").notNull(),

@@ -1,5 +1,6 @@
 import React, { useEffect, useReducer } from "react";
-import type { QuoteResult } from "@workspace/api-client-react";
+import type { QuoteResult, CandidateDataQuality } from "@workspace/api-client-react";
+import { sourceQualityReasons } from "../lib/sourceQuality";
 import { PlanGrid } from "./PlanGrid";
 import { LiveEntryGuard } from "./LiveEntryGuard";
 import { dailySymbol, type DailyPick } from "../lib/dailyCandidates";
@@ -9,6 +10,7 @@ import { quoteLabels, researchQuoteForMarket } from "../lib/researchQuote";
 import { assessLiveEntry, LIVE_ENTRY_MAX_PRICE_AGE_MS } from "../lib/liveEntryGuard";
 
 export type ResearchSignal = EdgeAICandidateMetrics & {
+  dataQuality?: CandidateDataQuality | null;
   id: number; signalDate?: string | null; entryPrice: number; stopPrice: number; targetPrice: number;
   importWarning?: string | null; volumeAsOf?: string | null; price?: number | null;
   earningsInDays?: number | null; earningsKnowledge?: "SIGNAL_TIME" | "UNKNOWN" | null;
@@ -34,7 +36,8 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
   }, [quote?.asOf]);
   // Warnings passed here are identity-linked or concise source-uncertainty
   // notices; receipt-level raw diagnostics belong only in SourceProvenance.
-  const warningList = [...new Set([...warnings, signal?.importWarning].filter((value): value is string => !!value))];
+  const qualityReasons = sourceQualityReasons(pick.source, signal?.dataQuality);
+  const warningList = [...new Set([...qualityReasons, ...warnings, signal?.importWarning].filter((value): value is string => !!value))];
   const screeningReady = pick.decision?.status === "TRADEABLE";
   const importWarning = warningList.join(" ") ||
     (stale ? "STALE eller obekräftat marknadsdatum – ingen entrybekräftelse" : !dataDate ? "Verifierat marknadsdatadatum saknas – ingen entrybekräftelse" : undefined);
@@ -56,7 +59,7 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
   ].filter((reason): reason is string => !!reason);
   const decisionSafe = screeningReady && !stale && !!dataDate && warningList.length === 0 &&
     guard?.status === "READY" && reportVerified;
-  const blocked = stale || warningList.some(w => w.startsWith("Källkonflikt") || w.startsWith("Flera planer/")) ||
+  const blocked = stale || (!!signal?.dataQuality && qualityReasons.length > 0) || warningList.some(w => w.startsWith("Källkonflikt") || w.startsWith("Flera planer/")) ||
     (!!pick.decision?.status && !screeningReady) ||
     guard?.status === "PLAN_BROKEN" || guard?.status === "MISSED_ENTRY";
   const entryLabel = decisionSafe ? "READY – entryvillkor verifierade, inte en order"
@@ -67,7 +70,7 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
       <strong className="font-mono text-lg font-semibold tracking-tight">{dailySymbol(pick.ticker, pick.market)}</strong>
       <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${long ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>{long ? "Long" : "Short"}</span>
       <span aria-label="Screeningstatus" className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-        {stale ? "STALE · historiskt urval" : screeningReady ? "Screeningkvalificerad · ej entrybesked" : `Screening: ${pick.decision?.status ?? unknown}`}
+        {stale ? "STALE · historiskt urval" : qualityReasons.length ? signal?.dataQuality ? "RESEARCH ONLY · kvalitet ej kvalificerad" : "Källkvalitet okänd · ej entrybesked" : screeningReady ? "Screeningkvalificerad · ej entrybesked" : `Screening: ${pick.decision?.status ?? unknown}`}
       </span>
       <span className="text-xs text-muted-foreground">{SOURCE[pick.source] ?? pick.source} · {pick.category}</span>
     </div>
@@ -103,9 +106,16 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
       <div data-testid={`guard-${pick.candidateId}`}>
         <LiveEntryGuard plan={pick} quote={checkedQuote?.error ? null : checkedQuote ?? null}
           signal={{ signalDate: pick.signalDate, signalSource: pick.source, signalAgeBars: signal?.signalAgeBars,
+            dataQuality: signal?.dataQuality,
             importWarning: importWarning ? "Entry ej verifierad; se kortets orsaker och källstatus." : undefined }} />
       </div>
       <p className="mt-2 text-sm leading-relaxed text-foreground">{WHY[pick.category] ?? `Setup ${pick.category} enligt källan`}.</p>
+      {signal?.dataQuality && <p className="mt-1 text-muted-foreground">
+        Källkvalitet: {signal.dataQuality.evidenceStatus ?? "okänd"} / {signal.dataQuality.eliteStatus ?? "okänd"}
+        {" · "}eliteQualified: {String(signal.dataQuality.eliteQualified ?? "okänt")}
+        {" · "}Datadag {signal.dataQuality.dataAsOf ?? "okänd"}
+        {" · "}{signal.dataQuality.barSource === "RECONSTRUCTED_INTRADAY" ? "Rekonstruerad intradag – ej verifierad dagsslutkurs" : "Officiell dagsstängning ej självständigt verifierad"}
+      </p>}
       <p className="mt-1 text-muted-foreground">Invalidation enligt ursprungsplan: stop {formatPrice(pick.stopPrice)}. Ingen planändring har gjorts.</p>
       <p className="mt-1 text-muted-foreground">{signal?.earningsKnowledge === "SIGNAL_TIME" && signal.earningsInDays != null
         ? `Källans rapportavstånd: ${signal.earningsInDays} dagar; verifiera rapporttid manuellt.`

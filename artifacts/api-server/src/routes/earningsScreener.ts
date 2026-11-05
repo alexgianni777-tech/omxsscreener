@@ -17,7 +17,8 @@ import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
 import { calendarDaysBetween, utcCalendarDate } from "../lib/marketCalendar";
 import {
-  buildEarningsDailyReaction,
+  buildPublicationReaction,
+  publicationTimestamp,
   earningsTimezone,
   isDailyHistoryStale,
   marketDayUtcBounds,
@@ -251,34 +252,6 @@ router.get("/screener/earnings-screener/intraday", async (req, res): Promise<voi
   }
 });
 
-// ── Day-of-earnings price reaction ────────────────────────────────────────────
-function computeDayPlusOneReturn(
-  history: { date: Date; close: number | null }[],
-  earningsDate: Date | string,
-): number | null {
-  const targetMs = new Date(earningsDate).getTime();
-  if (isNaN(targetMs)) return null;
-  const sorted = [...history]
-    .map((h) => ({ ms: new Date(h.date).getTime(), close: h.close }))
-    .sort((a, b) => a.ms - b.ms);
-
-  // Find the last trading day on or before earningsDate
-  let beforeIdx = -1;
-  for (let i = 0; i < sorted.length; i++) {
-    if (sorted[i].ms <= targetMs + 86_400_000) beforeIdx = i; // +1 day buffer
-    else break;
-  }
-  // Clamp: we want the day *before* the earnings date
-  while (beforeIdx > 0 && sorted[beforeIdx].ms > targetMs) beforeIdx--;
-
-  if (beforeIdx < 0 || beforeIdx >= sorted.length - 1) return null;
-  const before = sorted[beforeIdx].close;
-  const after = sorted[beforeIdx + 1].close;
-  if (typeof before !== "number" || !Number.isFinite(before) || before <= 0 ||
-      typeof after !== "number" || !Number.isFinite(after) || after <= 0) return null;
-  return Number((((after - before) / before) * 100).toFixed(2));
-}
-
 // ── Main route ────────────────────────────────────────────────────────────────
 router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
   // Serve from cache if still fresh
@@ -443,7 +416,7 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
           })),
           reason: "Rapporten har inte inträffat ännu.",
         }
-      : { ...buildEarningsDailyReaction(history, reportDate, stock.market), reportTimestamp };
+      : buildPublicationReaction(history, reportTimestamp, stock.market, now);
 
     // earningsHistory
     const rawHistory: any[] = (summary?.earningsHistory as any)?.history ?? [];
@@ -465,11 +438,15 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
         ? Number((((actual - estimate) / Math.abs(estimate)) * 100).toFixed(2))
         : null;
       const quarterDate = yahooDate(h.quarter);
-      const dayPlusOneReturn = quarterDate
-        ? computeDayPlusOneReturn(history, quarterDate)
-        : null;
+      // Yahoo `quarter` is a fiscal period, never evidence of release time.
+      const releaseTime = publicationTimestamp(yahooDate(h.reportTimestamp ?? h.earningsDate));
+      const releaseReaction = buildPublicationReaction(history, releaseTime, stock.market, now);
+      const dayPlusOneReturn = releaseReaction.status === "AVAILABLE"
+        ? releaseReaction.changePct?.close ?? null : null;
       return {
         date: utcCalendarDate(quarterDate) ?? h.period ?? "?",
+        reportTimestamp: releaseTime,
+        reactionReason: releaseReaction.reason,
         estimate,
         actual,
         surprisePct,
@@ -547,7 +524,7 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
       yahooTicker: stock.yahoo,
       display: stock.display,
       market: stock.market,
-      earningsDate: utcCalendarDate(stock.earningsTimestamp),
+      earningsDate: reportDate,
       earningsTimestamp: reportTimestamp,
       reportDate,
       earningsInDays: stock.earningsInDays,

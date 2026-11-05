@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ResearchCard } from "./ResearchCard";
 import { SourceProvenance } from "./SourceProvenance";
 import type { SessionSourceReport } from "@workspace/api-client-react";
+import { qualifiedEdgeQuality } from "../lib/sourceQuality.fixtures";
 
 function visibleWhenClosed(html: string): string {
   const stack: { open: boolean; summary: boolean }[] = [];
@@ -22,7 +23,7 @@ test("research plan precedes thesis/statistics; unknown live entry and original 
     category: "MOMENTUM", rank: 1, signalDate: "2026-10-28",
     entryPrice: 43.66, stopPrice: 42.05, targetPrice: 47.7, rr: 2.50931677018634,
     decision: { status: "TRADEABLE" } };
-  const signal = { id: 1, ...pick, signalSource: "edgeai", edgeWinRate: 0.6, edgeExpectancyR: 0.4, edgeSampleN: 80 };
+  const signal = { id: 1, ...pick, dataQuality: qualifiedEdgeQuality, signalSource: "edgeai", edgeWinRate: 0.6, edgeExpectancyR: 0.4, edgeSampleN: 80 };
   const before = JSON.stringify({ pick, signal });
   const html = renderToStaticMarkup(React.createElement(ResearchCard, { pick, signal, dataDate: "2026-10-27" }));
   const visible = visibleWhenClosed(html);

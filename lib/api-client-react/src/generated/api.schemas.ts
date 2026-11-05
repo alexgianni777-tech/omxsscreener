@@ -734,6 +734,33 @@ export interface MarketWeather {
   trendLabel: string;
 }
 
+export type CandidateDataQualityBarSource = typeof CandidateDataQualityBarSource[keyof typeof CandidateDataQualityBarSource];
+
+
+export const CandidateDataQualityBarSource = {
+  PROVIDER_DAILY: 'PROVIDER_DAILY',
+  RECONSTRUCTED_INTRADAY: 'RECONSTRUCTED_INTRADAY',
+  UNKNOWN: 'UNKNOWN',
+} as const;
+
+export interface CandidateDataQuality {
+  source: string;
+  /** @nullable */
+  dataAsOf: string | null;
+  /** @nullable */
+  evidenceStatus: string | null;
+  /** @nullable */
+  eliteStatus: string | null;
+  /** @nullable */
+  eliteQualified: boolean | null;
+  /** @nullable */
+  validatedEdge: boolean | null;
+  barSource: CandidateDataQualityBarSource;
+  fullSessionVerified: boolean;
+  entryEligible: boolean;
+  reasons: string[];
+}
+
 export type CandidateCategory = typeof CandidateCategory[keyof typeof CandidateCategory];
 
 
@@ -934,6 +961,7 @@ export interface OfficialCandidateSelection {
 export interface Candidate {
   /** @nullable */
   importWarning?: string | null;
+  dataQuality?: CandidateDataQuality | null;
   id: number;
   sessionId: number;
   /**

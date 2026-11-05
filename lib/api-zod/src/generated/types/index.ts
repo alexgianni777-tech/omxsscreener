@@ -18,6 +18,8 @@ export * from './candidateCategory';
 export * from './candidateChallengeTrade';
 export * from './candidateChallengeTradeDirection';
 export * from './candidateChallengeTradeFlag';
+export * from './candidateDataQuality';
+export * from './candidateDataQualityBarSource';
 export * from './candidateDecision';
 export * from './candidateDecisionStatus';
 export * from './candidateDirection';

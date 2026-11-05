@@ -2,6 +2,7 @@ import { makeImportReport } from "../lib/importReport";
 import { isolateEdgeAiPlans } from "../lib/edgeAiPlanIsolation";
 import { approveImportedTop3 } from "../lib/persistentTop3";
 import { recordImportFailure } from "../lib/importFailure";
+import { respectStoredEdgeAiBackoff, attachFetchDiagnostic } from "../lib/storedSourceBackoff";
 /**
  * POST /screener/sessions/import-from-edgeai
  *
@@ -59,11 +60,13 @@ router.post(
     let fetched: Awaited<ReturnType<typeof fetchFreshEdgeAiData>>;
     try {
       // Manual and scheduled imports share the same one-previous-close limit.
+      await respectStoredEdgeAiBackoff();
       fetched = await fetchFreshEdgeAiData(10_000);
     } catch (err: any) {
       const failureDate = stockholmSignalDate();
       const message = err instanceof Error ? err.message : "EdgeAI fetch failed";
       const report = makeImportReport("edgeai", failureDate, { failure: message });
+      attachFetchDiagnostic(report, err);
       try {
         await recordImportFailure(failureDate, report, message);
       } catch (recordError) {
@@ -141,8 +144,8 @@ router.post(
     //    which pending candidates a force re-import would remove.
     const rankCounter: Record<string, number> = {};
     const mappedSetups = [
-      ...setups.map((s: any) => mapEdgeAiSetup(s, "SE", rankCounter)),
-      ...usRaw.map((s: any) => mapEdgeAiSetup(s, "US", rankCounter)),
+      ...setups.map((s: any) => mapEdgeAiSetup(s, "SE", rankCounter, fetched.quality.dataDates.SE)),
+      ...usRaw.map((s: any) => mapEdgeAiSetup(s, "US", rankCounter, fetched.quality.dataDates.US)),
     ];
     mappedSetups.forEach((candidate) => {
       Object.assign(candidate, { signalSource: "edgeai" as const, origin: "edgeai" as const });

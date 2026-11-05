@@ -12,6 +12,7 @@
  */
 import { calculateOpeningGapPct, calculateWilderRsi } from "./marketIndicators.ts";
 import { edgeAiDirection, edgeAiSampleN, edgeAiSignalDate, validateEdgeAiSetup } from "./edgeAiValidation.ts";
+import { edgeAiDataQuality } from "./candidateDataQuality";
 
 export type EdgeAiCategory = "MOMENTUM" | "SQUEEZE" | "STUDS" | "WEAKEST";
 export type EdgeAiMarket = "SE" | "US";
@@ -39,6 +40,7 @@ export function mapEdgeAiSetup(
   s: any,
   market: EdgeAiMarket,
   rankCounter: Record<string, number>,
+  dataAsOf: string | null = null,
 ) {
   const setupErrors = validateEdgeAiSetup(s, market);
   if (setupErrors.length) throw new Error(`Invalid EdgeAI setup: ${setupErrors.join("; ")}`);
@@ -74,6 +76,7 @@ export function mapEdgeAiSetup(
 
   return {
     market,
+    dataQuality: edgeAiDataQuality(s, dataAsOf),
     signalDate: edgeAiSignalDate(s.signalT, market),
     category,
     rank: rankCounter[rankKey],

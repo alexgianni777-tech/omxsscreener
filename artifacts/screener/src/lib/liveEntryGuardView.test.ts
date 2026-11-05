@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { LiveEntryGuard } from "../components/LiveEntryGuard";
+import { qualifiedEdgeQuality } from "./sourceQuality.fixtures";
 
 const now = Date.parse("2026-10-02T12:00:00Z");
 const plan = { direction: "SHORT", entryPrice: 100, stopPrice: 105, targetPrice: 90, rr: 2 };
@@ -10,7 +11,7 @@ test("entry view renders separate status, both R/Rs, exact quote provenance and 
   const html = renderToStaticMarkup(createElement(LiveEntryGuard, {
     plan, now,
     quote: { livePrice: 99, asOf: "2026-10-02T11:59:00Z", marketState: "REGULAR" },
-    signal: { signalDate: "2026-10-01", signalSource: "edgeai", signalAgeBars: 3 },
+    signal: { signalDate: "2026-10-01", signalSource: "edgeai", signalAgeBars: 3, dataQuality: qualifiedEdgeQuality },
   }));
   for (const expected of [
     'data-entry-status="READY"', "original: 2,00", "aktuellt: 1,50",
