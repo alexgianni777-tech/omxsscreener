@@ -13,7 +13,7 @@ export function edgeAiDataQuality(setup: Record<string, unknown>, dataAsOf: stri
     reasons.push("RESEARCH ONLY – upstream kvalificerar inte denna setup för entry.");
   } else if (eliteQualified !== true || validatedEdge !== true ||
     !["VALIDATED", "ELITE", "QUALIFIED"].includes(evidenceStatus ?? "") ||
-    !["ELITE", "QUALIFIED"].includes(eliteStatus ?? "")) {
+    !["ELITE", "QUALIFIED", "QUALIFIED_OOS"].includes(eliteStatus ?? "")) {
     reasons.push("Upstream-kvalificering är okänd – ingen verifierad entry.");
   }
   if (!dataAsOf) reasons.push("Verifierad marknadsdag saknas.");

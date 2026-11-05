@@ -1,7 +1,50 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mapEdgeAiSetup } from "./edgeAiMapping";
-import { textReportQuality } from "./candidateDataQuality";
+import { edgeAiDataQuality, textReportQuality } from "./candidateDataQuality";
+
+test("the producer's QUALIFIED_OOS contract is recognized without changing the plan", () => {
+  for (const market of ["SE", "US"] as const) {
+    for (const dir of ["LONG", "SHORT"]) {
+      const setup = {
+        ticker: "TEST", dir, setup: "Momentum", entry: 100,
+        stop: dir === "LONG" ? 95 : 105, target: dir === "LONG" ? 115 : 85,
+        signalT: "2026-11-03T15:00:00Z", barsAgo: 0, rs: 1,
+        evidenceStatus: "VALIDATED", eliteStatus: "QUALIFIED_OOS",
+        eliteQualified: true, validatedEdge: true,
+        edge: { winRate: 80, expectancyR: 0.5, sample: 100 },
+      };
+      const before = structuredClone(setup);
+      const candidate = mapEdgeAiSetup(setup, market, {}, "2026-11-03");
+      assert.equal(candidate.dataQuality.entryEligible, true);
+      assert.equal(candidate.dataQuality.eliteStatus, "QUALIFIED_OOS");
+      assert.equal(candidate.dataQuality.fullSessionVerified, false);
+      assert.equal(candidate.dataQuality.barSource, "UNKNOWN");
+      assert.equal(candidate.direction, dir);
+      assert.equal(candidate.entryPrice, setup.entry);
+      assert.equal(candidate.stopPrice, setup.stop);
+      assert.equal(candidate.targetPrice, setup.target);
+      assert.equal(candidate.rr, 3);
+      assert.deepEqual(setup, before);
+    }
+  }
+});
+
+test("QUALIFIED_OOS cannot override missing or contradictory qualification evidence", () => {
+  const qualified = {
+    evidenceStatus: "VALIDATED", eliteStatus: "QUALIFIED_OOS",
+    eliteQualified: true, validatedEdge: true,
+  };
+  for (const override of [
+    { evidenceStatus: "WATCH" }, { evidenceStatus: "PROMISING" },
+    { eliteQualified: false }, { eliteQualified: undefined },
+    { validatedEdge: false }, { validatedEdge: undefined },
+    { evidenceStatus: undefined }, { eliteStatus: "UNKNOWN" },
+  ]) {
+    assert.equal(edgeAiDataQuality({ ...qualified, ...override }, "2026-11-03").entryEligible, false);
+  }
+  assert.equal(edgeAiDataQuality(qualified, null).entryEligible, false);
+});
 
 test("quality contract preserves WATCH/RESEARCH_ONLY/false and the exact long/short plan", () => {
   for (const dir of ["LONG", "SHORT"]) {
