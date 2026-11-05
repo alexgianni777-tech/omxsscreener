@@ -15,3 +15,9 @@ context and prevented the remaining protected-page checks.
 **How to apply:** Make browser reports distinguish loading, auth failure,
 render failure and lost testing context. Keep subsequent checks bounded and
 state which protected views were not actually verified.
+
+**Rule:** Keep disposable QA PostgreSQL and isolated API services alive using managed background shell tasks, and verify a test port is free before binding it. Do not redirect tests to an unidentified listener.
+
+**Why:** A detached PostgreSQL process did not survive the tester's setup command, and a presumed free API port was already occupied. Persistent background tasks and a different verified-free port restored isolation without stopping the normal app.
+
+**How to apply:** Require local test-database health and the explicit E2E scheduler-disabled startup message before browser routing. Clean up only the test resources after verification.
