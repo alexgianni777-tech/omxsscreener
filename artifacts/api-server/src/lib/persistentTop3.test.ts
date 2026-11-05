@@ -51,6 +51,27 @@ test("manual acceptance atomically approves only display metadata; original inpu
   assert.deepEqual(h.writes.map(w => w.value), [{ displayEligible: true }]);
   assert.equal(JSON.stringify({ inputs: h.version.inputs, selections: h.version.selections }), before);
 });
+
+test("original revision data day survives distinct setup/report dates and later candidate evidence", async () => {
+  const h = harness();
+  const quality = { source: "edgeai", dataAsOf: "2026-10-08", evidenceStatus: "WATCH",
+    eliteStatus: "RESEARCH_ONLY", eliteQualified: false, validatedEdge: false, entryEligible: false,
+    barSource: "UNKNOWN", fullSessionVerified: false, reasons: ["RESEARCH ONLY"] };
+  const original = { ...h.original, signalDate: "2026-10-07", dataQuality: quality };
+  const version = { ...h.version, sessionId: 1, displayEligible: true, inputs: [original] };
+  const sessions = [{ id: 1, date: "2026-10-09", sourceReports: [
+    { ...h.report, signalDate: "2026-10-09", dataDates: { SE: "2026-10-09", US: null } },
+  ] }];
+  const before = JSON.stringify({ sessions, version });
+  const tx: any = { select: () => ({ from: (table: unknown) => {
+    const rows = table === screenerSessionsTable ? sessions : table === top3SelectionRevisionsTable ? [version] : [];
+    const result: any = Promise.resolve(rows); result.orderBy = () => result; return result;
+  } }) };
+  const result = await readSavedTop3(tx);
+  assert.equal(result.selection.dataDates[0].dataDate, "2026-10-08");
+  assert.deepEqual(result.selection.revision.picks[0].dataQuality, quality);
+  assert.equal(JSON.stringify({ sessions, version }), before);
+});
 test("older replay, empty/partial versions and failed reports never approve automatic data", async () => {
   for (const change of ["old", "empty", "partial", "failed"]) {
     const h = harness();

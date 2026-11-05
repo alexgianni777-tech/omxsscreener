@@ -13,6 +13,7 @@ export function isolateEdgeAiPlans<T extends Plan>(rows: T[], labels: string[], 
     groups.set(key, [...(groups.get(key) ?? []), i]);
   });
   const rejected = new Set<string>();
+  const candidateWarnings: NonNullable<ImportReport["candidateWarnings"]> = [];
   const warnings: string[] = [];
   for (const [key, indices] of groups) {
     const first = rows[indices[0]];
@@ -26,12 +27,15 @@ export function isolateEdgeAiPlans<T extends Plan>(rows: T[], labels: string[], 
       Math.abs((rows[i][field as keyof Plan] as number) - (first[field as keyof Plan] as number)) > 0.005));
     if (invalid || conflict) {
       rejected.add(key);
-      warnings.push(`${first.market} ${first.ticker} ${first.direction}/${first.category} isolerad: ${invalid ? "ogiltig riskplan" : "olika setups inom samma signalidentitet"}; ` +
+      const message = `${first.market} ${first.ticker} ${first.direction}/${first.category} isolerad: ${invalid ? "ogiltig riskplan" : "olika setups inom samma signalidentitet"}; ` +
         indices.map(i => `${labels[i] ?? "setup"}: entry ${rows[i].entryPrice}, stop ${rows[i].stopPrice}, target ${rows[i].targetPrice}`).join(" | ") +
-        ". Ingen plan valdes; historik bevaras.");
+        ". Ingen plan valdes; historik bevaras.";
+      warnings.push(message);
+      candidateWarnings.push({ identity: key, message });
     }
   }
-  report.quarantinedIdentities = [...rejected].sort();
-  report.warnings = warnings.sort();
+  report.quarantinedIdentities = [...new Set([...(report.quarantinedIdentities ?? []), ...rejected])].sort();
+  report.warnings = [...new Set([...(report.warnings ?? []), ...warnings])].sort();
+  report.candidateWarnings = candidateWarnings.sort((a, b) => a.identity.localeCompare(b.identity));
   return rows.filter(row => !rejected.has(candidateIdentity(row)));
 }

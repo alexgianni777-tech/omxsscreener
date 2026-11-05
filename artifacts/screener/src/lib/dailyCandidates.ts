@@ -1,9 +1,10 @@
-import type { SessionSourceReport } from "@workspace/api-client-react";
+import type { CandidateDataQuality, SessionSourceReport } from "@workspace/api-client-react";
 import { acceptedReportDate } from "@workspace/market-calendar";
 export type DailyPick = {
   candidateId: number; ticker: string; market: string; direction: string; rank: number;
   source: string; signalDate?: string | null; category: string;
   entryPrice: number; stopPrice: number; targetPrice: number; rr: number;
+  dataQuality?: CandidateDataQuality | null;
 };
 export function dailySymbol(ticker: string, market = "SE") {
   const symbol = ticker.trim().toUpperCase();

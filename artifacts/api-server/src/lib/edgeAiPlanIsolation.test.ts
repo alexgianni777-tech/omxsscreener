@@ -44,6 +44,21 @@ test("same-plan duplicates and separate buckets/sides remain valid; invalid shor
   );
 });
 
+test("isolation preserves market-quality warnings and provides exact structured conflict scope", () => {
+  const input = [raw("GETI-B.ST", "Breakout", 244.48, 264.04), raw("GETI-B.ST", "Momentum flag", 234.8, 299.6)];
+  const rows = input.map(s => ({ ...mapEdgeAiSetup(s, "SE", {}), signalSource: "edgeai" }));
+  const report = makeImportReport("edgeai", "2026-10-07", { candidates: input });
+  report.warnings = ["SE: dataAsOf avviker från föregående handelsdag."];
+  const before = JSON.stringify(rows);
+  const safe = isolateEdgeAiPlans(rows, input.map(s => s.setup), report);
+  assert.equal(safe.length, 0);
+  assert.ok(report.warnings.includes("SE: dataAsOf avviker från föregående handelsdag."));
+  assert.equal(report.candidateWarnings?.length, 1);
+  assert.equal(report.candidateWarnings?.[0].identity, candidateIdentity(rows[0]));
+  assert.ok(report.warnings.includes(report.candidateWarnings![0].message));
+  assert.equal(JSON.stringify(rows), before);
+});
+
 test("different setup signalT dates do not collide for ERIC-B, ADBE, BKNG or XOM", () => {
   const input = [
     raw("ERIC-B.ST", "Breakout", 104, 118, "long", "Mon Oct 26 2026 08:00:00 GMT+0000 (Coordinated Universal Time)", 110),

@@ -37,7 +37,9 @@ export async function readSavedTop3(tx: any) {
         r.status !== "FAILED" && r.source === p.source && r.signalDate === p.signalDate &&
         r.importedAt && Date.parse(r.importedAt) <= Date.parse(revision.selectedAt));
       return { market: p.market, source: p.source ?? "unknown", signalDate: p.signalDate ?? null,
-        dataDate: receipt?.dataDates?.[p.market] ?? null };
+        // A setup trigger can predate the report. Use only this revision's
+        // captured quality; never borrow a later import's market day.
+        dataDate: p.dataQuality ? p.dataQuality.dataAsOf ?? null : receipt?.dataDates?.[p.market] ?? null };
     });
     for (const row of revisions.filter((r: any) => r.sessionId === session.id)) {
       const revision = mapTop3Revision(row);
@@ -51,7 +53,7 @@ export async function readSavedTop3(tx: any) {
         return { candidateId: s.candidateId, ticker: s.ticker, category: s.category,
           signalDate: c?.signalDate ?? null, rank: s.rank, score: s.score, market: s.market ?? c?.market,
           direction: s.direction, source: s.source ?? c?.signalSource ?? "unknown", entryPrice: c?.entryPrice,
-          stopPrice: c?.stopPrice, targetPrice: c?.targetPrice, rr: c?.rr, decision: s.decision };
+          stopPrice: c?.stopPrice, targetPrice: c?.targetPrice, rr: c?.rr, decision: s.decision, dataQuality: null };
       });
       if (picks.every(validDisplayPlan)) {
         const revision = { revision: 0, displayEligible: true, available: true,

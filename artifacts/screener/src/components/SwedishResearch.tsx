@@ -1,5 +1,5 @@
 import React from "react";
-import { d1Freshness, signalSessionDate } from "@workspace/market-calendar";
+import { d1Freshness, previousMarketDay, signalSessionDate } from "@workspace/market-calendar";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -64,6 +64,7 @@ export function SwedishResearchContent({ selection, signals = [], reports = [], 
             c.entryPrice === p.entryPrice && c.stopPrice === p.stopPrice && c.targetPrice === p.targetPrice)}
           dataDate={savedDataDate(selection.dataDates, p.source, p.signalDate, p.market)} quote={quotes[p.ticker]}
           dataDateStatus={freshness(p).status}
+          expectedDataDate={previousMarketDay(reference(p), p.market)}
           warnings={pickWarnings(p, reports, signals as Conflictable[], statusReports ?? reports)}
           stale={pickStale(p)} />} />
     <Link href={`/sessions/${selection.sessionId}`} className="mt-4 inline-block text-xs font-medium text-primary hover:underline" data-testid="link-research-session">
@@ -96,7 +97,15 @@ export function pickWarnings(
   if (latestSourceReceipt?.status === "FAILED") out.push("Senaste källimporten avvisades – se källstatus; sparad plan är oförändrad.");
   // Receipt warnings describe the whole import, not this signal. Never attach
   // their raw text (or infer identities from it) to an unrelated card.
-  if (latestSourceReceipt?.warnings?.length)
+  // Only explicit structured scope proves that a warning concerns another
+  // signal. Legacy/unmapped messages remain conservative; never text-match.
+  const scoped = new Set((latestSourceReceipt?.candidateWarnings ?? [])
+    .filter(w => latestSourceReceipt?.quarantinedIdentities?.includes(w.identity))
+    .map(w => w.message));
+  if (latestSourceReceipt?.candidateWarnings?.some(w => w.identity === identity &&
+    latestSourceReceipt.quarantinedIdentities?.includes(identity)) && !out.some(w => w.startsWith("Källkonflikt")))
+    out.push("Källkonflikt – ingen entrybekräftelse");
+  if (latestSourceReceipt?.warnings?.some(w => !scoped.has(w)))
     out.push("Källan har datavarningar med ej fullständigt verifierad omfattning – se källstatus.");
   return out;
 }

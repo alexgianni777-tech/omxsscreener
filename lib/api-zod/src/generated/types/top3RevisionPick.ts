@@ -5,12 +5,14 @@
  * OMXS30 Screener API
  * OpenAPI spec version: 0.1.0
  */
+import type { CandidateDataQuality } from './candidateDataQuality';
 import type { CandidateDecision } from './candidateDecision';
 import type { Top3RevisionPickDirection } from './top3RevisionPickDirection';
 import type { Top3RevisionPickMarket } from './top3RevisionPickMarket';
 import type { Top3RevisionPickSource } from './top3RevisionPickSource';
 
 export interface Top3RevisionPick {
+  dataQuality?: CandidateDataQuality | null;
   candidateId: number;
   ticker: string;
   /** Original report date, never rewritten to the import/session day. */

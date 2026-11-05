@@ -22,10 +22,11 @@ const WHY: Record<string, string> = {
 const SOURCE: Record<string, string> = { edgeai: "GitHub/EdgeAI", telegram: "Telegram", manual: "Manuell" };
 const unknown = "okänd";
 
-export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], stale = false, dataDateStatus }: {
+export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], stale = false, dataDateStatus, expectedDataDate }: {
   pick: DailyPick & { decision?: { status?: string | null; reasons?: readonly string[] | null } }; signal?: ResearchSignal;
   dataDate: string | null; quote?: QuoteResult; warnings?: readonly string[]; stale?: boolean;
   dataDateStatus?: "CURRENT" | "STALE" | "UNKNOWN" | "CONFLICT";
+  expectedDataDate?: string | null;
 }) {
   const [, expireQuote] = useReducer(n => n + 1, 0);
   useEffect(() => {
@@ -37,7 +38,10 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
   }, [quote?.asOf]);
   // Warnings passed here are identity-linked or concise source-uncertainty
   // notices; receipt-level raw diagnostics belong only in SourceProvenance.
-  const qualityReasons = sourceQualityReasons(pick.source, signal?.dataQuality);
+  // Saved revision evidence is authoritative, including explicit unknown.
+  // Never lend a later import's qualification to the frozen original plan.
+  const quality = Object.hasOwn(pick, "dataQuality") ? pick.dataQuality : signal?.dataQuality;
+  const qualityReasons = sourceQualityReasons(pick.source, quality);
   const dateWarning = dataDateStatus === "UNKNOWN" ? "NO DATA – datadag eller börskalender ej verifierad; ingen entrybekräftelse."
     : dataDateStatus === "CONFLICT" ? "CONFLICT – datadag är inte föregående avslutade handelsdag; ingen entrybekräftelse." : null;
   const warningList = [...new Set([dateWarning, ...qualityReasons, ...warnings, signal?.importWarning].filter((value): value is string => !!value))];
@@ -52,26 +56,26 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
     ? null
     : assessLiveEntry(pick, checkedQuote ?? null);
   const noTradeReasons = [
+    stale ? `Signal eller marknadsdag är STALE.${expectedDataDate ? ` D−1 kräver marknadsdag ${expectedDataDate}; sparat underlag är ${dataDate ?? "okänt"}.` : ""}` : null,
     warningList[0] ?? null,
-    stale ? "Signal eller marknadsdag är STALE." : null,
     !dataDate ? "Verifierat marknadsdatadatum saknas." : null,
     !screeningReady ? "Screeningkvalificering är inte verifierad; inget entrybesked." : null,
     guard && guard.status !== "READY" ? guard.reason : null,
   ].filter((reason): reason is string => !!reason);
   const decisionSafe = screeningReady && !stale && !!dataDate && warningList.length === 0 &&
     guard?.status === "READY";
-  const blocked = stale || dataDateStatus === "CONFLICT" || (!!signal?.dataQuality && qualityReasons.length > 0) || warningList.some(w => w.startsWith("Källkonflikt") || w.startsWith("Flera planer/")) ||
+  const blocked = stale || dataDateStatus === "CONFLICT" || (!!quality && qualityReasons.length > 0) || warningList.some(w => w.startsWith("Källkonflikt") || w.startsWith("Flera planer/")) ||
     (!!pick.decision?.status && !screeningReady) ||
     guard?.status === "PLAN_BROKEN" || guard?.status === "MISSED_ENTRY";
   const entryLabel = decisionSafe ? "READY – entryvillkor verifierade, inte en order"
-    : blocked ? "BLOCKERAD – ingen ny entry" : "AVVAKTA – entry ej bekräftad";
+    : stale ? "HISTORISKT – ingen ny entry" : blocked ? "BLOCKERAD – ingen ny entry" : "AVVAKTA – entry ej bekräftad";
   const reasons = [...new Set([...noTradeReasons, ...warningList.slice(1)])];
   return <li data-testid={`research-card-${pick.candidateId}`} className="surface-lift min-w-0 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
       <strong className="font-mono text-lg font-semibold tracking-tight">{dailySymbol(pick.ticker, pick.market)}</strong>
       <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${long ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>{long ? "Long" : "Short"}</span>
       <span aria-label="Screeningstatus" className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-        {stale ? "STALE · historiskt urval, ej aktivt" : dateWarning ? dataDateStatus === "CONFLICT" ? "CONFLICT · datadag" : "NO DATA · datadag ej verifierad" : qualityReasons.length ? signal?.dataQuality ? "RESEARCH ONLY · kvalitet ej kvalificerad" : "Källkvalitet okänd · ej entrybesked" : screeningReady ? "Aktuell D−1-signal · ej entrybesked" : `Screening: ${pick.decision?.status ?? unknown}`}
+        {stale ? "STALE · historiskt urval, ej aktivt" : dateWarning ? dataDateStatus === "CONFLICT" ? "CONFLICT · datadag" : "NO DATA · datadag ej verifierad" : qualityReasons.length ? quality ? "RESEARCH ONLY · kvalitet ej kvalificerad" : "Källkvalitet okänd · ej entrybesked" : screeningReady ? "Aktuell D−1-signal · ej entrybesked" : `Screening: ${pick.decision?.status ?? unknown}`}
       </span>
       <span className="text-xs text-muted-foreground">{SOURCE[pick.source] ?? pick.source} · {pick.category}</span>
     </div>
@@ -108,15 +112,15 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
       <div data-testid={`guard-${pick.candidateId}`}>
         <LiveEntryGuard plan={pick} quote={checkedQuote?.error ? null : checkedQuote ?? null}
           signal={{ signalDate: pick.signalDate, signalSource: pick.source, signalAgeBars: signal?.signalAgeBars,
-            dataQuality: signal?.dataQuality,
+            dataQuality: quality,
             importWarning: importWarning ? "Entry ej verifierad; se kortets orsaker och källstatus." : undefined }} />
       </div>
       <p className="mt-2 text-sm leading-relaxed text-foreground">{WHY[pick.category] ?? `Setup ${pick.category} enligt källan`}.</p>
-      {signal?.dataQuality && <p className="mt-1 text-muted-foreground">
-        Källkvalitet: {signal.dataQuality.evidenceStatus ?? "okänd"} / {signal.dataQuality.eliteStatus ?? "okänd"}
-        {" · "}eliteQualified: {String(signal.dataQuality.eliteQualified ?? "okänt")}
-        {" · "}Datadag {signal.dataQuality.dataAsOf ?? "okänd"}
-        {" · "}{signal.dataQuality.barSource === "RECONSTRUCTED_INTRADAY" ? "Rekonstruerad intradag – ej verifierad dagsslutkurs" : "Officiell dagsstängning ej självständigt verifierad"}
+      {quality && <p className="mt-1 text-muted-foreground">
+        Källkvalitet: {quality.evidenceStatus ?? "okänd"} / {quality.eliteStatus ?? "okänd"}
+        {" · "}eliteQualified: {String(quality.eliteQualified ?? "okänt")}
+        {" · "}Datadag {quality.dataAsOf ?? "okänd"}
+        {" · "}{quality.barSource === "RECONSTRUCTED_INTRADAY" ? "Rekonstruerad intradag – ej verifierad dagsslutkurs" : "Officiell dagsstängning ej självständigt verifierad"}
       </p>}
       <p className="mt-1 text-muted-foreground">Invalidation enligt ursprungsplan: stop {formatPrice(pick.stopPrice)}. Ingen planändring har gjorts.</p>
       <p className="mt-1 text-muted-foreground">{signal?.earningsKnowledge === "SIGNAL_TIME" && signal.earningsInDays != null

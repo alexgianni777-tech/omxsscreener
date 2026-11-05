@@ -44,6 +44,7 @@ export function isTop3CutoffDue(date: string, now: Date): boolean {
 }
 
 export type PolicyCandidate = {
+  dataQuality?: import("@workspace/db").CandidateDataQuality | null;
   id: number;
   ticker: string;
   category: string;

@@ -360,6 +360,10 @@ export const ImportSessionResponse = zod.object({
   "createdAt": zod.coerce.date().nullable(),
   "lastImportAt": zod.coerce.date().nullable(),
   "sourceReports": zod.array(zod.object({
+  "candidateWarnings": zod.array(zod.object({
+  "identity": zod.string(),
+  "message": zod.string()
+})).optional(),
   "warnings": zod.array(zod.string()).optional(),
   "quarantinedIdentities": zod.array(zod.string()).optional(),
   "status": zod.enum(['SUCCESS', 'FAILED']).optional(),
@@ -556,6 +560,18 @@ export const ImportSessionResponse = zod.object({
   "policyVersion": zod.string(),
   "sources": zod.array(zod.string()),
   "picks": zod.array(zod.object({
+  "dataQuality": zod.union([zod.object({
+  "source": zod.string(),
+  "dataAsOf": zod.string().nullable(),
+  "evidenceStatus": zod.string().nullable(),
+  "eliteStatus": zod.string().nullable(),
+  "eliteQualified": zod.boolean().nullable(),
+  "validatedEdge": zod.boolean().nullable(),
+  "barSource": zod.enum(['PROVIDER_DAILY', 'RECONSTRUCTED_INTRADAY', 'UNKNOWN']),
+  "fullSessionVerified": zod.boolean(),
+  "entryEligible": zod.boolean(),
+  "reasons": zod.array(zod.string())
+}),zod.null()]).optional(),
   "candidateId": zod.number(),
   "ticker": zod.string(),
   "signalDate": zod.string().optional().describe('Original report date, never rewritten to the import\/session day.'),
@@ -592,6 +608,18 @@ export const GetLastValidTop3Response = zod.object({
   "policyVersion": zod.string(),
   "sources": zod.array(zod.string()),
   "picks": zod.array(zod.object({
+  "dataQuality": zod.union([zod.object({
+  "source": zod.string(),
+  "dataAsOf": zod.string().nullable(),
+  "evidenceStatus": zod.string().nullable(),
+  "eliteStatus": zod.string().nullable(),
+  "eliteQualified": zod.boolean().nullable(),
+  "validatedEdge": zod.boolean().nullable(),
+  "barSource": zod.enum(['PROVIDER_DAILY', 'RECONSTRUCTED_INTRADAY', 'UNKNOWN']),
+  "fullSessionVerified": zod.boolean(),
+  "entryEligible": zod.boolean(),
+  "reasons": zod.array(zod.string())
+}),zod.null()]).optional(),
   "candidateId": zod.number(),
   "ticker": zod.string(),
   "signalDate": zod.string().optional().describe('Original report date, never rewritten to the import\/session day.'),
@@ -678,6 +706,10 @@ export const ReimportSessionResponse = zod.object({
   "createdAt": zod.coerce.date().nullable(),
   "lastImportAt": zod.coerce.date().nullable(),
   "sourceReports": zod.array(zod.object({
+  "candidateWarnings": zod.array(zod.object({
+  "identity": zod.string(),
+  "message": zod.string()
+})).optional(),
   "warnings": zod.array(zod.string()).optional(),
   "quarantinedIdentities": zod.array(zod.string()).optional(),
   "status": zod.enum(['SUCCESS', 'FAILED']).optional(),
@@ -874,6 +906,18 @@ export const ReimportSessionResponse = zod.object({
   "policyVersion": zod.string(),
   "sources": zod.array(zod.string()),
   "picks": zod.array(zod.object({
+  "dataQuality": zod.union([zod.object({
+  "source": zod.string(),
+  "dataAsOf": zod.string().nullable(),
+  "evidenceStatus": zod.string().nullable(),
+  "eliteStatus": zod.string().nullable(),
+  "eliteQualified": zod.boolean().nullable(),
+  "validatedEdge": zod.boolean().nullable(),
+  "barSource": zod.enum(['PROVIDER_DAILY', 'RECONSTRUCTED_INTRADAY', 'UNKNOWN']),
+  "fullSessionVerified": zod.boolean(),
+  "entryEligible": zod.boolean(),
+  "reasons": zod.array(zod.string())
+}),zod.null()]).optional(),
   "candidateId": zod.number(),
   "ticker": zod.string(),
   "signalDate": zod.string().optional().describe('Original report date, never rewritten to the import\/session day.'),
@@ -920,6 +964,10 @@ export const GetSessionResponse = zod.object({
   "createdAt": zod.coerce.date().nullable(),
   "lastImportAt": zod.coerce.date().nullable(),
   "sourceReports": zod.array(zod.object({
+  "candidateWarnings": zod.array(zod.object({
+  "identity": zod.string(),
+  "message": zod.string()
+})).optional(),
   "warnings": zod.array(zod.string()).optional(),
   "quarantinedIdentities": zod.array(zod.string()).optional(),
   "status": zod.enum(['SUCCESS', 'FAILED']).optional(),
@@ -1116,6 +1164,18 @@ export const GetSessionResponse = zod.object({
   "policyVersion": zod.string(),
   "sources": zod.array(zod.string()),
   "picks": zod.array(zod.object({
+  "dataQuality": zod.union([zod.object({
+  "source": zod.string(),
+  "dataAsOf": zod.string().nullable(),
+  "evidenceStatus": zod.string().nullable(),
+  "eliteStatus": zod.string().nullable(),
+  "eliteQualified": zod.boolean().nullable(),
+  "validatedEdge": zod.boolean().nullable(),
+  "barSource": zod.enum(['PROVIDER_DAILY', 'RECONSTRUCTED_INTRADAY', 'UNKNOWN']),
+  "fullSessionVerified": zod.boolean(),
+  "entryEligible": zod.boolean(),
+  "reasons": zod.array(zod.string())
+}),zod.null()]).optional(),
   "candidateId": zod.number(),
   "ticker": zod.string(),
   "signalDate": zod.string().optional().describe('Original report date, never rewritten to the import\/session day.'),

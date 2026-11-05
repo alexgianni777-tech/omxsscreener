@@ -229,6 +229,11 @@ export interface HealthStatus {
   status: string;
 }
 
+export type SessionSourceReportCandidateWarningsItem = {
+  identity: string;
+  message: string;
+};
+
 export type SessionSourceReportStatus = typeof SessionSourceReportStatus[keyof typeof SessionSourceReportStatus];
 
 
@@ -245,6 +250,7 @@ export type SessionSourceReportDataDates = {
 };
 
 export interface SessionSourceReport {
+  candidateWarnings?: SessionSourceReportCandidateWarningsItem[];
   warnings?: string[];
   quarantinedIdentities?: string[];
   status?: SessionSourceReportStatus;
@@ -1374,6 +1380,7 @@ export const Top3RevisionPickSource = {
 } as const;
 
 export interface Top3RevisionPick {
+  dataQuality?: CandidateDataQuality | null;
   candidateId: number;
   ticker: string;
   /** Original report date, never rewritten to the import/session day. */

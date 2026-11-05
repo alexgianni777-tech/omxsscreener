@@ -116,6 +116,7 @@ export * from './sessionDetailEdgeRegime';
 export * from './sessionImport';
 export * from './sessionReview';
 export * from './sessionSourceReport';
+export * from './sessionSourceReportCandidateWarningsItem';
 export * from './sessionSourceReportDataDates';
 export * from './sessionSourceReportStatus';
 export * from './sessionSummary';

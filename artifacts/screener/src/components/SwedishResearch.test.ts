@@ -4,7 +4,7 @@ import React from "react";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Router } from "wouter";
-import { SwedishResearchContent, allowPreliminaryResearch } from "./SwedishResearch";
+import { SwedishResearchContent, allowPreliminaryResearch, pickWarnings } from "./SwedishResearch";
 import { quoteLabels, researchQuoteForMarket } from "../lib/researchQuote";
 import { ResearchCard } from "./ResearchCard";
 import { ResearchMarketSections, marketEvidence } from "./ResearchMarketSections";
@@ -44,12 +44,43 @@ test("decision brief fails closed on missing market date, stale data, non-TRADEA
   const html = renderToStaticMarkup(React.createElement(ResearchCard, {
     pick: pick(20, "LONG"), dataDate: null, stale: true,
   }));
-  assert.ok(html.includes("BLOCKERAD – ingen ny entry"));
+  assert.ok(html.includes("HISTORISKT – ingen ny entry"));
   assert.ok(html.includes("Screeningkvalificering är inte verifierad"));
   assert.ok(html.includes("Signal eller marknadsdag är STALE"));
   assert.ok(html.includes("Verifierat marknadsdatadatum saknas"));
   assert.ok(html.includes("Rapportkalender kontrolleras manuellt före orderläggning"));
   assert.ok(!html.includes('data-entry-status="READY"'));
+});
+
+test("structured unrelated quarantine warnings stay in source status; unknown scope remains conservative", () => {
+  const p = pick(1, "LONG");
+  const message = "ELUX-B conflicting plans";
+  const identity = "SE|WEAKEST|ELUX-B|SHORT|2026-10-09|edgeai";
+  const report: any = { source: "edgeai", status: "SUCCESS", signalDate: p.signalDate,
+    warnings: [message], quarantinedIdentities: [identity], candidateWarnings: [{ identity, message }] };
+  assert.deepEqual(pickWarnings(p, [report], [], [report]), []);
+  assert.ok(pickWarnings({ ...p, ticker: "ELUX-B", category: "WEAKEST", direction: "SHORT" }, [report], [], [report])
+    .some(w => w.startsWith("Källkonflikt")));
+  assert.ok(pickWarnings(p, [report], [], [{ ...report, warnings: [message, "Unscoped price warning"] }])
+    .some(w => w.includes("ej fullständigt verifierad")));
+  assert.ok(pickWarnings(p, [], [], [{ ...report, candidateWarnings: undefined }])
+    .some(w => w.includes("ej fullständigt verifierad")));
+});
+
+test("historical card explains actual and required market day without approving old or unknown quality", () => {
+  const html = renderToStaticMarkup(React.createElement(ResearchCard, {
+    pick: { ...pick(1, "LONG"), decision: { status: "TRADEABLE", reasons: [] }, dataQuality: null },
+    signal: { id: 1, entryPrice: 100, stopPrice: 95, targetPrice: 110,
+      dataQuality: { source: "edgeai", dataAsOf: "2026-11-04", evidenceStatus: "VALIDATED",
+        eliteStatus: "ELITE", eliteQualified: true, validatedEdge: true, entryEligible: true,
+        barSource: "UNKNOWN", fullSessionVerified: false, reasons: [] } },
+    dataDate: "2026-11-03", expectedDataDate: "2026-11-04", stale: true, dataDateStatus: "STALE",
+  }));
+  assert.ok(html.includes("HISTORISKT – ingen ny entry"));
+  assert.ok(html.includes("D−1 kräver marknadsdag 2026-11-04; sparat underlag är 2026-11-03."));
+  assert.ok(html.includes("Upstream-kvalificering okänd"));
+  assert.ok(!html.includes("READY – entryvillkor"));
+  assert.ok(!html.includes("Källkvalitet: VALIDATED"));
 });
 test("a US Yahoo symbol cannot be shown as a verified current price for a Swedish EQT plan", () => {
   const quote: any = { ticker: "EQT", yahooTicker: "EQT", livePrice: 53.82,
@@ -125,7 +156,7 @@ test("old US and SE saved TRADEABLE statuses are historical, never verified entr
     }));
     assert.ok(html.includes("STALE · historiskt urval"));
     assert.ok(!html.includes("TRADEABLE · screening") && !html.includes('data-entry-status="READY"'));
-    assert.ok(html.includes("BLOCKERAD"));
+    assert.ok(html.includes("HISTORISKT – ingen ny entry"));
   }
 });
 test("latest-session source status is separate from the saved selection's signal evidence", () => {

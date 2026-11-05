@@ -12,6 +12,7 @@ export type ImportReport = {
   status?: "SUCCESS" | "FAILED"; error?: string | null;
   httpStatus?: number | null; retryAt?: string | null;
   quarantinedIdentities?: string[]; warnings?: string[];
+  candidateWarnings?: { identity: string; message: string }[];
 };
 function canonical(value: unknown, market = "SE", field = ""): unknown {
   if (Array.isArray(value)) {

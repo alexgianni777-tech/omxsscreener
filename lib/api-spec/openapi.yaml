@@ -939,6 +939,16 @@ components:
       type: object
       required: [source, fingerprint, signalDate, reportDate, generatedAt, dataDates, importedAt]
       properties:
+        candidateWarnings:
+          type: array
+          items:
+            type: object
+            required: [identity, message]
+            properties:
+              identity:
+                type: string
+              message:
+                type: string
         warnings:
           type: array
           items:
@@ -1785,6 +1795,10 @@ components:
       type: object
       required: [candidateId, ticker, category, rank, score, market, direction, source, entryPrice, stopPrice, targetPrice, rr, decision]
       properties:
+        dataQuality:
+          anyOf:
+            - $ref: "#/components/schemas/CandidateDataQuality"
+            - type: "null"
         candidateId:
           type: number
         ticker:

@@ -5,10 +5,12 @@
  * OMXS30 Screener API
  * OpenAPI spec version: 0.1.0
  */
+import type { SessionSourceReportCandidateWarningsItem } from './sessionSourceReportCandidateWarningsItem';
 import type { SessionSourceReportDataDates } from './sessionSourceReportDataDates';
 import type { SessionSourceReportStatus } from './sessionSourceReportStatus';
 
 export interface SessionSourceReport {
+  candidateWarnings?: SessionSourceReportCandidateWarningsItem[];
   warnings?: string[];
   quarantinedIdentities?: string[];
   status?: SessionSourceReportStatus;

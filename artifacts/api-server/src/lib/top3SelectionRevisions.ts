@@ -101,6 +101,7 @@ export function mapTop3Revision(row: typeof top3SelectionRevisionsTable.$inferSe
           market: selection.market!, direction: selection.direction, source: selection.source!,
           entryPrice: input.entryPrice, stopPrice: input.stopPrice,
           targetPrice: input.targetPrice, rr: input.rr, decision: selection.decision,
+          dataQuality: input.dataQuality ?? null,
         };
       }),
   };

@@ -67,7 +67,9 @@ test("READY requires all existing conditions; missing evidence awaits; stale and
     assert.ok(html.includes("AVVAKTA – entry ej bekräftad"));
     assert.ok(!html.includes("READY – entryvillkor verifierade"));
   }
-  for (const props of [{ stale: true }, { quote: { ...quote, livePrice: 111 } },
+  assert.ok(card({ stale: true }).includes("HISTORISKT – ingen ny entry"));
+  assert.ok(!card({ stale: true }).includes("READY – entryvillkor"));
+  for (const props of [{ quote: { ...quote, livePrice: 111 } },
     { quote: { ...quote, livePrice: 94 } }, { quote: { ...quote, livePrice: 102 } }]) {
     assert.ok(card(props).includes("BLOCKERAD – ingen ny entry"));
   }
