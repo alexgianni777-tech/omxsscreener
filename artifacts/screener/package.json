@@ -76,6 +76,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "@workspace/market-calendar": "workspace:*",
     "lightweight-charts": "^5.2.0",
     "@workspace/replit-auth-web": "workspace:*"
   }

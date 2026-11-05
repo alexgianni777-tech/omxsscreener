@@ -22,9 +22,10 @@ const WHY: Record<string, string> = {
 const SOURCE: Record<string, string> = { edgeai: "GitHub/EdgeAI", telegram: "Telegram", manual: "Manuell" };
 const unknown = "okänd";
 
-export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], stale = false }: {
+export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], stale = false, dataDateStatus }: {
   pick: DailyPick & { decision?: { status?: string | null; reasons?: readonly string[] | null } }; signal?: ResearchSignal;
   dataDate: string | null; quote?: QuoteResult; warnings?: readonly string[]; stale?: boolean;
+  dataDateStatus?: "CURRENT" | "STALE" | "UNKNOWN" | "CONFLICT";
 }) {
   const [, expireQuote] = useReducer(n => n + 1, 0);
   useEffect(() => {
@@ -37,7 +38,9 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
   // Warnings passed here are identity-linked or concise source-uncertainty
   // notices; receipt-level raw diagnostics belong only in SourceProvenance.
   const qualityReasons = sourceQualityReasons(pick.source, signal?.dataQuality);
-  const warningList = [...new Set([...qualityReasons, ...warnings, signal?.importWarning].filter((value): value is string => !!value))];
+  const dateWarning = dataDateStatus === "UNKNOWN" ? "NO DATA – datadag eller börskalender ej verifierad; ingen entrybekräftelse."
+    : dataDateStatus === "CONFLICT" ? "CONFLICT – datadag är inte föregående avslutade handelsdag; ingen entrybekräftelse." : null;
+  const warningList = [...new Set([dateWarning, ...qualityReasons, ...warnings, signal?.importWarning].filter((value): value is string => !!value))];
   const screeningReady = pick.decision?.status === "TRADEABLE";
   const importWarning = warningList.join(" ") ||
     (stale ? "STALE eller obekräftat marknadsdatum – ingen entrybekräftelse" : !dataDate ? "Verifierat marknadsdatadatum saknas – ingen entrybekräftelse" : undefined);
@@ -48,18 +51,16 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
   const guard = importWarning || stale || !dataDate
     ? null
     : assessLiveEntry(pick, checkedQuote ?? null);
-  const reportVerified = signal?.earningsKnowledge === "SIGNAL_TIME" && signal.earningsInDays != null;
   const noTradeReasons = [
     warningList[0] ?? null,
     stale ? "Signal eller marknadsdag är STALE." : null,
     !dataDate ? "Verifierat marknadsdatadatum saknas." : null,
     !screeningReady ? "Screeningkvalificering är inte verifierad; inget entrybesked." : null,
     guard && guard.status !== "READY" ? guard.reason : null,
-    !reportVerified ? "Rapportdatum ej verifierat – kontrollera manuellt." : null,
   ].filter((reason): reason is string => !!reason);
   const decisionSafe = screeningReady && !stale && !!dataDate && warningList.length === 0 &&
-    guard?.status === "READY" && reportVerified;
-  const blocked = stale || (!!signal?.dataQuality && qualityReasons.length > 0) || warningList.some(w => w.startsWith("Källkonflikt") || w.startsWith("Flera planer/")) ||
+    guard?.status === "READY";
+  const blocked = stale || dataDateStatus === "CONFLICT" || (!!signal?.dataQuality && qualityReasons.length > 0) || warningList.some(w => w.startsWith("Källkonflikt") || w.startsWith("Flera planer/")) ||
     (!!pick.decision?.status && !screeningReady) ||
     guard?.status === "PLAN_BROKEN" || guard?.status === "MISSED_ENTRY";
   const entryLabel = decisionSafe ? "READY – entryvillkor verifierade, inte en order"
@@ -70,7 +71,7 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
       <strong className="font-mono text-lg font-semibold tracking-tight">{dailySymbol(pick.ticker, pick.market)}</strong>
       <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${long ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"}`}>{long ? "Long" : "Short"}</span>
       <span aria-label="Screeningstatus" className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-        {stale ? "STALE · historiskt urval" : qualityReasons.length ? signal?.dataQuality ? "RESEARCH ONLY · kvalitet ej kvalificerad" : "Källkvalitet okänd · ej entrybesked" : screeningReady ? "Screeningkvalificerad · ej entrybesked" : `Screening: ${pick.decision?.status ?? unknown}`}
+        {stale ? "STALE · historiskt urval, ej aktivt" : dateWarning ? dataDateStatus === "CONFLICT" ? "CONFLICT · datadag" : "NO DATA · datadag ej verifierad" : qualityReasons.length ? signal?.dataQuality ? "RESEARCH ONLY · kvalitet ej kvalificerad" : "Källkvalitet okänd · ej entrybesked" : screeningReady ? "Aktuell D−1-signal · ej entrybesked" : `Screening: ${pick.decision?.status ?? unknown}`}
       </span>
       <span className="text-xs text-muted-foreground">{SOURCE[pick.source] ?? pick.source} · {pick.category}</span>
     </div>
@@ -78,6 +79,7 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
       Signal {pick.signalDate ?? unknown} · Datadag D−1 {dataDate ?? unknown}
     </p>
     <PlanGrid plan={pick} caption="Originalplan · D−1-underlag" />
+    <p className="mt-2 text-xs text-muted-foreground">Rapportkalender kontrolleras manuellt före orderläggning</p>
     <div role={decisionSafe ? "status" : "alert"} data-testid={`decision-brief-${pick.candidateId}`}
       className={`mt-3 rounded-lg px-3 py-2 text-xs ${decisionSafe ? "bg-success/10 text-success" : "bg-amber-500/10 text-amber-800 dark:text-amber-300"}`}>
       <p className="font-semibold" data-testid={`entry-status-${pick.candidateId}`}>{entryLabel}</p>

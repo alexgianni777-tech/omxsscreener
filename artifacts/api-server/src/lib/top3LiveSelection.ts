@@ -40,7 +40,7 @@ export function buildTop3LiveSelection(
   const cutoff = session.top3CutoffAt ?? null;
   const observed = candidates.filter((candidate) =>
     (candidate.signalSource === "telegram" || candidate.signalSource === "edgeai") &&
-    isAcceptedSignalDate(candidate.signalDate, session.date) &&
+    isAcceptedSignalDate(candidate.signalDate, session.date, candidate.market ?? "SE") &&
     candidate.createdAt instanceof Date &&
     candidate.createdAt.getTime() <= now.getTime(),
   );

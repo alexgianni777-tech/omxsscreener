@@ -170,6 +170,9 @@ importers:
 
   artifacts/api-server:
     dependencies:
+      '@workspace/market-calendar':
+        specifier: workspace:*
+        version: link:../../lib/market-calendar
       '@workspace/api-zod':
         specifier: workspace:*
         version: link:../../lib/api-zod
@@ -420,6 +423,9 @@ importers:
 
   artifacts/screener:
     dependencies:
+      '@workspace/market-calendar':
+        specifier: workspace:*
+        version: link:../../lib/market-calendar
       '@workspace/replit-auth-web':
         specifier: workspace:*
         version: link:../../lib/replit-auth-web
@@ -634,6 +640,8 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 3.25.76
+
+  lib/market-calendar: {}
 
   lib/db:
     dependencies:

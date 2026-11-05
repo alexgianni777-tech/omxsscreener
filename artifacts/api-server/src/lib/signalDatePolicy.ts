@@ -1,3 +1,4 @@
+import { acceptedReportDate, previousMarketDay } from "@workspace/market-calendar";
 const STOCKHOLM_DATE = new Intl.DateTimeFormat("sv-SE", {
   timeZone: "Europe/Stockholm", year: "numeric", month: "2-digit", day: "2-digit",
 });
@@ -12,17 +13,13 @@ function validDate(value: unknown): value is string {
     new Date(`${value}T12:00:00Z`).toISOString().slice(0, 10) === value;
 }
 
-/** Previous weekday close; Friday remains the previous trading day on Monday. */
-export function previousTradingDate(date: string): string {
+/** Previous equity trading day, including the exchange's published closures. */
+export function previousTradingDate(date: string, market = "SE"): string {
   if (!validDate(date)) throw new Error("Invalid reference date");
-  const previous = new Date(`${date}T12:00:00Z`);
-  do { previous.setUTCDate(previous.getUTCDate() - 1); }
-  while (previous.getUTCDay() === 0 || previous.getUTCDay() === 6);
-  return previous.toISOString().slice(0, 10);
+  return previousMarketDay(date, market) ?? "";
 }
 
 /** Unknown dates, future reports and reports older than one previous close fail closed. */
-export function isAcceptedSignalDate(signalDate: unknown, sessionDate: string): boolean {
-  return validDate(signalDate) && validDate(sessionDate) &&
-    (signalDate === sessionDate || signalDate === previousTradingDate(sessionDate));
+export function isAcceptedSignalDate(signalDate: unknown, sessionDate: string, market = "SE"): boolean {
+  return acceptedReportDate(signalDate, sessionDate, market);
 }

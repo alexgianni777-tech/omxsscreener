@@ -1,4 +1,5 @@
 import { isAcceptedSignalDate } from "./signalDatePolicy";
+import { marketDate, signalSessionDate } from "@workspace/market-calendar";
 
 export type ReviewStatus = "APPROVED" | "WARN" | "BLOCKED";
 
@@ -6,6 +7,7 @@ export type ReviewStatus = "APPROVED" | "WARN" | "BLOCKED";
 export const AUTOMATIC_EARNINGS_CHECK_ENABLED = false;
 
 export type CandidateReviewInput = {
+  market?: string | null;
   category: string;
   direction: string;
   rs3m: number;
@@ -40,13 +42,6 @@ export type CandidateDecision = {
   status: CandidateDecisionStatus;
   reasons: string[];
 };
-
-const STOCKHOLM_DATE = new Intl.DateTimeFormat("sv-SE", {
-  timeZone: "Europe/Stockholm",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
 
 function statusFor(reasons: string[], blockers: string[]): ReviewStatus {
   if (blockers.length > 0) return "BLOCKED";
@@ -149,7 +144,8 @@ export function decideCandidate(
       reasons: ["Signalen saknar verifierat källdatum — kontrollera en ny snapshot före trade.", ...review.reasons],
     };
   }
-  if (!isAcceptedSignalDate(candidate.signalDate, sessionDate)) {
+  const market = candidate.market === "US" ? "US" : "SE";
+  if (!isAcceptedSignalDate(candidate.signalDate, sessionDate, market)) {
     return {
       status: "STALE",
       reasons: [`Källsignalen ${candidate.signalDate} ligger utanför tillåten fördröjning för ${sessionDate}; endast dagens eller föregående handelsdags rapport accepteras.`, ...review.reasons],
@@ -202,8 +198,11 @@ export function decideCandidate(
   }
   if (invalid.length > 0) return { status: "INVALID", reasons: [...invalid, ...review.reasons] };
 
-  const today = STOCKHOLM_DATE.format(now);
-  if (!isAcceptedSignalDate(candidate.signalDate, today) || sessionDate !== today) {
+  const today = marketDate(now, market);
+  const referenceSession = signalSessionDate(now, market);
+  if (candidate.signalDate > today || !(isAcceptedSignalDate(candidate.signalDate, today, market) ||
+      isAcceptedSignalDate(candidate.signalDate, referenceSession, market)) ||
+    sessionDate > referenceSession) {
     return {
       status: "STALE",
       reasons: [`Signalen är från ${candidate.signalDate}; kontrollera en ny snapshot och live-pris före trade.`, ...review.reasons],

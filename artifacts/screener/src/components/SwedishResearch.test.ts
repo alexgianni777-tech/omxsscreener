@@ -48,7 +48,7 @@ test("decision brief fails closed on missing market date, stale data, non-TRADEA
   assert.ok(html.includes("Screeningkvalificering är inte verifierad"));
   assert.ok(html.includes("Signal eller marknadsdag är STALE"));
   assert.ok(html.includes("Verifierat marknadsdatadatum saknas"));
-  assert.ok(html.includes("Rapportdatum ej verifierat – kontrollera manuellt"));
+  assert.ok(html.includes("Rapportkalender kontrolleras manuellt före orderläggning"));
   assert.ok(!html.includes('data-entry-status="READY"'));
 });
 test("a US Yahoo symbol cannot be shown as a verified current price for a Swedish EQT plan", () => {

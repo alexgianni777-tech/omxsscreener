@@ -1,4 +1,5 @@
 import type { SessionSourceReport } from "@workspace/api-client-react";
+import { acceptedReportDate } from "@workspace/market-calendar";
 export type DailyPick = {
   candidateId: number; ticker: string; market: string; direction: string; rank: number;
   source: string; signalDate?: string | null; category: string;
@@ -31,7 +32,7 @@ export function previousWeekday(date: string) {
   do { d.setUTCDate(d.getUTCDate() - 1); } while ([0, 6].includes(d.getUTCDay()));
   return d.toISOString().slice(0, 10);
 }
-export function oldSignalWarning(date: string | null | undefined, today: string) {
-  return !date ? "Signaldatum okänt" : date === today || date === previousWeekday(today)
+export function oldSignalWarning(date: string | null | undefined, today: string, market = "SE") {
+  return !date ? "Signaldatum okänt" : acceptedReportDate(date, today, market)
     ? null : date > today ? "Signaldatum ligger i framtiden" : "Gammalt underlag – inte dagens signal";
 }

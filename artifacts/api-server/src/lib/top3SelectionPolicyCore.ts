@@ -119,7 +119,7 @@ export function buildTop3SelectionSnapshot(
 
   const eligible = evaluated.filter(({ decision, candidate }) =>
     decision.status === "TRADEABLE" &&
-    isAcceptedSignalDate(candidate.signalDate, sessionDate) &&
+    isAcceptedSignalDate(candidate.signalDate, sessionDate, candidate.market ?? "SE") &&
     Boolean(candidate.signalSource) &&
     (candidate.market === "SE" || candidate.market === "US"),
   );

@@ -1,6 +1,7 @@
 import React from "react";
+import { d1Freshness } from "@workspace/market-calendar";
 import type { SessionSourceReport } from "@workspace/api-client-react";
-import { marketDailyPicks, oldSignalWarning, previousWeekday, type DailyPick } from "../lib/dailyCandidates";
+import { marketDailyPicks, oldSignalWarning, type DailyPick } from "../lib/dailyCandidates";
 
 export type MarketEvidenceSignal = {
   market?: string | null; direction?: string; signalDate?: string | null;
@@ -20,8 +21,8 @@ export function marketEvidence(market: "SE" | "US", direction: string,
   const receipt = receipts.at(-1);
   const dataDate = receipt?.dataDates?.[market] ?? null;
   const blockedDates = rows.filter(s => !validDay(s.signalDate) ||
-    !validDay(sessionDate) || oldSignalWarning(s.signalDate, sessionDate) != null).length;
-  const staleData = validDay(sessionDate) && validDay(dataDate) && dataDate < previousWeekday(sessionDate);
+    !validDay(sessionDate) || oldSignalWarning(s.signalDate, sessionDate, market) != null).length;
+  const staleData = d1Freshness(dataDate, sessionDate, market).status === "STALE";
   const futureData = validDay(sessionDate) && validDay(dataDate) && dataDate > sessionDate;
   return { count: rows.length, newestSignal: dates.at(-1) ?? null, blockedDates,
     dataDate: validDay(dataDate) ? dataDate : null, reportDate: receipt?.reportDate ?? null,
@@ -58,15 +59,15 @@ export function ResearchMarketSections({ picks, signals = [], reports = [], sess
               <p>Kontrollerad mot inläst session {sessionDate || "okänd"}: {evidence.count} importerade screeningcase,
                 {" "}{evidence.blockedDates} med för gammalt, framtida eller okänt signaldatum.</p>
               {evidence.blockedDates > 0 && <p className="font-medium text-amber-700 dark:text-amber-400">
-                Datumspärr: endast sessionens dag eller föregående vardag accepteras. En ny importtid förnyar inte signalen.
+                Datumspärr: endast sessionens dag eller föregående handelsdag accepteras. En ny importtid förnyar inte signalen.
               </p>}
-              {evidence.staleData && <p className="font-medium text-amber-700 dark:text-amber-400">STALE · marknadsdata är äldre än föregående vardag. Inget datum flyttas fram.</p>}
+              {evidence.staleData && <p className="font-medium text-amber-700 dark:text-amber-400">STALE · marknadsdata är äldre än föregående handelsdag. Inget datum flyttas fram.</p>}
               {evidence.futureData && <p className="font-medium text-destructive">CONFLICT · marknadsdatum ligger efter sessionen.</p>}
               {!evidence.dataDate && <p className="text-muted-foreground">NO DATA · verifierat marknadsdatum saknas.</p>}
               {evidence.count > evidence.blockedDates && <p className="text-muted-foreground">
                 Ett godkänt signaldatum räcker inte: sparat urval, källkrav, risk- och konfliktkontroller måste också vara uppfyllda. Se sessionens beslut för enskilda case.
               </p>}
-              <p className="text-muted-foreground">Inga äldre case ersätter giltiga förslag. Helgdagar antas inte utan verifierad kalender.</p>
+              <p className="text-muted-foreground">Inga äldre case ersätter giltiga förslag. Börskalender för Sverige och USA används; okänt kalenderår godkänns inte.</p>
             </div>}
             <ul className="space-y-3">{group.picks.map(renderPick)}</ul>
           </section>;

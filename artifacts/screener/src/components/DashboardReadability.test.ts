@@ -28,7 +28,7 @@ test("research plan precedes thesis/statistics; unknown live entry and original 
   const html = renderToStaticMarkup(React.createElement(ResearchCard, { pick, signal, dataDate: "2026-10-27" }));
   const visible = visibleWhenClosed(html);
   assert.ok(html.indexOf('aria-label="Entry ') < html.indexOf("Momentum-setup"));
-  for (const field of ["43,66", "42,05", "47,70", "2,51", "Screeningkvalificerad · ej entrybesked", "AVVAKTA – entry ej bekräftad", "Aktuell kurs saknas"]) {
+  for (const field of ["43,66", "42,05", "47,70", "2,51", "Aktuell D−1-signal · ej entrybesked", "AVVAKTA – entry ej bekräftad", "Aktuell kurs saknas"]) {
     assert.ok(visible.includes(field), field);
   }
   assert.ok(!visible.includes("Träff hist."));

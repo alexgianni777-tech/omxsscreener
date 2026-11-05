@@ -1,4 +1,5 @@
 import React from "react";
+import { d1Freshness, signalSessionDate } from "@workspace/market-calendar";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -6,7 +7,7 @@ import {
   useGetQuotes, getGetQuotesQueryKey, useListSessions, type QuoteResult, type SavedTop3Display, type SessionSourceReport,
 } from "@workspace/api-client-react";
 import { ResearchCard, type ResearchSignal } from "./ResearchCard";
-import { marketDailyPicks, previousWeekday, oldSignalWarning, isolatedDailyPick, dailySymbol, type DailyPick } from "../lib/dailyCandidates";
+import { marketDailyPicks, oldSignalWarning, isolatedDailyPick, dailySymbol, type DailyPick } from "../lib/dailyCandidates";
 import { stockholmToday } from "../lib/persistentTop3Display";
 import { savedDataDate } from "../lib/researchQuote";
 import { SourceProvenance } from "./SourceProvenance";
@@ -17,15 +18,21 @@ export function researchPicks(selection: SavedTop3Display): DailyPick[] {
 }
 
 export function SwedishResearchContent({ selection, signals = [], reports = [], statusReports, quotes = {}, today, onRefresh, refreshing = false, quoteError = false,
-  diagnosticSignals, diagnosticReports, diagnosticDate }: {
+  diagnosticSignals, diagnosticReports, diagnosticDate, marketDates }: {
   selection: SavedTop3Display; signals?: readonly ResearchSignal[]; reports?: readonly SessionSourceReport[]; quotes?: Record<string, QuoteResult>;
   today: string; onRefresh?: () => void; refreshing?: boolean; quoteError?: boolean;
   statusReports?: readonly SessionSourceReport[];
   diagnosticSignals?: readonly MarketEvidenceSignal[]; diagnosticReports?: readonly SessionSourceReport[]; diagnosticDate?: string;
+  marketDates?: { SE: string; US: string };
 }) {
   const picks = researchPicks(selection);
   const groups = marketDailyPicks(picks, "SE");
-  const stale = selection.date !== today || selection.dataDates.some(d => !d.dataDate || d.dataDate !== previousWeekday(today));
+  const reference = (p: DailyPick) => marketDates?.[p.market as "SE" | "US"] ?? today;
+  const freshness = (p: DailyPick) => d1Freshness(savedDataDate(selection.dataDates, p.source, p.signalDate, p.market), reference(p), p.market);
+  const pickStale = (p: DailyPick) => oldSignalWarning(p.signalDate, reference(p), p.market) != null ||
+    freshness(p).status === "STALE";
+  const stale = picks.some(pickStale);
+  const unknownDate = picks.some(p => freshness(p).status === "UNKNOWN");
   const official = selection.kind === "OFFICIAL";
   return <>
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -36,6 +43,7 @@ export function SwedishResearchContent({ selection, signals = [], reports = [], 
           <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-primary">
             {official ? "Officiellt fryst urval" : `Ändringsbar rekommendation v${selection.revision.revision}`}</span>
           {stale && <span data-testid="status-research-stale" className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-700">STALE</span>}
+          {unknownDate && <span className="text-muted-foreground">NO DATA · datadag eller börskalender ej verifierad</span>}
           <span>Long {groups[0].picks.length}/3 · Short {groups[1].picks.length}/3</span>
           <span>USA: Long {marketDailyPicks(picks, "US")[0].picks.length}/3 · Short {marketDailyPicks(picks, "US")[1].picks.length}/3</span>
         </p>
@@ -55,9 +63,9 @@ export function SwedishResearchContent({ selection, signals = [], reports = [], 
           signal={signals.find(c => c.id === p.candidateId && (c.signalDate ?? null) === (p.signalDate ?? null) &&
             c.entryPrice === p.entryPrice && c.stopPrice === p.stopPrice && c.targetPrice === p.targetPrice)}
           dataDate={savedDataDate(selection.dataDates, p.source, p.signalDate, p.market)} quote={quotes[p.ticker]}
+          dataDateStatus={freshness(p).status}
           warnings={pickWarnings(p, reports, signals as Conflictable[], statusReports ?? reports)}
-          stale={selection.date !== today || oldSignalWarning(p.signalDate, today) != null ||
-            savedDataDate(selection.dataDates, p.source, p.signalDate, p.market) !== previousWeekday(today)} />} />
+          stale={pickStale(p)} />} />
     <Link href={`/sessions/${selection.sessionId}`} className="mt-4 inline-block text-xs font-medium text-primary hover:underline" data-testid="link-research-session">
       Öppna sessionen för versioner, fryst urval och utfall</Link>
   </>;
@@ -166,7 +174,8 @@ export function SwedishResearch({ latestReports }: { latestReports?: readonly Se
   return <section data-testid="swedish-research" aria-busy={loading} className="rounded-2xl bg-card p-4 sm:p-6 shadow-sm ring-1 ring-primary/20">
     {s ? <SwedishResearchContent selection={s} signals={(detail.data?.candidates ?? []) as ResearchSignal[]} reports={detail.data?.sourceReports ?? []} statusReports={sourceReports} quotes={map}
       diagnosticSignals={latestDetail.data?.candidates} diagnosticReports={latestDetail.data?.sourceReports} diagnosticDate={latestDetail.data?.date}
-      today={stockholmToday()} onRefresh={params.tickers ? () => void quotes.refetch() : undefined}
+      today={stockholmToday()} marketDates={{ SE: signalSessionDate(new Date(), "SE"), US: signalSessionDate(new Date(), "US") }}
+      onRefresh={params.tickers ? () => void quotes.refetch() : undefined}
       refreshing={quotes.isFetching} quoteError={quotes.isError} />
       : detail.data && canUsePreliminary ? <PreliminaryResearchContent picks={prelim} sessionDate={detail.data.date}
         signals={detail.data.candidates as ResearchSignal[]} statusReports={sourceReports} quotes={map}

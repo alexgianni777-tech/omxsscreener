@@ -159,8 +159,8 @@ export function validateEdgeAiPayload(value: unknown, reportDate: string): EdgeA
       else {
         dataDates[market] = dataAsOf;
       }
-      if (dataAsOf <= reportDate && dataAsOf !== previousTradingDate(reportDate)) {
-        warnings.push(`${market}: dataAsOf ${dataAsOf} avviker från föregående vardag ${previousTradingDate(reportDate)}; kontrollera börshelgdag och D−1-underlag.`);
+      if (dataAsOf <= reportDate && dataAsOf !== previousTradingDate(reportDate, market)) {
+        warnings.push(`${market}: dataAsOf ${dataAsOf} avviker från föregående handelsdag ${previousTradingDate(reportDate, market) || "okänd"}; kontrollera börskalender och D−1-underlag.`);
       }
     } else {
       errors.push(`markets.${market}.dataAsOf saknas.`);

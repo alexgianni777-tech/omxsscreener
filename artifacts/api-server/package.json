@@ -13,6 +13,7 @@
     "test:synchronization": "node --test src/lib/candidateSynchronization.test.ts"
   },
   "dependencies": {
+    "@workspace/market-calendar": "workspace:*",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
     "cookie-parser": "^1.4.7",

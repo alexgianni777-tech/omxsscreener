@@ -1,13 +1,15 @@
 import React from "react";
+import { d1Freshness } from "@workspace/market-calendar";
 import { Link } from "wouter";
 import { useGetLastValidTop3, getGetLastValidTop3QueryKey, type SavedTop3Display } from "@workspace/api-client-react";
 import { stockholmToday } from "../lib/persistentTop3Display";
-import { previousWeekday } from "../lib/dailyCandidates";
+import { oldSignalWarning } from "../lib/dailyCandidates";
 import { PlanGrid } from "./PlanGrid";
 import { savedDataDate } from "../lib/researchQuote";
 
 export function SavedTop3Content({ selection: s, today }: { selection: SavedTop3Display; today: string }) {
-  const stale = s.date !== today || s.dataDates.some(d => !d.dataDate || d.dataDate !== previousWeekday(today));
+  const stale = s.revision.picks.some(p => oldSignalWarning(p.signalDate, today, p.market ?? "") != null ||
+    d1Freshness(savedDataDate(s.dataDates, p.source, p.signalDate, p.market ?? ""), today, p.market ?? "").status !== "CURRENT");
   return <>
     <h3 className="text-sm font-semibold flex flex-wrap items-center gap-2">Senast giltiga sparade Top 3
       <span className="rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">{s.kind === "OFFICIAL" ? "officiellt fryst urval" : `rekommendation v${s.revision.revision}`}</span></h3>
