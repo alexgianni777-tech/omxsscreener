@@ -58,12 +58,20 @@ export class ScreenerParseError extends Error {
  */
 function normalizeScreenerText(rawText: string): string {
   return rawText
+    // Decode transport newline escapes only, never arbitrary JSON/string escapes.
+    .replace(/\\r\\n|\\n|\\r/g, "\n")
     .replace(/\r\n?/g, "\n")
+    .replace(/\\\n/g, "\n")
+    // Fences are separators, including when pasted inline around a plan.
+    .replace(/`{3,}(?:[ \t]*(?:text|txt|plaintext|markdown|md)\b)?|~{3,}/gi, "\n")
     .replace(/═{2,}/g, "===")
     .replace(/(?<!\n)(?=={3,}\s*\d+\s*[·•])/g, "\n")
     .replace(/(?<!\n)(?=(?:={3,}\s*)?\d+\.\s+[A-ZÅÄÖ])/g, "\n")
     .replace(/(?<!\n)\s*(?=plan\((?:LONG|SHORT)\):)/g, "\n")
-    .replace(/\n{2,}/g, "\n");
+    .split("\n")
+    .map(line => line.trim())
+    .filter(Boolean)
+    .join("\n");
 }
 
 /**
@@ -229,7 +237,7 @@ export function parseScreenerText(rawText: string): ParsedSession {
       const rank = parseInt(candidateLineMatch[1], 10);
       const ticker = candidateLineMatch[2];
       // Next line should be the plan line
-      const planLine = lines[i + 1] ?? "";
+      let planLine = lines[i + 1] ?? "";
       const looksLikeCandidate = planLine.includes("plan(")
         || candidateLineMatch[3].includes("|")
         || /^\s+\d+(?:\.\d+)?(?:\s|$)/.test(candidateLineMatch[3]);
@@ -240,6 +248,14 @@ export function parseScreenerText(rawText: string): ParsedSession {
         );
       }
 
+      // A copied plan may wrap at a field separator. Only consume recognized
+      // continuations; never search past another candidate/header for its plan.
+      let planEnd = i + 1;
+      while (planEnd + 1 < lines.length &&
+        /^(?:[·(]|entry\b|stop\b|mål\b|R\/R\b|max\b|1R\b|\d+(?:\.\d+)?(?:\s*[·(]|\s*$))/.test(lines[planEnd + 1])) {
+        planLine += ` ${lines[++planEnd]}`;
+      }
+
       try {
         const candidate = parseCandidate(line, planLine, currentCategory, rank);
         candidates.push(candidate);
@@ -247,7 +263,7 @@ export function parseScreenerText(rawText: string): ParsedSession {
         const detail = error instanceof Error ? error.message : "invalid candidate";
         throw new ScreenerParseError(`Line ${i + 1} (${ticker}): ${detail}`);
       }
-      i++; // skip plan line
+      i = planEnd; // skip only this candidate's plan and its continuations
     }
   }
 
@@ -257,7 +273,7 @@ export function parseScreenerText(rawText: string): ParsedSession {
 
   let quality: ReturnType<typeof textReportQuality>;
   try {
-    quality = textReportQuality(rawText, date, candidates.map(c => c.ticker));
+    quality = textReportQuality(normalizedText, date, candidates.map(c => c.ticker));
   } catch (error) {
     throw new ScreenerParseError(error instanceof Error ? error.message : "Rapportens datakvalitet kan inte verifieras.");
   }
