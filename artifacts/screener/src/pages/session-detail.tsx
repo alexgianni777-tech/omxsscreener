@@ -311,6 +311,7 @@ export function SessionDetail() {
           <div>
             <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-1 flex items-center gap-1"><BarChart2 className="w-4 h-4"/> Market Weather</div>
             <div className="text-3xl font-bold font-mono tracking-tight">{formatNumber(marketWeather.omxsValue, 1)}</div>
+            <p className="text-xs text-muted-foreground">Historisk sessionsreferens · ej live eller separat verifierat källvärde. Se källkvitton för Telegram/EdgeAI.</p>
             <div className="mt-2 inline-block px-2.5 py-1 bg-muted rounded text-sm font-medium">
               Trend: <span className={marketWeather.trendLabel.includes("BULL") ? "text-success" : marketWeather.trendLabel.includes("BEAR") ? "text-destructive" : ""}>{marketWeather.trendLabel}</span>
             </div>

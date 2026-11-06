@@ -10,6 +10,7 @@ import { ResearchCard, type ResearchSignal } from "./ResearchCard";
 import { marketDailyPicks, oldSignalWarning, isolatedDailyPick, dailySymbol, type DailyPick } from "../lib/dailyCandidates";
 import { stockholmToday } from "../lib/persistentTop3Display";
 import { savedDataDate } from "../lib/researchQuote";
+import { trendAlignment } from "../lib/sourceMarketEvidence";
 import { SourceProvenance } from "./SourceProvenance";
 import { ResearchMarketSections, type MarketEvidenceSignal } from "./ResearchMarketSections";
 
@@ -63,6 +64,7 @@ export function SwedishResearchContent({ selection, signals = [], reports = [], 
           signal={signals.find(c => c.id === p.candidateId && (c.signalDate ?? null) === (p.signalDate ?? null) &&
             c.entryPrice === p.entryPrice && c.stopPrice === p.stopPrice && c.targetPrice === p.targetPrice)}
           dataDate={savedDataDate(selection.dataDates, p.source, p.signalDate, p.market)} quote={quotes[p.ticker]}
+          advisory={trendAlignment(statusReports ?? reports, p.market, p.direction, savedDataDate(selection.dataDates, p.source, p.signalDate, p.market))}
           dataDateStatus={freshness(p).status}
           expectedDataDate={previousMarketDay(reference(p), p.market)}
           warnings={pickWarnings(p, reports, signals as Conflictable[], statusReports ?? reports)}
@@ -142,7 +144,8 @@ export function PreliminaryResearchContent({ picks, sessionDate, signals = [], s
       sessionDate={sessionDate} renderPick={p => <ResearchCard key={p.candidateId} pick={p}
           signal={signals.find(c => c.id === p.candidateId && (c.signalDate ?? null) === (p.signalDate ?? null) &&
             c.entryPrice === p.entryPrice && c.stopPrice === p.stopPrice && c.targetPrice === p.targetPrice)}
-          dataDate={null} quote={quotes[p.ticker]} warnings={pickWarnings(p, [], signals as Conflictable[], statusReports ?? [])} stale />} />
+          dataDate={null} quote={quotes[p.ticker]} advisory="avvakta"
+          warnings={pickWarnings(p, [], signals as Conflictable[], statusReports ?? [])} stale />} />
   </>;
 }
 

@@ -8,8 +8,10 @@
 import type { SessionSourceReportCandidateWarningsItem } from './sessionSourceReportCandidateWarningsItem';
 import type { SessionSourceReportDataDates } from './sessionSourceReportDataDates';
 import type { SessionSourceReportStatus } from './sessionSourceReportStatus';
+import type { SourceMarketContext } from './sourceMarketContext';
 
 export interface SessionSourceReport {
+  marketContext?: SourceMarketContext;
   candidateWarnings?: SessionSourceReportCandidateWarningsItem[];
   warnings?: string[];
   quarantinedIdentities?: string[];

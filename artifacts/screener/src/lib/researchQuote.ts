@@ -1,5 +1,6 @@
 import type { QuoteResult } from "@workspace/api-client-react";
 import { formatPrice } from "./presentationNumbers";
+import { LIVE_ENTRY_MAX_PRICE_AGE_MS } from "./liveEntryGuard";
 
 /** UI safety only: keep the fetched price/mapping intact, but flag a different quote market. */
 export function researchQuoteForMarket(market: string, quote: QuoteResult | null | undefined) {
@@ -20,17 +21,26 @@ export function researchQuoteForMarket(market: string, quote: QuoteResult | null
 }
 
 /** Labels for a manually fetched quote. Never derived from the D-1 plan. */
-export function quoteLabels(quote: QuoteResult | null | undefined) {
+export function quoteLabels(quote: QuoteResult | null | undefined, now = Date.now()) {
   if (!quote) return null;
   const t = quote.asOf ? Date.parse(quote.asOf) : NaN;
-  const asOf = Number.isFinite(t)
+  const verifiedTime = typeof quote.asOf === "string" && /T.*(?:Z|[+-]\d{2}:\d{2})$/i.test(quote.asOf) && Number.isFinite(t);
+  const age = verifiedTime ? now - t : NaN;
+  const recent = Number.isFinite(age) && age >= -60_000 && age <= LIVE_ENTRY_MAX_PRICE_AGE_MS;
+  const usable = recent && !quote.error && quote.marketState === "REGULAR" &&
+    quote.livePrice != null && Number.isFinite(quote.livePrice) && quote.livePrice > 0;
+  const asOf = verifiedTime
     ? new Date(t).toLocaleString("sv-SE", { timeZone: "Europe/Stockholm", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) + " (Europe/Stockholm)"
     : "Tidpunkt ej verifierad";
   return {
-    price: quote.error ? "Kurs ej verifierad" : quote.livePrice != null ? formatPrice(quote.livePrice) : "Pris saknas",
+    price: usable ? formatPrice(quote.livePrice!) : quote.livePrice == null ? "Pris saknas" : "Kurs ej verifierad",
+    observedPrice: !usable && !quote.error && quote.livePrice != null && Number.isFinite(quote.livePrice) && quote.livePrice > 0 ? formatPrice(quote.livePrice) : null,
     asOf,
     source: `Yahoo Finance · ${quote.yahooTicker || quote.ticker}`,
-    status: quote.error ? `Fel: ${quote.error}` : quote.marketState ?? "Marknadsstatus okänd",
+    status: quote.error ? `Fel: ${quote.error}` : `${quote.marketState ?? "Marknadsstatus okänd"} · ${
+      !verifiedTime ? "kursålder okänd" : age < -60_000 ? "CONFLICT – framtida källtid" : !recent
+        ? `STALE – ${Math.max(0, Math.floor(age / 60000))} min gammal`
+        : `${Math.max(0, Math.floor(age / 60000))} min gammal`}`,
   };
 }
 

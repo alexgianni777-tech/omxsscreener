@@ -360,6 +360,20 @@ export const ImportSessionResponse = zod.object({
   "createdAt": zod.coerce.date().nullable(),
   "lastImportAt": zod.coerce.date().nullable(),
   "sourceReports": zod.array(zod.object({
+  "marketContext": zod.object({
+  "SE": zod.object({
+  "dataAsOf": zod.string().nullable(),
+  "weather": zod.record(zod.string(), zod.unknown()).optional(),
+  "indexSnapshot": zod.record(zod.string(), zod.unknown()).optional(),
+  "marketTrendV2": zod.record(zod.string(), zod.unknown()).optional()
+}).optional(),
+  "US": zod.object({
+  "dataAsOf": zod.string().nullable(),
+  "weather": zod.record(zod.string(), zod.unknown()).optional(),
+  "indexSnapshot": zod.record(zod.string(), zod.unknown()).optional(),
+  "marketTrendV2": zod.record(zod.string(), zod.unknown()).optional()
+}).optional()
+}).optional(),
   "candidateWarnings": zod.array(zod.object({
   "identity": zod.string(),
   "message": zod.string()
@@ -706,6 +720,20 @@ export const ReimportSessionResponse = zod.object({
   "createdAt": zod.coerce.date().nullable(),
   "lastImportAt": zod.coerce.date().nullable(),
   "sourceReports": zod.array(zod.object({
+  "marketContext": zod.object({
+  "SE": zod.object({
+  "dataAsOf": zod.string().nullable(),
+  "weather": zod.record(zod.string(), zod.unknown()).optional(),
+  "indexSnapshot": zod.record(zod.string(), zod.unknown()).optional(),
+  "marketTrendV2": zod.record(zod.string(), zod.unknown()).optional()
+}).optional(),
+  "US": zod.object({
+  "dataAsOf": zod.string().nullable(),
+  "weather": zod.record(zod.string(), zod.unknown()).optional(),
+  "indexSnapshot": zod.record(zod.string(), zod.unknown()).optional(),
+  "marketTrendV2": zod.record(zod.string(), zod.unknown()).optional()
+}).optional()
+}).optional(),
   "candidateWarnings": zod.array(zod.object({
   "identity": zod.string(),
   "message": zod.string()
@@ -964,6 +992,20 @@ export const GetSessionResponse = zod.object({
   "createdAt": zod.coerce.date().nullable(),
   "lastImportAt": zod.coerce.date().nullable(),
   "sourceReports": zod.array(zod.object({
+  "marketContext": zod.object({
+  "SE": zod.object({
+  "dataAsOf": zod.string().nullable(),
+  "weather": zod.record(zod.string(), zod.unknown()).optional(),
+  "indexSnapshot": zod.record(zod.string(), zod.unknown()).optional(),
+  "marketTrendV2": zod.record(zod.string(), zod.unknown()).optional()
+}).optional(),
+  "US": zod.object({
+  "dataAsOf": zod.string().nullable(),
+  "weather": zod.record(zod.string(), zod.unknown()).optional(),
+  "indexSnapshot": zod.record(zod.string(), zod.unknown()).optional(),
+  "marketTrendV2": zod.record(zod.string(), zod.unknown()).optional()
+}).optional()
+}).optional(),
   "candidateWarnings": zod.array(zod.object({
   "identity": zod.string(),
   "message": zod.string()

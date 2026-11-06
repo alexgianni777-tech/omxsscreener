@@ -22,11 +22,12 @@ const WHY: Record<string, string> = {
 const SOURCE: Record<string, string> = { edgeai: "GitHub/EdgeAI", telegram: "Telegram", manual: "Manuell" };
 const unknown = "okänd";
 
-export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], stale = false, dataDateStatus, expectedDataDate }: {
+export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], stale = false, dataDateStatus, expectedDataDate, advisory }: {
   pick: DailyPick & { decision?: { status?: string | null; reasons?: readonly string[] | null } }; signal?: ResearchSignal;
   dataDate: string | null; quote?: QuoteResult; warnings?: readonly string[]; stale?: boolean;
   dataDateStatus?: "CURRENT" | "STALE" | "UNKNOWN" | "CONFLICT";
   expectedDataDate?: string | null;
+  advisory?: string;
 }) {
   const [, expireQuote] = useReducer(n => n + 1, 0);
   useEffect(() => {
@@ -100,13 +101,15 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
       <span className="font-mono font-medium tabular-nums">{signal?.maxHoldDays != null ? `${signal.maxHoldDays} handelsdagar` : "okänd"}</span>
     </div>
     <div className={q ? "mt-3 rounded-lg bg-muted/40 p-2 text-xs" : "mt-3 text-xs text-muted-foreground"} data-testid={`quote-${pick.candidateId}`}>
-      <div className="text-[11px] font-medium text-muted-foreground">{q ? "Aktuell kurs · manuellt hämtad" : "Aktuell kurs · ej hämtad"}</div>
+      <div className="text-[11px] font-medium text-muted-foreground">{q ? "Yahoo-kurs · manuellt hämtad, se källtid" : "Aktuell kurs · ej hämtad"}</div>
       {q ? <>
         <div className="mt-0.5 font-mono text-sm font-semibold">{q.price}</div>
+        {q.observedPrice && <div>Senast observerat {q.observedPrice} · ej verifierad aktuell kurs</div>}
         <div>{q.asOf}</div>
         <div className="text-muted-foreground">{q.source} · {q.status}</div>
       </> : <div className="mt-0.5 text-muted-foreground">As-of: okänd · ingen kurs hämtad</div>}
     </div>
+    {advisory && <p className="mt-2 text-xs text-muted-foreground">Rådgivande indextrend: {advisory} · inget entrygodkännande</p>}
     <details className="group mt-3 text-xs">
       <summary className="cursor-pointer select-none text-muted-foreground hover:text-foreground">Beslutsunderlag och datadetaljer</summary>
       <div data-testid={`guard-${pick.candidateId}`}>

@@ -249,7 +249,27 @@ export type SessionSourceReportDataDates = {
   US: string | null;
 };
 
+export type SourceMarketSnapshotWeather = { [key: string]: unknown };
+
+export type SourceMarketSnapshotIndexSnapshot = { [key: string]: unknown };
+
+export type SourceMarketSnapshotMarketTrendV2 = { [key: string]: unknown };
+
+export interface SourceMarketSnapshot {
+  /** @nullable */
+  dataAsOf: string | null;
+  weather?: SourceMarketSnapshotWeather;
+  indexSnapshot?: SourceMarketSnapshotIndexSnapshot;
+  marketTrendV2?: SourceMarketSnapshotMarketTrendV2;
+}
+
+export interface SourceMarketContext {
+  SE?: SourceMarketSnapshot;
+  US?: SourceMarketSnapshot;
+}
+
 export interface SessionSourceReport {
+  marketContext?: SourceMarketContext;
   candidateWarnings?: SessionSourceReportCandidateWarningsItem[];
   warnings?: string[];
   quarantinedIdentities?: string[];

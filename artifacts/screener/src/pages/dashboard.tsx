@@ -452,7 +452,7 @@ function TodaySessionPanel() {
             <div className="flex flex-wrap gap-3 text-xs">
               {/* OMXS30 value */}
               <span className="flex items-center gap-1 bg-muted/60 rounded-md px-2.5 py-1 font-mono font-semibold">
-                OMXS30 {formatNumber(marketWeather.omxsValue, 1)}
+                Historisk sessionsreferens OMXS30 {formatNumber(marketWeather.omxsValue, 1)} · ej live
               </span>
               {/* Trend */}
               <span className={`flex items-center gap-1 bg-muted/60 rounded-md px-2.5 py-1 font-medium ${trendColor}`}>
@@ -649,7 +649,7 @@ export function MarketIntelSection() {
   return (
     <section className="rounded-lg border border-border bg-card p-3 sm:p-4" data-testid="market-weather">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold">Marknadsläge</h3>
+        <h3 className="text-sm font-semibold">Marknadsläge · separat omvärldsdata</h3>
         <p className="text-xs font-mono" data-testid="text-market-weather-summary">
           {isLoading ? <span className="text-muted-foreground">Läser marknadsläge…</span>
             : !data?.fearGreed ? <span className="text-muted-foreground">Fear &amp; Greed saknas</span>

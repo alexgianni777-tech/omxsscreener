@@ -939,6 +939,8 @@ components:
       type: object
       required: [source, fingerprint, signalDate, reportDate, generatedAt, dataDates, importedAt]
       properties:
+        marketContext:
+          $ref: "#/components/schemas/SourceMarketContext"
         candidateWarnings:
           type: array
           items:
@@ -982,6 +984,30 @@ components:
               type: [string, "null"]
             US:
               type: [string, "null"]
+
+    SourceMarketContext:
+      type: object
+      properties:
+        SE:
+          $ref: "#/components/schemas/SourceMarketSnapshot"
+        US:
+          $ref: "#/components/schemas/SourceMarketSnapshot"
+
+    SourceMarketSnapshot:
+      type: object
+      required: [dataAsOf]
+      properties:
+        dataAsOf:
+          type: [string, "null"]
+        weather:
+          type: object
+          additionalProperties: true
+        indexSnapshot:
+          type: object
+          additionalProperties: true
+        marketTrendV2:
+          type: object
+          additionalProperties: true
 
     ErrorResponse:
       type: object

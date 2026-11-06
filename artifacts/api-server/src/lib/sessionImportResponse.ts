@@ -17,6 +17,7 @@ export function parseSessionImportResponse(
     source: session.source ?? null,
     createdAt: session.createdAt ?? null,
     lastImportAt: session.lastImportAt ?? null,
+    sourceReports: Array.isArray(session.sourceReports) ? session.sourceReports : [],
     marketWeather: {
       omxsValue: session.omxsValue,
       perf5d: session.perf5d,

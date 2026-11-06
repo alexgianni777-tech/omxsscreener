@@ -30,7 +30,8 @@ export function edgeAiDataQuality(setup: Record<string, unknown>, dataAsOf: stri
  * guessed subset. No claim of an official close is inferred from silence.
  */
 export function textReportQuality(raw: string, reportDate: string, tickers: string[]) {
-  const dates = [...raw.matchAll(/(?:dataAsOf|datadag|dataDate|marknadsdag)\s*(?:[:=·]|är)?\s*(\d{4}-\d{2}-\d{2})/gi)]
+  const dates = [...raw.matchAll(/(?:dataAsOf|datadag|dataDate|marknadsdag)\s*(?:[:=·]|är)?\s*(\d{4}-\d{2}-\d{2})/gi),
+    ...raw.matchAll(/(?:baserad|baserat|baserade)\s+på\s+(\d{4}-\d{2}-\d{2})(?:-|\s+)(?:stängning|stängningen|stängningskurser)/gi)]
     .map(match => match[1]);
   const validDates = [...new Set(dates)].filter(d =>
     new Date(`${d}T12:00:00Z`).toISOString().slice(0, 10) === d && d <= reportDate);

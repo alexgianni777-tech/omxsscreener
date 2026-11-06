@@ -29,7 +29,7 @@ test("different dates warn without modifying plans or claiming delivery failure"
 });
 test("missing market date or receipt never borrows the report date or claims synchronization", () => {
   const html = render([receipt("telegram", {dataDates:{SE:null,US:null},importedAt:"not-a-time"})]);
-  assert.ok(html.includes("Marknadsdag SE okänd / USA okänd"));
+  assert.ok(html.includes("Marknadsdag SE okänd / USA ingår inte i svensk rapport"));
   assert.ok(html.includes("Importerad okänd"));
   assert.ok(html.includes("GitHub/EdgeAI: Importkvittens saknas"));
   assert.ok(html.includes("Synkronisering ej verifierad"));

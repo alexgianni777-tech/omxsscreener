@@ -136,6 +136,9 @@ router.post(
       return;
     }
     const { omxsValue, perf5d, perf1m, perf3m, marketRsi } = mw;
+    if (setups.length > 0 && importReport.marketContext?.SE) {
+      importReport.marketContext.SE.weather = { ...mw, rsi: marketRsi, trendLabel: se.regime?.label ?? null };
+    }
 
     // 3. Map setups → candidates (SE + US combined), rank each market separately.
     //    mapEdgeAiSetup is the single shared mapping function (see edgeAiMapping.ts) —

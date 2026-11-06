@@ -123,6 +123,9 @@ async function runImport(date: string): Promise<boolean> {
   const mw = seSetups.length > 0
     ? await fetchOmxsMarketWeather(yf, String(se?.dataAsOf ?? ""))
     : { omxsValue: 0, perf5d: 0, perf1m: 0, perf3m: 0, marketRsi: 0 };
+  if (seSetups.length > 0 && importReport.marketContext?.SE) {
+    importReport.marketContext.SE.weather = { ...mw, rsi: mw.marketRsi, trendLabel: se?.regime?.label ?? null };
+  }
 
   const rankCounterSE: Record<string, number> = {};
   const rankCounterUS: Record<string, number> = {};

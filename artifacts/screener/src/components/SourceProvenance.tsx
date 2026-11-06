@@ -1,5 +1,6 @@
 import React from "react";
 import type { SessionSourceReport } from "@workspace/api-client-react";
+import { SourceMarketEvidence } from "./SourceMarketEvidence";
 
 function day(value?: string | null): string {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return "okänd";
@@ -35,10 +36,10 @@ export function SourceProvenance({ reports = [], context }: { reports?: readonly
   const b = sources[1].latest;
   const alignment = !verified || !completeDates
     ? "Synkronisering ej verifierad – importstatus eller datadag saknas/är avvisad."
-    : a!.reportDate !== b!.reportDate || a!.dataDates.SE !== b!.dataDates.SE
+    : a!.dataDates.SE !== b!.dataDates.SE
       ? "Olika rapport-/datadagar – källorna är inte datumssynkroniserade."
-      : "Rapport- och datadag överensstämmer; källorna kan ändå ha olika signaler.";
-  const alignWarn = !alignment.startsWith("Rapport- och datadag överensstämmer");
+      : "Sveriges datadag överensstämmer; källorna kan ändå ha olika signaler.";
+  const alignWarn = !alignment.startsWith("Sveriges datadag överensstämmer");
   return <div data-testid="source-provenance" className="mt-3 rounded-lg bg-muted/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
     {context && <p className="mb-1 font-medium text-foreground">Källstatus · {context}</p>}
     <div className="flex flex-wrap gap-x-4 gap-y-1">
@@ -52,10 +53,17 @@ export function SourceProvenance({ reports = [], context }: { reports?: readonly
       {sources.map(s => <p key={`${s.source}-dates`} className="break-words">
         <span className="font-medium text-foreground">{s.source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"}</span>
         {" · "}Rapportdatum {day(s.accepted?.reportDate)}
-        {" · "}Marknadsdag SE {day(s.accepted?.dataDates?.SE)} / USA {day(s.accepted?.dataDates?.US)}
+        {" · "}Marknadsdag SE {day(s.accepted?.dataDates?.SE)} / USA {s.source === "telegram" ? "ingår inte i svensk rapport" : day(s.accepted?.dataDates?.US)}
          {" · "}Senast lyckad import: {importTime(s.accepted?.importedAt)}
       </p>)}
     </div>
+    <details className="mt-1">
+      <summary className="cursor-pointer">Källornas separata indexunderlag och rådgivande trend</summary>
+      {sources.map(s => s.accepted ? <section key={s.source} className="mt-2">
+        <p className="font-medium">{s.source === "telegram" ? "Telegram" : "GitHub/EdgeAI"}</p>
+        <SourceMarketEvidence receipt={s.accepted} />
+      </section> : null)}
+    </details>
     {sources.filter(s => s.latest?.status === "FAILED").map(s => <p key={`${s.source}-error`} role="alert" className="mt-1 break-words font-medium text-destructive">
       {s.source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"} · import avvisad: {s.latest?.error || "orsak okänd"}. Tidigare lyckat kvitto används endast som historik.
     </p>)}
@@ -69,6 +77,9 @@ export function SourceProvenance({ reports = [], context }: { reports?: readonly
       <p className="mt-1">Importens varningar gäller inte automatiskt varje aktie. Ej verifierad omfattning kräver försiktighet; endast säkert kopplade konflikter märks på kortet.</p>
     </details>)}
     <p data-testid="source-date-alignment" className={alignWarn ? "mt-1 font-semibold text-amber-700" : "mt-1"}>{alignment}</p>
+    {a?.reportDate && b?.reportDate && a.reportDate !== b.reportDate && <p className="mt-1">
+      Olika rapportdatum: Telegram {day(a.reportDate)}, EdgeAI {day(b.reportDate)}. Marknadsdag jämförs separat för Sverige; USA ingår inte i Telegram.
+    </p>}
     {verified && completeDates && alignWarn && <p className="mt-1 text-amber-700 dark:text-amber-400">
       Telegram: rapport {day(a!.reportDate)}, data {day(a!.dataDates.SE)} · EdgeAI: rapport {day(b!.reportDate)}, data {day(b!.dataDates.SE)}
     </p>}
@@ -82,7 +93,7 @@ export function SourceProvenance({ reports = [], context }: { reports?: readonly
         {sources.map(s => <p key={s.source} className="break-words">
           <span className="font-medium text-foreground">{s.source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"}</span>
           {" · "}{s.latest?.status === "FAILED" && s.accepted ? "Senast lyckad import: " : ""}
-          Rapportdatum {day(s.accepted?.reportDate)} · Marknadsdag Sverige {day(s.accepted?.dataDates?.SE)} · Marknadsdag USA {day(s.accepted?.dataDates?.US)} · Importerad {importTime(s.accepted?.importedAt)}
+          Rapportdatum {day(s.accepted?.reportDate)} · Marknadsdag Sverige {day(s.accepted?.dataDates?.SE)} · Marknadsdag USA {s.source === "telegram" ? "ingår inte i svensk rapport" : day(s.accepted?.dataDates?.US)} · Importerad {importTime(s.accepted?.importedAt)}
           {s.latest?.status === "FAILED" && <> · Senaste avvisade försök {importTime(s.latest.importedAt)}</>}
         </p>)}
         <p>Sparade kvitton, inte livekontroll av leverans eller kurs. Importtid visas i Stockholmstid. Datum utan verifierat kvitto visas som okända.</p>

@@ -14,3 +14,9 @@ Source-quality restrictions are a safety overlay, not permission to retune strat
 **Why:** The user observed unrelated import conflicts on individual cards and found the resulting blanket blocking unusable. Removing genuine uncertainty to generate more signals would be equally misleading.
 
 **How to apply:** Preserve global diagnostics once in source status, retain exact candidate-specific blockers, and evaluate saved recommendations using their original captured quality rather than a newer import's qualification.
+
+Keep source-specific market evidence separate from the legacy session-wide market-weather summary. Older receipts without their own weather remain unknown; do not reconstruct them from a summary or later import. Advisory trends never qualify a candidate.
+
+**Why:** The user requested independent Telegram/EdgeAI evidence without changing strategies or ranking. Legacy summary fields still serve existing calculations; replacing those calculations would exceed the approved scope.
+
+**How to apply:** Use each receipt's own market/date for source displays and compare the Swedish Telegram report only against Sweden. New optional source fields do not justify rewriting history or adding price polling.
