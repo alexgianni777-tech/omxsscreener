@@ -843,7 +843,8 @@ function CandidateRow({
             </div>
           )}
         
-        <LiveEntryGuard plan={candidate} quote={quote} signal={candidate} />
+        <LiveEntryGuard plan={candidate} quote={quote}
+          signal={{...candidate,sourceConflict:Boolean(candidate.importWarning)}} />
         {/* Metrics grid — labels adapt to EdgeAI vs manual */}
         <div className="grid grid-cols-3 gap-y-2 gap-x-4 text-xs">
           <div>

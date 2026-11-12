@@ -17,6 +17,8 @@ const STYLES: Record<EntryStatus, string> = {
   UNKNOWN: "text-muted-foreground",
 };
 export type SignalMetadata = ResearchEvidence & {
+  /** Set only from the API's exact, structured candidate quarantine match. */
+  sourceConflict?: boolean;
   qualification?: Qualification;
   review?: { status: string; reasons: string[] };
   dataQuality?: CandidateDataQuality | null;
@@ -43,7 +45,8 @@ export function LiveEntryGuard({ plan, quote, signal, now }: {
   }, [quote?.asOf, now]);
   const qualityWarning = sourceQualityReasons(signal?.signalSource, signal?.dataQuality)[0];
   const qualification = signal?.qualification ?? qualifyResearch({ ...signal, ...plan });
-  const warning = (signal?.review && signal.review.status !== "APPROVED"
+  const warning = (signal?.sourceConflict ? signal.importWarning || "Källkonflikt – ingen ny entry." : null) ||
+    (signal?.review && signal.review.status !== "APPROVED"
     ? signal.review.reasons.join(" ") || "BLOCKERAD – signalens datakontroll är underkänd." : null) ||
     qualityWarning || signal?.importWarning || (qualification.status !== "QUALIFIED"
       ? qualification.reasons[0] ?? `${qualification.status} – ingen kvalificerad entry.` : null);
@@ -61,14 +64,15 @@ export function LiveEntryGuard({ plan, quote, signal, now }: {
     MISSED_ENTRY: "Entry passerad – ingen entrybekräftelse",
     PLAN_BROKEN: "Plan bruten – ingen entrybekräftelse",
     STALE_PRICE: "För gammal kurs eller stängd marknad – ingen entrybekräftelse",
-    UNKNOWN: !hasPrice ? "Livekurs saknas – ingen entrybekräftelse"
+    UNKNOWN: signal?.sourceConflict ? "CONFLICT – BLOCKERAD, ingen ny entry"
+      : !hasPrice ? "Livekurs saknas – ingen entrybekräftelse"
       : warning ? "Signaldata behöver kontrolleras – ingen entrybekräftelse"
       : "Livekurs ej verifierad – ingen entrybekräftelse",
   }[assessment.status];
   return (
     <div data-testid="live-entry-guard" data-entry-status={assessment.status}
       className="mt-2 min-w-0 border-t border-border pt-2 text-xs leading-relaxed whitespace-normal break-words">
-      <p role="status" className={`font-medium ${STYLES[assessment.status]}`}>
+      <p role="status" className={`font-medium ${signal?.sourceConflict ? "text-destructive" : STYLES[assessment.status]}`}>
         {statusText}
       </p>
       <p className="text-muted-foreground">{BOARD_REVIEW_REQUIRED} · underliggande aktie, manuellt fempartsprotokoll krävs.</p>

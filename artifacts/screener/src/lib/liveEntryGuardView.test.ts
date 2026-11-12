@@ -7,6 +7,19 @@ import { qualifiedEdgeQuality } from "./sourceQuality.fixtures";
 
 const now = Date.parse("2026-10-02T12:00:00Z");
 const plan = { direction: "SHORT", entryPrice: 100, stopPrice: 105, targetPrice: 90, rr: 2 };
+test("exact source conflict is visible without a quote and outranks generic WATCH reasons only on that candidate",()=>{
+  const conflict="Isolerad ERIC-B: motstridiga planer för denna strukturerade signalidentitet.";
+  const signal={signalSource:"edgeai",sourceConflict:true,importWarning:conflict,
+    review:{status:"WARN",reasons:["Upstream-kvalificering ej verifierad."]}};
+  const blocked=renderToStaticMarkup(createElement(LiveEntryGuard,{plan,now,signal}));
+  assert.ok(blocked.includes("CONFLICT – BLOCKERAD, ingen ny entry"));
+  assert.equal((blocked.match(/Isolerad ERIC-B/g)??[]).length,1);
+  assert.ok(!blocked.includes('data-entry-status="READY"'));
+  const other=renderToStaticMarkup(createElement(LiveEntryGuard,{plan,now,
+    signal:{...signal,sourceConflict:false,importWarning:undefined}}));
+  assert.ok(!other.includes("CONFLICT – BLOCKERAD"));
+  assert.ok(!other.includes("ERIC-B"));
+});
 test("entry view renders separate status, both R/Rs, exact quote provenance and signal metadata", () => {
   const html = renderToStaticMarkup(createElement(LiveEntryGuard, {
     plan, now,
