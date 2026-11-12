@@ -3,7 +3,9 @@ export type CostEvidence = {
   fx:number; asOf:string; source:string; instrumentId:string; contractTermsVerified:boolean; marketState:string;
 };
 export function netRiskReward(e?:CostEvidence, now=Date.now()) {
-  if (!e || !e.contractTermsVerified || e.marketState!=="REGULAR" || !e.source.trim() || !e.instrumentId.trim() ||
+  if (!e || e.contractTermsVerified!==true || e.marketState!=="REGULAR" ||
+    typeof e.source!=="string" || !e.source.trim() || typeof e.instrumentId!=="string" || !e.instrumentId.trim() ||
+    typeof e.asOf!=="string" || !/T.*(?:Z|[+-]\d{2}:\d{2})$/.test(e.asOf) ||
     ![e.grossRiskKr,e.grossRewardKr,e.fx].every(n=>Number.isFinite(n)&&n>0) ||
     ![e.spreadCostKr,e.commissionKr,e.fundingKr].every(n=>Number.isFinite(n)&&n>=0) ||
     !Number.isFinite(Date.parse(e.asOf)) || Date.parse(e.asOf)>now || now-Date.parse(e.asOf)>300_000) return null;

@@ -161,7 +161,7 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
         {" · "}{quality.barSource === "RECONSTRUCTED_INTRADAY" ? "Rekonstruerad intradag – ej verifierad dagsslutkurs" : "Officiell dagsstängning ej självständigt verifierad"}
       </p>}
       <p className="mt-1 text-muted-foreground">Invalidation enligt ursprungsplan: stop {formatPrice(pick.stopPrice)}. Ingen planändring har gjorts.</p>
-      <RiskPanel plan={pick} />
+      <RiskPanel plan={pick} maxHoldDays={signal?.maxHoldDays} />
       <CashResearch ticker={pick.ticker} />
       <p className="mt-1 text-muted-foreground">{signal?.earningsKnowledge === "SIGNAL_TIME" && signal.earningsInDays != null
         ? `Källans rapportavstånd: ${signal.earningsInDays} dagar; verifiera rapporttid manuellt.`

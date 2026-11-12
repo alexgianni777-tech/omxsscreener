@@ -10,8 +10,9 @@ export function riskInR(p: Plan) {
   const risk = Math.abs(p.entryPrice - p.stopPrice);
   return { risk, rewardR: Math.abs(p.targetPrice - p.entryPrice) / risk };
 }
-export function RiskPanel({ plan, instrument = "UNDERLYING", netR, realizedR, costEvidence }: {
+export function RiskPanel({ plan, instrument = "UNDERLYING", netR, realizedR, costEvidence, maxHoldDays }: {
   plan: Plan; instrument?: "UNDERLYING" | "SHARE" | "PRODUCT"; netR?: number | null; realizedR?: number | null; costEvidence?:CostEvidence;
+  maxHoldDays?: number | null;
 }) {
   const r = riskInR(plan);
   return <details className="col-span-full mt-2 min-w-0 rounded border border-border p-2 text-xs break-words" data-testid="risk-panel">
@@ -29,5 +30,12 @@ export function RiskPanel({ plan, instrument = "UNDERLYING", netR, realizedR, co
       Detta är inte samma sak som realiserad netto-R ovan.</p>
     <p>Riskpolicy: max 20 % insats och max 4 % portföljrisk; 0,5–1 % är ett försiktighetsexempel.
       Utan verifierat kontokapital och maximal förlust är gränserna inte verifierade. Stop är ingen garanti mot gap/knockout.</p>
+    <p data-testid="risk-budget-status">NOT_VERIFIED – planerad stop-risk är inte verifierad maximal förlust.
+      Kapital, FX och verklig maximal förlust måste styrkas innan den absoluta riskgränsen kan kontrolleras.</p>
+    {plan.direction==="SHORT"&&<p>Blankning av aktien kan ge obegränsad förlust.
+      Detta är inte samma risk som köp av ett bearish miniinstrument.</p>}
+    <p>Tidsstopp: {typeof maxHoldDays==="number"&&Number.isInteger(maxHoldDays)&&maxHoldDays>0
+      ?`${maxHoldDays} handelsdagar enligt källan`:"ej verifierat"}.
+      Stoppets ATR-/tekniska beräkningsmetod verifieras inte av enbart den angivna prisnivån.</p>
   </details>;
 }

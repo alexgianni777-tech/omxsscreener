@@ -25,3 +25,11 @@ test("manual catalyst cases have requested dates/times and never claim confirmed
   assert.ok(html.includes("inte automatiskt verifierade"));
   assert.ok(html.includes("före USA-öppning"));
 });
+test("stop loss is not an absolute risk guarantee; known time stops remain separate from unlimited share-short risk",()=>{
+  const plan={direction:"SHORT",entryPrice:100,stopPrice:105,targetPrice:90};
+  const html=renderToStaticMarkup(React.createElement(RiskPanel,{plan,maxHoldDays:5}));
+  for(const text of ["NOT_VERIFIED","obegränsad förlust","5 handelsdagar enligt källan","max 20 %","max 4 %","0,5–1 %"])
+    assert.ok(html.includes(text),text);
+  const unknown=renderToStaticMarkup(React.createElement(RiskPanel,{plan,maxHoldDays:NaN}));
+  assert.ok(unknown.includes("Tidsstopp: ej verifierat"));
+});

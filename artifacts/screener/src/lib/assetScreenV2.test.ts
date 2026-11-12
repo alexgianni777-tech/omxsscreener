@@ -65,6 +65,10 @@ test("net RR needs complete fresh instrument costs; capital limits never pass un
   assert.equal(netRiskReward({...costs,fx:NaN},now.getTime()),null);
   assert.equal(netRiskReward({...costs,asOf:"2026-11-11T10:00:00Z"},now.getTime()),null);
   assert.equal(netRiskReward({...costs,contractTermsVerified:false},now.getTime()),null);
+  for(const patch of [{source:null},{instrumentId:undefined},{asOf:now.toISOString().slice(0,-1)},
+    {spreadCostKr:undefined},{contractTermsVerified:1}]){
+    assert.equal(netRiskReward({...costs,...patch} as any,now.getTime()),null);
+  }
   assert.equal(riskBudget(10000,2000,400,true),"PASS");
   assert.equal(riskBudget(10000,2001,400,true),"BLOCKED");
   assert.equal(riskBudget(10000,2000,401,true),"BLOCKED");
