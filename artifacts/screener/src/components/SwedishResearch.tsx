@@ -13,6 +13,7 @@ import { savedDataDate, quoteRequestTicker } from "../lib/researchQuote";
 import { trendAlignment } from "../lib/sourceMarketEvidence";
 import { SourceProvenance } from "./SourceProvenance";
 import { ResearchMarketSections, type MarketEvidenceSignal } from "./ResearchMarketSections";
+import { CashResearchRanking } from "./CashResearch";
 
 export function researchPicks(selection: SavedTop3Display): DailyPick[] {
   return selection.revision.picks.map(p => ({ ...p, market: p.market ?? "", source: p.source ?? "okänd", signalDate: p.signalDate ?? null }));
@@ -229,5 +230,6 @@ export function SwedishResearch({ latestReports }: { latestReports?: readonly Se
     {last.isError && <p role="alert" className="mt-2 text-xs text-amber-700">Status kunde inte hämtas.{" "}
       <button onClick={() => last.refetch()} className="underline" data-testid="button-retry-research">Försök igen</button></p>}
     {last.data?.warnings.map(w => <p key={w} role="status" className="mt-2 text-xs text-amber-700">{w}</p>)}
+    <CashResearchRanking entries={[...new Map(shown.map(p=>[`${p.market}:${p.ticker}`,{ticker:p.ticker,market:p.market}])).values()]} />
   </section>;
 }

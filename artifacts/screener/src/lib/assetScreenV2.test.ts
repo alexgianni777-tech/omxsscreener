@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { marketRegime, qualifyResearch } from "./researchQualification";
 import { cashResearch } from "./cashResearch";
+import {cashTestEvidence} from "./cashResearch.testFixtures";
 import { netRiskReward,riskBudget } from "./riskCostPlan";
 import { assessLiveEntry } from "./liveEntryGuard";
 const now=new Date("2026-11-12T10:00:00Z");
@@ -45,17 +46,13 @@ test("index SMA requires one timestamped market/source identity and rejects conf
 });
 test("cash classifications never fabricate inputs or produce a trading qualification",()=>{
   assert.equal(cashResearch().status,"DATA_MISSING");
-  const data:any={cash:100,shortTermInvestments:20,interestBearingDebt:50,fcf:10,previousFcf:8,
-    interestCoverage:4,previousCoverage:3,earningsGrowth:1,valuationMultiple:10,trend:"BULLISH",
-    currency:"SEK",period:"2026-09-30",previousPeriod:"2025-09-30",source:"TEST FIXTURE ONLY",
-    publishedAt:"2026-10-20T08:00:00Z",asOf:"2026-11-11T08:00:00Z",provenanceVerified:true};
+  const data=cashTestEvidence();
   assert.equal(cashResearch(data,now.getTime()).netCash,70);
   assert.equal(cashResearch(data,now.getTime()).classification,"CASH STRONG");
   assert.equal(cashResearch(data,now.getTime()).status,"RESEARCH");
-  assert.equal(cashResearch({...data,interestBearingDebt:NaN},now.getTime()).status,"DATA_MISSING");
-  assert.equal(cashResearch({...data,provenanceVerified:false},now.getTime()).status,"DATA_MISSING");
-  assert.equal(cashResearch({...data,cash:1,shortTermInvestments:0,fcf:-5,previousFcf:2,
-    interestCoverage:0.5,previousCoverage:2,earningsGrowth:-1,trend:"BEARISH"},now.getTime()).classification,"CASH WEAK");
+  assert.equal(cashResearch({...data,balance:{...data.balance!,interestBearingDebt:NaN}},now.getTime()).status,"DATA_MISSING");
+  assert.equal(cashResearch({...data,balance:{...data.balance!,source:{...data.balance!.source,kind:"MANUAL_UNVERIFIED"}}},now.getTime()).status,"DATA_MISSING");
+  assert.equal(cashResearch(cashTestEvidence(true),now.getTime()).classification,"CASH WEAK");
 });
 test("net RR needs complete fresh instrument costs; capital limits never pass unknown FX",()=>{
   assert.equal(netRiskReward(undefined,now.getTime()),null);
