@@ -17,7 +17,7 @@ Detta är fem analytiska roller i en simulerad styrelse, inte verkliga oberoende
 ## 2. Obligatoriska fält
 - Unik idé och tidsstämpel, underliggande bolag, ticker, land, aktieslag och källa/datagång.
 - Long/short, entry-trigger, invalidation/stop på *underliggande aktie*, mål och maximal innehavstid.
-- Rapportdatum: VERIFIED med källa, eller UNKNOWN => BLOCKED för ny order; blockera rapportnära affärer enligt policy.
+- Rapporter och kommande rapportdatum kontrolleras MANUELLT av styrelsen före order. Automatisk rapport-/kalenderdata får aldrig vara kvalificeringskrav i Asset Screen. Logga att kontrollen är genomförd, källa och eventuella risker; okänd automatisk uppgift ger MANUAL_REPORT_CHECK, inte teknisk BLOCKED-status.
 - ATR/volym/relativ styrka/regim. Ogiltig eller gammal data => BLOCKED.
 - Föreslagen insats i SEK, procent av aktuell total portfölj och aktiva positioner.
 - Risk i SEK vid korrekt stopp samt % av konto, inklusive korrelation. Felvänd stop => INVALID_STOP, **aldrig noll risk**.
@@ -29,7 +29,7 @@ Detta är fem analytiska roller i en simulerad styrelse, inte verkliga oberoende
 - Screener QUALIFIED = endast **kandidat**, aldrig godkänd order. Ställ aldrig status READY som kan misstas för genomförd styrelseprövning.
 - Max fem positioner i ordinarie portfölj, och utred byte före eventuell sjätte; 20 % kapital per position är inte samma sak som 4 % risk.
 - 4 % av totalkapital är absolut högsta *planerade* stop-risk, inte förväntad maximal förlust; gap och knockout kan ge större förlust. Lägre testnivå (0,5–1 %) tills positiv validerad expectancy.
-- Avsaknad av finansiell/rapportdata är DATA_MISSING, inte neutralt, och får inte automatiskt passera.
+- Saknad finansiell/rapportdata är DATA_MISSING och får aldrig anges som positivt verifierat rapportutfall; den ska inte sänka en teknisk screenerkandidats status/score. Styrelsens manuella rapportkontroll måste dokumenteras innan order enligt vår process.
 - Studs och Svagast är RESEARCH tills oberoende nettoresultat motiverar statusändring.
 - Bevara skillnaden mellan REAL, SIMULATED och NOT_TAKEN i journal/analys.
 - Ändra aldrig verifierad signalhistoria retroaktivt när nya data anländer.
@@ -39,7 +39,7 @@ Detta är fem analytiska roller i en simulerad styrelse, inte verkliga oberoende
 1. Kandidat med fem saknade styrelseutlåtanden förblir BOARD_REVIEW_REQUIRED även när alla tekniska villkor är QUALIFIED.
 2. Om en av fem roller anger NEJ blir status VETO även om fyra anger JA.
 3. Long entry 100, stop 110 och short entry 100, stop 90 ger INVALID_STOP, inte 0 risk eller godkännande.
-4. Okänd rapportdag eller färskhet => BLOCKED; EdgeAI-ATR utan bevisad källa => NOT_VERIFIED.
+4. Okänd rapportdag => MANUAL_REPORT_CHECK utan att blockera teknisk QUALIFIED; okänd eller för gammal kursdatadag => BLOCKED; EdgeAI-ATR utan bevisad källa => NOT_VERIFIED.
 5. Utan faktisk spread/FX/funding/produktdata får framåtblickande netto-R/R inte visas som ett exakt tal.
 6. Signerade beslut får inte föras in automatiskt från AI-utdata som om de var självständiga externa signaturer; de är dokumenterade perspektiv.
 7. Utförd order utan tidigare styrelsebeslut loggas som PROCESS_BREACH och kan inte godkännas retroaktivt.
