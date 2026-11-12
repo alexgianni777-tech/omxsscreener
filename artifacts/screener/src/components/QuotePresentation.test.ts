@@ -4,6 +4,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QuotePresentation } from "./QuotePresentation";
 import { LiveEntryGuard } from "./LiveEntryGuard";
+import {qualifiedEdgeQuality} from "../lib/sourceQuality.fixtures";
 const render = (props: React.ComponentProps<typeof QuotePresentation>) => renderToStaticMarkup(React.createElement(QuotePresentation, props));
 test("missing, malformed or fetched-only timestamps never imply a verified live quote", () => {
   for (const asOf of [null, undefined, "", "invalid"]) {
@@ -25,10 +26,12 @@ test("mobile captions wrap and core short plan assessment remains visible, not h
   const s = renderToStaticMarkup(React.createElement(LiveEntryGuard, {
     plan: { direction: "SHORT", entryPrice: 100, stopPrice: 105, targetPrice: 90, rr: 2 },
     quote: { livePrice: 99, asOf: "2026-10-02T11:59:00Z", marketState: "REGULAR" },
+    signal:{signalSource:"edgeai",dataQuality:qualifiedEdgeQuality,qualification:{status:"QUALIFIED",reasons:[]}},
     now: Date.parse("2026-10-02T12:00:00Z"),
   }));
   assert.ok(s.includes("min-w-0")); assert.ok(s.includes("break-words"));
-  assert.ok(s.includes('data-entry-status="READY"')); assert.ok(s.includes("original: 2,00")); assert.ok(s.includes("aktuellt: 1,50"));
+  assert.ok(s.includes('data-entry-status="UNKNOWN"')); assert.ok(!s.includes('data-entry-status="READY"'));
+  assert.ok(s.includes("original: 2,00")); assert.ok(s.includes("aktuellt: 1,50"));
   assert.ok(s.indexOf("Aktuellt R/R: 1,50") < s.indexOf("<details"));
   assert.ok(!s.includes("min-w-[320px]"));
 });

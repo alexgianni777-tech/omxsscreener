@@ -1,5 +1,6 @@
 import { RiskPanel } from "./RiskPanel";
 import { JournalAnalysis } from "./JournalAnalysis";
+import { executionAnalysis } from "../lib/journalAnalysis";
 import { useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -293,6 +294,7 @@ export function TradeJournal() {
               <tbody>
                 {shown.map((r) => {
                   const i = r.input;
+                    const verified=executionAnalysis(r);
                   return (
                     <tr key={r.id} className="border-t border-border/50" data-testid={`row-journal-${r.id}`}>
                       <td className="px-2 py-1">{r.signal.ticker} {r.signal.signalDate ?? "okänt"}</td>
@@ -305,7 +307,7 @@ export function TradeJournal() {
                       <td className="px-2 py-1">{i.instrumentKind ?? "–"} {i.side ?? ""}
                         {i.fillPrice != null && i.stopPrice != null && i.targetPrice != null && i.side &&
                           <RiskPanel plan={{ direction: i.side, entryPrice: i.fillPrice, stopPrice: i.stopPrice, targetPrice: i.targetPrice }}
-                            instrument={i.instrumentKind ?? "UNDERLYING"} netR={r.metrics.netR} />}
+                            instrument={i.instrumentKind ?? "UNDERLYING"} netR={verified.netR} />}
                       </td>
                       <td className="px-2 py-1">{when(i.entryTime)}</td>
                       <td className="px-2 py-1">{when(i.exitTime)}</td>
@@ -319,8 +321,8 @@ export function TradeJournal() {
                       <td className="px-2 py-1">{i.mode === "NOT_TAKEN" ? "–" : cost(i.slippageCostKr)}</td>
                       <td className="px-2 py-1">{i.mode === "NOT_TAKEN" ? "–" : cost(i.financingCostKr)}</td>
                       <td className="px-2 py-1">{i.mode === "NOT_TAKEN" ? "–" : cost(i.commissionKr)}</td>
-                      <td className="px-2 py-1">{num(r.metrics.grossR)}</td>
-                      <td className="px-2 py-1">{r.metrics.netR == null ? "okänt" : num(r.metrics.netR)}</td>
+                      <td className="px-2 py-1">{num(verified.grossR)}</td>
+                      <td className="px-2 py-1">{verified.netR == null ? "NOT_VERIFIED" : num(verified.netR)}</td>
                       <td className="px-2 py-1 whitespace-normal min-w-[12rem]">{i.notes}</td>
                     </tr>
                   );

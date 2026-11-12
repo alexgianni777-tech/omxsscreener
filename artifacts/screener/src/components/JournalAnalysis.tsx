@@ -2,6 +2,11 @@ import React from "react";
 import type { JournalRecord } from "@workspace/api-client-react";
 import { journalAnalysis } from "../lib/journalAnalysis";
 const fmt = (n: number | null | undefined) => n == null || !Number.isFinite(n) ? "okänt" : n.toLocaleString("sv-SE", { maximumFractionDigits: 2 });
+const reasons:Record<string,string>={
+  EXECUTION_NOT_VERIFIED:"Fill/exit, tid, antal eller FX ej verifierade",COSTS_NOT_VERIFIED:"Kostnader okända eller ogiltiga",
+  INVALID_STOP_OR_RISK:"Initial stop/risk ogiltig",NET_PNL_MISMATCH:"Netto-P&L motsäger underlaget",
+  RISK_MISMATCH:"Lagrad risk motsäger faktisk fill/stop",NET_R_MISMATCH:"Lagrad netto-R motsäger underlaget",
+};
 export function JournalAnalysis({ records, now }: { records: readonly JournalRecord[]; now?: number }) {
   const analysis = journalAnalysis(records, now);
   return <section className="mt-3 space-y-3 rounded border border-border p-3" data-testid="journal-analysis">
@@ -17,10 +22,30 @@ export function JournalAnalysis({ records, now }: { records: readonly JournalRec
     </dl>
     <dl className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
       <div><dt>Netto expectancy</dt><dd>{fmt(analysis.net.netExpectancy)} R</dd></div>
-      <div><dt>Profit Factor</dt><dd>{fmt(analysis.net.profitFactor)}</dd></div>
-      <div><dt>Max drawdown</dt><dd>{fmt(analysis.net.maxDrawdownR)} R</dd></div>
+      <div><dt>Profit Factor</dt><dd>{fmt(analysis.net.profitFactor)} · {analysis.net.profitFactorStatus}</dd></div>
+      <div><dt>Max drawdown</dt><dd>{fmt(analysis.net.maxDrawdownR)} R · {analysis.net.drawdownStatus}</dd></div>
       <div><dt>Evidens (n={analysis.net.n})</dt><dd>{analysis.net.status}</dd></div>
     </dl>
+    <p className="text-xs">Payoff: {analysis.net.payoffStatus}. Verifiering avser beräkningskonsistens i manuellt journalförda fills,
+      inte oberoende avstämning mot mäklare eller backtest. Lika exittider med blandade utfall ger okänd drawdown.</p>
+    {!!analysis.exclusions.length&&<details><summary className="cursor-pointer text-xs">Varför verkliga avslut exkluderats</summary>
+      {analysis.exclusions.map(item=><p key={item.reason} className="text-xs">{reasons[item.reason]??item.reason}: {item.count}</p>)}
+      <p className="text-xs">En post kan ha flera orsaker. Okänd separat spread/slippage ersätts inte med noll;
+        faktiska fills omfattar dessa priseffekter och de dras inte av igen.</p>
+    </details>}
+    <details><summary className="cursor-pointer text-xs">Nettoanalys per källa, modul, riktning och regim</summary>
+      <div className="mt-2 grid min-w-0 gap-2 sm:grid-cols-2">{(["source","module","direction","regime"] as const).map(dimension=>
+        <section key={dimension} className="min-w-0 text-xs break-words"><h4 className="font-semibold">
+          {{source:"Källa",module:"Modul",direction:"Signalriktning",regime:"Historisk regim"}[dimension]}</h4>
+          {!analysis.dimensions[dimension].length&&<p>NOT_VERIFIED – inga verifierade avslut.</p>}
+          {analysis.dimensions[dimension].map(group=><p key={group.key} className="mt-1">
+            {group.key==="WEAKEST"?"SVAGAST":group.key} · n={group.n} · {group.status}<br/>
+            Netto E[R] {fmt(group.netExpectancy)} · win rate {group.winRate==null?"okänd":`${fmt(group.winRate*100)} %`} ·
+            payoff {fmt(group.payoff)} · PF {fmt(group.profitFactor)} · DD {fmt(group.maxDrawdownR)} R
+            {group.drawdownStatus==="AMBIGUOUS_EXIT_ORDER"?" · exitordning ej verifierad":""}
+          </p>)}
+        </section>)}</div>
+    </details>
     <details><summary className="cursor-pointer text-xs">Källa / modul / signalriktning / historisk regim</summary>
       <div className="mt-2 grid gap-2 sm:grid-cols-2">{analysis.groups.map(g=><article key={g.key} className="min-w-0 rounded border p-2 text-xs break-words">
         <strong>{g.key}</strong><p>n={g.n} · {g.status}</p>
@@ -41,7 +66,7 @@ export function JournalAnalysis({ records, now }: { records: readonly JournalRec
           <strong>{r.record.signal.ticker} · {i.mode}</strong> · {i.instrumentKind ?? "typ okänd"} · {i.side ?? "sida okänd"}
           <p>Entry {i.entryTime ?? "okänd"} · fill {fmt(i.fillPrice)} · stop {fmt(i.stopPrice)} · mål {fmt(i.targetPrice)}</p>
           <p>Exit {i.exitTime ?? "okänd"} · exitpris {fmt(i.exitPrice)} · antal {fmt(i.quantity)} · prisvaluta {i.priceCurrency ?? "okänd"}</p>
-          <p>Brutto-P&amp;L {fmt(r.grossPnl)} SEK · netto-P&amp;L {fmt(r.netPnl)} SEK · netto-R {fmt(r.netR)}</p>
+           <p>Brutto-P&amp;L {fmt(r.grossPnl)} SEK · netto-P&amp;L {fmt(r.netPnl)} SEK · netto-R {fmt(r.netR)} · {r.verification}</p>
           <p>Spread {fmt(i.spreadCostKr)} · slippage {fmt(i.slippageCostKr)} · finansiering {fmt(i.financingCostKr)} · courtage {fmt(i.commissionKr)} SEK.</p>
           <p>Brutto beräknas från faktiska fills/antal/FX. Spread/slippage i fills dras inte av igen. Hävstång {fmt(i.leverage)} används inte som P&amp;L-multiplikator.</p>
           <p>MFE/MAE: ej tillgängligt; inga uppskattningar ur slutkurs.</p>

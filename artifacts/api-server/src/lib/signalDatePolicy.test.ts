@@ -14,7 +14,7 @@ function candidate(id: number, source: "telegram" | "edgeai", date = "2026-10-01
     rank: id, signalDate: date, signalSource: source, createdAt: now,
     price: 100, perf1m: 3, rs3m: 2, rsi: 50, pctB: 0.5, distFrom20dH: 1,
     edgeExpectancyR: 0.2, edgeSampleN: 100, signalAgeBars: 0, maxHoldDays: 10,
-    signalRsi: 50, signalGapPct: 0, volMultiplier: 1, volumeAsOf: "2026-09-30",
+    signalRsi: 50, signalGapPct: 0, volMultiplier: 1, volumeAsOf: "2026-10-01",
     earningsInDays: 30, earningsKnowledge: "SIGNAL_TIME",
     entryPrice: 100, stopPrice: 95, targetPrice: 110, rr: 2,
   } as any;
@@ -38,7 +38,7 @@ test("signal-day boundaries use Stockholm, not UTC", () => {
   assert.equal(stockholmSignalDate(new Date("2026-10-01T22:15:00Z")), "2026-10-02");
 });
 
-test("previous-close reports are received and can qualify for Top 3 without changing their source dates", () => {
+test("previous-close receipts retain their dates but cannot qualify without the newer evidence gates", () => {
   const candidates = [candidate(1, "telegram"), candidate(2, "edgeai")];
   const live = buildTop3LiveSelection({
     id: 123, date: today, source: "mixed", top3SnapshotAt: null, top3CutoffEvaluatedAt: null,
@@ -46,9 +46,9 @@ test("previous-close reports are received and can qualify for Top 3 without chan
   assert.equal(live.sourceReceipts.telegram.received, true);
   assert.equal(live.sourceReceipts.edgeai.received, true);
   assert.deepEqual(live.sourceReceipts.telegram.signalDates, ["2026-10-01"]);
-  assert.equal(live.picks.length, 2);
+  assert.equal(live.picks.length, 0);
   const selections = buildTop3SelectionSnapshot(candidates, 123, today, "mixed", now);
-  assert.equal(selections.filter((row) => row.selected).length, 2);
+  assert.equal(selections.filter((row) => row.selected).length, 0);
   assert.ok(candidates.every((row) => row.signalDate === "2026-10-01"));
 });
 
@@ -63,7 +63,7 @@ test("the lag exception does not bypass invalid volume, negative LONG edge or si
   }
 });
 
-test("manual earnings checks allow otherwise valid prior-close reports without fabricating calendar evidence", () => {
+test("manual notice and numeric days alone never fabricate report/regime/ATR approval", () => {
   for (const source of ["telegram", "edgeai"] as const) {
     for (const earnings of [
       { earningsKnowledge: "UNKNOWN", earningsInDays: null },
@@ -75,8 +75,8 @@ test("manual earnings checks allow otherwise valid prior-close reports without f
       const input = { ...candidate(1, source), ...earnings };
       const before = structuredClone(input);
       const decision = decideCandidate(input, reviewCandidate(input, source), today, now);
-      assert.equal(decision.status, "TRADEABLE");
-      assert.ok(decision.reasons.some((reason) => reason.startsWith("Rapportkalender kontrolleras manuellt")));
+      assert.notEqual(decision.status, "TRADEABLE");
+      assert.ok(decision.reasons.some((reason) => /ATR|SMA|REPORT|regim/i.test(reason)));
       assert.deepEqual(input, before);
     }
   }

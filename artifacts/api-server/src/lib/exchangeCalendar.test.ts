@@ -52,7 +52,10 @@ test("prior session is not itself a reason to mark a valid report stale; origina
     earningsInDays: null,
   };
   const before = structuredClone(candidate);
-  assert.equal(decideCandidate(candidate, {status: "APPROVED", reasons: []},
-    "2026-04-02", new Date("2026-04-07T08:00:00Z")).status, "TRADEABLE");
+  assert.equal(d1Freshness(candidate.volumeAsOf,"2026-04-07","SE").status,"CURRENT");
+  const decision=decideCandidate(candidate, {status: "APPROVED", reasons: []},
+    "2026-04-02", new Date("2026-04-07T08:00:00Z"));
+  assert.equal(decision.status,"BLOCKED","unknown report evidence still blocks despite a valid D−1 date");
+  assert.ok(decision.reasons.some(reason=>reason.includes("UNKNOWN_REPORT_DATE")));
   assert.deepEqual(candidate, before);
 });

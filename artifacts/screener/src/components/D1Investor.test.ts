@@ -36,7 +36,7 @@ test("unknown, unverified calendar and old market data cannot become active D−
     assert.ok(!html.includes("READY – entryvillkor"));
   }
 });
-test("missing manual earnings check is a neutral notice, not an automatic blocker, for LONG and SHORT", () => {
+test("manual notice stays visible but unknown report evidence never grants READY for LONG or SHORT", () => {
   for (const direction of ["LONG", "SHORT"]) {
     const p = { ...pick, direction, stopPrice: direction === "LONG" ? 95 : 105, targetPrice: direction === "LONG" ? 110 : 90 };
     const signal: any = { id: 1, ...p, signalSource: "edgeai", dataQuality: qualifiedEdgeQuality,
@@ -46,10 +46,10 @@ test("missing manual earnings check is a neutral notice, not an automatic blocke
     const html = renderToStaticMarkup(React.createElement(ResearchCard, {
       pick: p, signal, quote, dataDate: "2026-04-02", dataDateStatus: "CURRENT",
     }));
-    assert.ok(html.includes("READY – entryvillkor verifierade, inte en order"));
+    assert.ok(!html.includes("READY – entryvillkor verifierade, inte en order"));
+    assert.ok(html.includes("UNKNOWN_REPORT_DATE"));
     assert.ok(html.includes("Rapportkalender kontrolleras manuellt före orderläggning"));
     assert.ok(!html.includes("Rapportdatum ej verifierat – kontrollera manuellt"));
-    assert.ok(!html.includes("BLOCKERAD"));
     assert.equal(JSON.stringify({ p, signal }), before);
   }
 });

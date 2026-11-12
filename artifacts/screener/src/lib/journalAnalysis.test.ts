@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { executionAnalysis, journalAnalysis } from "./journalAnalysis";
+import React from "react";
+import {renderToStaticMarkup} from "react-dom/server";
+import {JournalAnalysis} from "../components/JournalAnalysis";
 export const execution: any = { id: "real", input: { mode: "REAL", instrumentKind: "SHARE", side: "LONG", entryTime: "2026-10-01T08:00:00Z",
   exitTime: "2026-10-01T09:00:00Z", fillPrice: 100, stopPrice: 95, targetPrice: 110, exitPrice: 110, quantity: 10,
   priceCurrency: "SEK", financingCostKr: 2, commissionKr: 8, spreadCostKr: 4, slippageCostKr: 3 },
@@ -63,4 +66,53 @@ test("summary excludes simulated/missed/unknown trades, counts flats and compute
   assert.equal(JSON.stringify(records), before);
   assert.equal(journalAnalysis([], now).payoff, null);
   assert.equal(journalAnalysis([execution], now).payoff, null);
+});
+
+test("missing costs and contradictory risk/net evidence have counted exclusion reasons, not spread double deductions",()=>{
+  const a=journalAnalysis([
+    execution,
+    {...execution,id:"cost",input:{...execution.input,commissionKr:null}},
+    {...execution,id:"risk",metrics:{...execution.metrics,riskCashKr:1}},
+    {...execution,id:"net",metrics:{...execution.metrics,netR:50}},
+    {...execution,id:"bad-spread",input:{...execution.input,spreadCostKr:-1}},
+    {...execution,id:"implicit-spread",input:{...execution.input,spreadCostKr:null,slippageCostKr:null}},
+  ],now);
+  assert.equal(a.sample,2);assert.equal(a.excluded,4);
+  const count=(reason:string)=>a.exclusions.find(e=>e.reason===reason)?.count;
+  assert.equal(count("COSTS_NOT_VERIFIED"),2);assert.equal(count("RISK_MISMATCH"),1);assert.equal(count("NET_R_MISMATCH"),1);
+  assert.equal(a.rows[0].grossR,2);
+});
+test("ambiguous simultaneous exits never invent a drawdown order, while gain-only profit factor/payoff stay unknown",()=>{
+  const loss={...execution,id:"loss",input:{...execution.input,exitPrice:95},
+    metrics:{riskCashKr:50,netPnlKr:-60,netR:-1.2}};
+  for(const rows of [[execution,loss],[loss,execution]]){
+    const r=journalAnalysis(rows,now);
+    assert.equal(r.net.maxDrawdownR,null);assert.equal(r.net.drawdownStatus,"AMBIGUOUS_EXIT_ORDER");
+  }
+  const r=journalAnalysis([execution],now);
+  assert.equal(r.net.profitFactorStatus,"NO_LOSS_OBSERVATIONS");assert.equal(r.net.profitFactor,null);
+  assert.equal(r.net.payoffStatus,"BOTH_SIDES_REQUIRED");assert.equal(r.net.payoff,null);
+});
+test("source/module/direction cohorts use only real net executions and never borrow a current regime or imported profit factor",()=>{
+  const records=["MOMENTUM","SQUEEZE","STUDS","WEAKEST"].map((bucket,index)=>({...execution,id:`module-${index}`,
+    signal:{...execution.signal,bucket,source:index%2?"edgeai":"telegram",direction:index%2?"SHORT":"LONG",
+      marketRegime:"BULLISH",edgeProfitFactor:99}}));
+  const a=journalAnalysis(records,now);
+  assert.equal(a.dimensions.module.length,4);
+  assert.deepEqual(a.dimensions.source.map(g=>[g.key,g.n]),[["edgeai",2],["telegram",2]]);
+  assert.deepEqual(a.dimensions.direction.map(g=>[g.key,g.n]),[["LONG",2],["SHORT",2]]);
+  assert.deepEqual(a.dimensions.regime.map(g=>g.key),["UNKNOWN"]);
+  const enough=journalAnalysis(Array.from({length:20},(_,i)=>({...execution,id:`enough-${i}`})),now);
+  assert.equal(enough.net.status,"DESCRIPTIVE_ONLY");
+  assert.equal(a.net.status,"INSUFFICIENT_DATA");
+});
+test("analysis render explains missing evidence, modes, unknown metrics and unverified historical regime",()=>{
+  const records=[execution,{...execution,id:"cost",input:{...execution.input,commissionKr:null}},
+    {...execution,id:"sim",input:{...execution.input,mode:"SIMULATED"}},
+    {...execution,id:"missed",input:{mode:"NOT_TAKEN"}}];
+  const html=renderToStaticMarkup(React.createElement(JournalAnalysis,{records,now}));
+  for(const word of ["INSUFFICIENT_DATA","NO_LOSS_OBSERVATIONS","NOT_VERIFIED","UNKNOWN","Kostnader okända",
+    "simulerade","uteblivna","inte oberoende avstämning"]){
+    assert.ok(html.includes(word),word);
+  }
 });

@@ -18,17 +18,18 @@ function visibleWhenClosed(html: string): string {
   }).join("");
 }
 
-test("research plan precedes thesis/statistics; unknown live entry and original values stay visible", () => {
+test("historical research plan precedes thesis/statistics; unknown live entry and original values stay visible", (context) => {
+  context.mock.timers.enable({apis:["Date"],now:Date.parse("2026-11-12T10:00:00Z")});
   const pick = { candidateId: 1, ticker: "NIBE-B.ST", source: "edgeai", market: "SE", direction: "LONG",
     category: "MOMENTUM", rank: 1, signalDate: "2026-10-28",
     entryPrice: 43.66, stopPrice: 42.05, targetPrice: 47.7, rr: 2.50931677018634,
     decision: { status: "TRADEABLE" } };
   const signal = { id: 1, ...pick, dataQuality: qualifiedEdgeQuality, signalSource: "edgeai", edgeWinRate: 0.6, edgeExpectancyR: 0.4, edgeSampleN: 80 };
   const before = JSON.stringify({ pick, signal });
-  const html = renderToStaticMarkup(React.createElement(ResearchCard, { pick, signal, dataDate: "2026-10-27" }));
+  const html = renderToStaticMarkup(React.createElement(ResearchCard, { pick, signal, dataDate: "2026-10-27",stale:true }));
   const visible = visibleWhenClosed(html);
   assert.ok(html.indexOf('aria-label="Entry ') < html.indexOf("Momentum-setup"));
-  for (const field of ["43,66", "42,05", "47,70", "2,51", "Aktuell D−1-signal · ej entrybesked", "AVVAKTA – entry ej bekräftad", "Aktuell kurs saknas"]) {
+  for (const field of ["43,66", "42,05", "47,70", "2,51", "HISTORISKT – ingen ny entry", "Aktuell kurs · ej hämtad", "As-of: okänd"]) {
     assert.ok(visible.includes(field), field);
   }
   assert.ok(!visible.includes("Träff hist."));

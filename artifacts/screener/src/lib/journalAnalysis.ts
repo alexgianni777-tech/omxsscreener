@@ -7,6 +7,7 @@ const instant = (s: string | null | undefined) => {
 };
 const close = (a: number, b: number) => finite(a) && finite(b) &&
   Math.abs(a - b) <= 1e-7 * Math.max(1, Math.abs(a), Math.abs(b));
+const label=(v:unknown)=>typeof v==="string"&&v.trim()?v.trim():"UNKNOWN";
 
 function netStatistics(rows: ReturnType<typeof executionAnalysis>[]) {
   const sample = rows.filter(r=>r.executed && r.netR!=null).sort((a,b)=>
@@ -17,19 +18,30 @@ function netStatistics(rows: ReturnType<typeof executionAnalysis>[]) {
   let equity=0,peak=0,drawdown=0;
   for (const value of values) { equity+=value; peak=Math.max(peak,equity); drawdown=Math.max(drawdown,peak-equity); }
   const average=(a:number[])=>a.length?sum(a)/a.length:null;
-  const profitFactor=losses.length?sum(wins)/Math.abs(sum(losses)):null;
-  const payoff=wins.length&&losses.length?average(wins)!/Math.abs(average(losses)!):null;
+  const sumsValid=[sum(wins),sum(losses)].every(finite);
+  const profitFactor=losses.length&&sumsValid?sum(wins)/Math.abs(sum(losses)):null;
+  const payoff=wins.length&&losses.length&&sumsValid?average(wins)!/Math.abs(average(losses)!):null;
   const valid=[equity,drawdown].every(Number.isFinite);
+  const exits=new Map<string,number[]>();
+  for(const row of sample){
+    const key=new Date(row.record.input.exitTime!).toISOString();
+    exits.set(key,[...(exits.get(key)??[]),row.netR!]);
+  }
+  const ambiguous=[...exits.values()].some(group=>group.some(r=>r>0)&&group.some(r=>r<0));
   return { n:sample.length, status:!sample.length||!valid?"NOT_VERIFIED":sample.length<20?"INSUFFICIENT_DATA":"DESCRIPTIVE_ONLY",
     netExpectancy:valid?average(values):null, winRate:sample.length?wins.length/sample.length:null,
     profitFactor:finite(profitFactor)?profitFactor:null, payoff:finite(payoff)?payoff:null,
-    maxDrawdownR:sample.length&&valid?drawdown:null };
+    maxDrawdownR:sample.length&&valid&&!ambiguous?drawdown:null,
+    profitFactorStatus:!sample.length?"NOT_VERIFIED":!losses.length?"NO_LOSS_OBSERVATIONS":!finite(profitFactor)?"NOT_VERIFIED":"DESCRIPTIVE_ONLY",
+    payoffStatus:!sample.length?"NOT_VERIFIED":!wins.length||!losses.length?"BOTH_SIDES_REQUIRED":!finite(payoff)?"NOT_VERIFIED":"DESCRIPTIVE_ONLY",
+    drawdownStatus:!sample.length||!valid?"NOT_VERIFIED":ambiguous?"AMBIGUOUS_EXIT_ORDER":"DESCRIPTIVE_ONLY" };
 }
 
 /** Execution evidence only. Never backfills from the signal's plan/outcome. */
 export function executionAnalysis(record: JournalRecord, now = Date.now()) {
   const i = record.input, m = record.metrics;
   const issues: string[] = [];
+  const exclusionReasons:string[]=[];
   const entryFx = i.priceCurrency === "SEK" ? 1 : i.priceCurrency === "USD" ? i.entryFxSek : null;
   const exitFx = i.priceCurrency === "SEK" ? 1 : i.priceCurrency === "USD" ? i.exitFxSek : null;
   const times = instant(i.entryTime) && instant(i.exitTime) &&
@@ -45,7 +57,8 @@ export function executionAnalysis(record: JournalRecord, now = Date.now()) {
   if (!evidence && i.mode !== "NOT_TAKEN") issues.push("Fill/exit, antal, tid, instrumentsida eller valuta/FX saknas/är ogiltiga.");
   if (!positive(i.stopPrice) && i.mode !== "NOT_TAKEN") issues.push("Faktisk stop saknas/är ogiltig; signalens stop används inte som ersättning.");
   if (!positive(i.targetPrice) && i.mode !== "NOT_TAKEN") issues.push("Faktiskt mål saknas; signalens mål används inte som ersättning.");
-  const costs = [i.financingCostKr, i.commissionKr].every(n => finite(n) && n >= 0);
+  const observationCosts=[i.spreadCostKr,i.slippageCostKr].every(n=>n==null||(finite(n)&&n>=0));
+  const costs = [i.financingCostKr, i.commissionKr].every(n => finite(n) && n >= 0)&&observationCosts;
   if (!costs && i.mode !== "NOT_TAKEN") issues.push("Finansiering/courtage okänt: inget verifierat nettoresultat.");
   if (i.mode !== "NOT_TAKEN" && (i.spreadCostKr == null || i.slippageCostKr == null))
     issues.push("Spread/slippage ej separat observerade; faktiska fills används, ingen kostnad uppskattas.");
@@ -56,9 +69,20 @@ export function executionAnalysis(record: JournalRecord, now = Date.now()) {
   const risk = validStop ? Math.abs(i.fillPrice! - i.stopPrice!) * i.quantity! * entryFx! : null;
   const netR = netPnl != null && positive(risk) && finite(m.riskCashKr) && close(risk, m.riskCashKr) &&
     finite(m.netR) && close(netPnl / risk, m.netR) ? m.netR : null;
+  const rawGrossR=positive(risk)&&grossPnl!=null?grossPnl/risk:null;
+  const grossR=finite(rawGrossR)?rawGrossR:null;
   if (computedNet != null && netPnl == null) issues.push("Nettofälten saknas eller motsäger exekveringsunderlaget.");
   if (netR == null && i.mode !== "NOT_TAKEN") issues.push("Netto-R ej verifierat: risk-/stopunderlag saknas eller är inkonsekvent.");
-  return { record, grossPnl, netPnl, netR, issues, executed: evidence && i.mode === "REAL" };
+  if(i.mode==="REAL"){
+    if(!evidence||grossPnl==null)exclusionReasons.push("EXECUTION_NOT_VERIFIED");
+    if(!costs)exclusionReasons.push("COSTS_NOT_VERIFIED");
+    if(!validStop||!positive(risk))exclusionReasons.push("INVALID_STOP_OR_RISK");
+    if(computedNet!=null&&netPnl==null)exclusionReasons.push("NET_PNL_MISMATCH");
+    if(positive(risk)&&(!finite(m.riskCashKr)||!close(risk,m.riskCashKr)))exclusionReasons.push("RISK_MISMATCH");
+    if(netPnl!=null&&positive(risk)&&(!finite(m.netR)||!close(netPnl/risk,m.netR)))exclusionReasons.push("NET_R_MISMATCH");
+  }
+  return { record, grossPnl, grossR, netPnl, netR, issues, exclusionReasons,
+    verification:netR==null?"NOT_VERIFIED":"ARITHMETICALLY_VERIFIED",executed: evidence && i.mode === "REAL" };
 }
 export function journalAnalysis(records: readonly JournalRecord[], now = Date.now()) {
   const rows = records.map(r => executionAnalysis(r, now));
@@ -71,13 +95,29 @@ export function journalAnalysis(records: readonly JournalRecord[], now = Date.no
   };
   const winR = mean(wins), lossR = mean(losses);
   const groups = new Map<string, typeof sample>();
+  const dimensions={source:new Map<string,typeof sample>(),module:new Map<string,typeof sample>(),
+    direction:new Map<string,typeof sample>(),regime:new Map<string,typeof sample>()};
   for (const r of sample) {
     // Journal contract has no historical SMA regime. Never fill it using today's index.
     const key = `${r.record.signal.source ?? "UNKNOWN"} · ${r.record.signal.bucket ?? "UNKNOWN"} · ${r.record.signal.direction ?? "UNKNOWN"} · regim UNKNOWN`;
     groups.set(key,[...(groups.get(key)??[]),r]);
+    const labels={source:label(r.record.signal.source),module:label(r.record.signal.bucket),
+      direction:["LONG","SHORT"].includes(r.record.signal.direction)?r.record.signal.direction:"UNKNOWN",regime:"UNKNOWN"};
+    for(const dimension of ["source","module","direction","regime"] as const){
+      const label=labels[dimension];
+      dimensions[dimension].set(label,[...(dimensions[dimension].get(label)??[]),r]);
+    }
   }
+  const summarize=(groups:Map<string,typeof sample>)=>[...groups].sort(([a],[b])=>a.localeCompare(b))
+    .map(([key,rows])=>({key,...netStatistics(rows)}));
+  const exclusions=new Map<string,number>();
+  for(const row of real.filter(row=>row.netR==null))
+    for(const reason of row.exclusionReasons)exclusions.set(reason,(exclusions.get(reason)??0)+1);
   return { rows, real: real.length, sample: sample.length, excluded: real.length - sample.length,
-    net:netStatistics(sample), groups:[...groups].map(([key,rows])=>({key,...netStatistics(rows)})),
+    net:netStatistics(sample), groups:summarize(groups),
+    dimensions:{source:summarize(dimensions.source),module:summarize(dimensions.module),
+      direction:summarize(dimensions.direction),regime:summarize(dimensions.regime)},
+    exclusions:[...exclusions].map(([reason,count])=>({reason,count})),
     winRate: sample.length ? wins.length / sample.length : null, winR, lossR,
     payoff: winR != null && lossR != null && lossR < 0 && finite(winR / Math.abs(lossR)) ? winR / Math.abs(lossR) : null,
     simulated: rows.filter(r => r.record.input.mode === "SIMULATED").length,

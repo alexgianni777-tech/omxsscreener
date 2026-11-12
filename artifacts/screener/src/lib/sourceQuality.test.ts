@@ -6,7 +6,8 @@ import { ResearchCard } from "../components/ResearchCard";
 import { LiveEntryGuard } from "../components/LiveEntryGuard";
 import { sourceQualityReasons } from "./sourceQuality";
 
-test("legacy unknown and WATCH/RESEARCH_ONLY prevent READY with otherwise fresh long/short prices", () => {
+test("legacy unknown and WATCH/RESEARCH_ONLY prevent READY with otherwise fresh long/short prices", (context) => {
+  context.mock.timers.enable({apis:["Date"],now:Date.parse("2026-11-04T15:00:00Z")});
   for (const direction of ["LONG", "SHORT"] as const) {
     const pick: any = { candidateId: 1, ticker: "TEST", market: "US", direction, source: "edgeai",
       signalDate: "2026-11-03", category: direction === "LONG" ? "MOMENTUM" : "WEAKEST",
@@ -19,7 +20,7 @@ test("legacy unknown and WATCH/RESEARCH_ONLY prevent READY with otherwise fresh 
     for (const dataQuality of [null, quality]) {
       const signal: any = { id: 1, ...pick, signalSource: "edgeai", dataQuality, earningsKnowledge: "SIGNAL_TIME", earningsInDays: 10 };
       const card = renderToStaticMarkup(React.createElement(ResearchCard, { pick, signal, quote, dataDate: "2026-11-03" }));
-      assert.ok(card.includes(dataQuality ? "BLOCKERAD" : "AVVAKTA"));
+      assert.ok(card.includes("BLOCKERAD"));
       assert.ok(!card.includes("READY – entryvillkor"));
       const guard = renderToStaticMarkup(React.createElement(LiveEntryGuard, { plan: pick, signal, quote }));
       assert.ok(guard.includes('data-entry-status="UNKNOWN"'));
