@@ -39,16 +39,33 @@ export function hasVerifiedAtr(e:ResearchEvidence):boolean {
 export function marketRegime(reports:readonly SourceReport[],market:string,dataDate:string|null,now=new Date()):Regime {
   const unknown:Regime={state:"UNKNOWN",source:null,dataDate};
   if(!dataDate||(market!=="SE"&&market!=="US"))return unknown;
+  let evidenceConflict=false;
   const snapshots=reports.filter(r=>r?.status==="SUCCESS").flatMap(r=>{
-    const s=object(object(r.marketContext)[market]),i=object(s.indexSnapshot);
+    const s=object(object(r.marketContext)[market]),i=object(s.indexSnapshot),t=object(s.marketTrendV2),metrics=object(t.metrics);
+    let sma50=i.sma50,sma200=i.sma200,source=i.source;
+    // Existing producer puts the actual SMA values in marketTrendV2.metrics.
+    // Reuse only matching price/index/day evidence, not its advisory approval.
+    if(sma50==null&&sma200==null&&t.status==="OK"&&t.asOf===dataDate&&
+      i.symbol===(market==="SE"?"^OMX":"^GSPC")&&t.indexSymbol===i.symbol&&
+      metrics.close===i.close&&positive(metrics.sma50)&&positive(metrics.sma200)&&
+      typeof t.source==="string"&&t.source.trim()){
+      sma50=metrics.sma50;sma200=metrics.sma200;source=`${i.source} / ${t.source}`;
+    }
+    if(positive(i.sma50)&&positive(i.sma200)&&t.status==="OK"&&t.asOf===dataDate&&
+      t.indexSymbol===i.symbol&&positive(metrics.sma50)&&positive(metrics.sma200)&&
+      (metrics.sma50!==i.sma50||metrics.sma200!==i.sma200)){evidenceConflict=true;return [];}
+    const dailyDate=i.asOf===dataDate&&i.priceType==="COMPLETED_DAILY_CLOSE";
+    const observedAt=dailyDate?i.fetchedAt:i.asOf;
+    const validTime=typeof observedAt==="string"&&/(Z|[+-]\d{2}:\d{2})$/.test(observedAt)&&
+      Number.isFinite(Date.parse(observedAt))&&Date.parse(observedAt)<=now.getTime()&&
+      signalSessionDate(new Date(observedAt),market)>dataDate;
     if(s.dataAsOf!==dataDate||object(r.dataDates)[market]!==dataDate||
-      !positive(i.close)||!positive(i.sma50)||!positive(i.sma200)||typeof i.source!=="string"||!i.source.trim()||
-      typeof i.asOf!=="string"||!Number.isFinite(Date.parse(i.asOf))||Date.parse(i.asOf)>now.getTime()||
-      marketDate(new Date(i.asOf),market)!==dataDate||signalSessionDate(new Date(i.asOf),market)<=dataDate)return [];
-    return [{close:i.close,sma50:i.sma50,sma200:i.sma200,source:i.source}];
+      !positive(i.close)||!positive(sma50)||!positive(sma200)||typeof i.source!=="string"||!i.source.trim()||
+      !validTime||(!dailyDate&&marketDate(new Date(observedAt as string),market)!==dataDate))return [];
+    return [{close:i.close,sma50,sma200,source:source as string}];
   });
   const f=snapshots[0];
-  if(!f||snapshots.some(s=>s.close!==f.close||s.sma50!==f.sma50||s.sma200!==f.sma200))return unknown;
+  if(evidenceConflict||!f||snapshots.some(s=>s.close!==f.close||s.sma50!==f.sma50||s.sma200!==f.sma200))return unknown;
   return {source:f.source,dataDate,state:f.close>f.sma50&&f.sma50>f.sma200?"BULLISH":
     f.close<f.sma50&&f.sma50<f.sma200?"BEARISH":"NEUTRAL"};
 }

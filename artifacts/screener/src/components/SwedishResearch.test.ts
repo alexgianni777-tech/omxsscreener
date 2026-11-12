@@ -18,6 +18,14 @@ const selection: any = { sessionId: 7, date: "2026-10-09", kind: "RECOMMENDATION
   dataDates: [{ source: "edgeai", signalDate: "2026-10-09", dataDate: "2026-10-08" }] };
 const render = (props: any) => renderToStaticMarkup(React.createElement(Router, { ssrPath: "/" },
   React.createElement(SwedishResearchContent, { selection, today: "2026-10-12", ...props })));
+test("newer imports are distinguished from the retained original selection, with an explicit research link",()=>{
+  const html=render({diagnosticDate:"2026-10-12",diagnosticSessionId:88});
+  assert.ok(html.includes("Nyare session inläst: 2026-10-12"));
+  assert.ok(html.includes("2026-10-09"));
+  assert.ok(html.includes('href="/sessions/88"'));
+  assert.ok(html.includes("Importdatum är inte marknadsdag eller entrybekräftelse"));
+  assert.ok(!render({diagnosticDate:selection.date}).includes("Nyare session inläst"));
+});
 test("failed or unfinished saved-selection lookup cannot promote preliminary research", () => {
   assert.equal(allowPreliminaryResearch(false, null), false);
   assert.equal(allowPreliminaryResearch(false, undefined), false);

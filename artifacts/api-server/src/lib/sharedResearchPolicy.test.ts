@@ -13,6 +13,36 @@ const receipt=(market="SE",state="BULLISH"):any=>({status:"SUCCESS",dataDates:{[
   marketContext:{[market]:{dataAsOf:"2026-11-11",indexSnapshot:{close:state==="BEARISH"?90:110,
     sma50:state==="BEARISH"?95:state==="NEUTRAL"?110:105,sma200:100,source:"DEMO TEST ONLY",
     asOf:market==="SE"?"2026-11-11T16:30:00Z":"2026-11-11T21:00:00Z"}}}});
+test("actual EdgeAI daily-date and trend-metrics schema retains evidenced SMA context for both markets",()=>{
+  for(const market of ["SE","US"]){
+    const r=receipt(market),s=r.marketContext[market],i=s.indexSnapshot;
+    delete i.sma50;delete i.sma200;
+    Object.assign(i,{symbol:market==="SE"?"^OMX":"^GSPC",asOf:"2026-11-11",
+      priceType:"COMPLETED_DAILY_CLOSE",fetchedAt:"2026-11-12T08:00:00Z"});
+    s.marketTrendV2={status:"OK",asOf:"2026-11-11",indexSymbol:i.symbol,source:"DEMO completed daily bars",
+      metrics:{close:110,sma50:105,sma200:100},tradeApproved:false,validatedAlpha:false};
+    assert.equal(marketRegime([r],market,"2026-11-11",now).state,"BULLISH");
+    for(const patch of [{indexSymbol:"OTHER"},{asOf:"2026-11-10"},{metrics:{close:111,sma50:105,sma200:100}},
+      {metrics:{close:110,sma50:NaN,sma200:100}},{status:"UNKNOWN"}]){
+      const bad=structuredClone(r);Object.assign(bad.marketContext[market].marketTrendV2,patch);
+      assert.equal(marketRegime([bad],market,"2026-11-11",now).state,"UNKNOWN");
+    }
+    for(const patch of [{fetchedAt:null},{fetchedAt:"2026-11-11T08:00:00Z"},
+      {fetchedAt:"2026-11-13T08:00:00Z"},{priceType:"INTRADAY"}]){
+      const bad=structuredClone(r);Object.assign(bad.marketContext[market].indexSnapshot,patch);
+      assert.equal(marketRegime([bad],market,"2026-11-11",now).state,"UNKNOWN");
+    }
+    const old=qualifyResearch({...base,market,dataDate:"2026-11-10"},marketRegime([r],market,"2026-11-11",now),now);
+    assert.equal(old.status,"BLOCKED");
+    const research=qualifyResearch({...base,market,signalSource:"edgeai",dataDate:"2026-11-11",
+      dataQuality:{eliteQualified:false,evidenceStatus:"WATCH",eliteStatus:"RESEARCH_ONLY",validatedEdge:false}},
+      marketRegime([r],market,"2026-11-11",now),now);
+    assert.notEqual(research.status,"QUALIFIED");
+    const conflicting=structuredClone(r);
+    Object.assign(conflicting.marketContext[market].indexSnapshot,{sma50:106,sma200:100});
+    assert.equal(marketRegime([r,conflicting],market,"2026-11-11",now).state,"UNKNOWN");
+  }
+});
 
 test("API and UI use the same implementation and statuses for identical SE/US inputs",async()=>{
   const wrapperPath="../../../screener/src/lib/researchQualification.ts";

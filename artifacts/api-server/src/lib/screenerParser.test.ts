@@ -12,6 +12,17 @@ MARKNADSVÄDER  OMXS30 3305.0 | 5d 2.7% | 1m 1.8% | 3m 8.9% | RSI 79
 
 const validCandidate = `1. SSAB 102.85 | RS3m 18.5 | 1m 9.4% | RSI 57 | %B 0.90 | ATR 3.3% | vol 0.2x | ↔20dH -0.3%
 plan(LONG): entry ~102.85 · stop 98.83 (1.2×ATR) · mål +1% 103.88 (R/R 0.26) · 1R 106.87`;
+test("reads the actual producer's common closing-data phrase, never the report date",()=>{
+  const raw=`${header}\nRapportdag: 2025-03-14 · all ranking/entry/stop/mål använder gemensam stängningsdata från 2025-03-13.\nDetta är avsiktligt tillåtet.\n${validCandidate}`;
+  const p=parseScreenerText(raw);
+  assert.equal(p.date,"2025-03-14");
+  assert.equal(p.dataAsOf,"2025-03-13");
+  assert.equal(p.candidates.length,1);
+  assert.equal(p.candidates[0].entryPrice,102.85);
+  assert.equal(parseScreenerText(raw.replace(".\nDetta",". Detta")).dataAsOf,"2025-03-13");
+  assert.throws(()=>parseScreenerText(raw+"\nDatadag: 2025-03-12"),/Motstridiga/);
+  assert.throws(()=>parseScreenerText(raw.replace("2025-03-13.","2025-99-13.")),/ogiltiga/);
+});
 
 test("parses a valid candidate while ignoring harmless numbered prose", () => {
   const parsed = parseScreenerText(`${header}

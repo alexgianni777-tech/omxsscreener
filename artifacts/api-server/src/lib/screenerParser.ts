@@ -66,7 +66,8 @@ function normalizeScreenerText(rawText: string): string {
     .replace(/`{3,}(?:[ \t]*(?:text|txt|plaintext|markdown|md)\b)?|~{3,}/gi, "\n")
     .replace(/═{2,}/g, "===")
     .replace(/(?<!\n)(?=={3,}\s*\d+\s*[·•])/g, "\n")
-    .replace(/(?<!\n)(?=(?:={3,}\s*)?\d+\.\s+[A-ZÅÄÖ])/g, "\n")
+    // A date ending "2026-11-10.\nDetta..." is not a numbered stock row.
+    .replace(/(?<![\n\d-])(?=(?:={3,}[ \t]*)?\d+\.[ \t]+[A-ZÅÄÖ])/g, "\n")
     .replace(/(?<!\n)\s*(?=plan\((?:LONG|SHORT)\):)/g, "\n")
     .split("\n")
     .map(line => line.trim())

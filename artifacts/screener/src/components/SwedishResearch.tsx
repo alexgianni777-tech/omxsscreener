@@ -19,11 +19,12 @@ export function researchPicks(selection: SavedTop3Display): DailyPick[] {
 }
 
 export function SwedishResearchContent({ selection, signals = [], reports = [], statusReports, quotes = {}, today, onRefresh, refreshing = false, quoteError = false,
-  diagnosticSignals, diagnosticReports, diagnosticDate, marketDates }: {
+  diagnosticSignals, diagnosticReports, diagnosticDate, diagnosticSessionId, marketDates }: {
   selection: SavedTop3Display; signals?: readonly ResearchSignal[]; reports?: readonly SessionSourceReport[]; quotes?: Record<string, QuoteResult>;
   today: string; onRefresh?: () => void; refreshing?: boolean; quoteError?: boolean;
   statusReports?: readonly SessionSourceReport[];
   diagnosticSignals?: readonly MarketEvidenceSignal[]; diagnosticReports?: readonly SessionSourceReport[]; diagnosticDate?: string;
+  diagnosticSessionId?: number;
   marketDates?: { SE: string; US: string };
 }) {
   const picks = researchPicks(selection);
@@ -57,6 +58,11 @@ export function SwedishResearchContent({ selection, signals = [], reports = [], 
       Senast giltiga sparade urval behålls tills ett nytt giltigt finns. Underlag från föregående stängning; inte ett köpbesked.
       {stale && " Gammalt eller ej styrkt datadatum: inget nytt köp utan egen liveverifiering."}
     </p>
+    {diagnosticDate && diagnosticDate>selection.date && <p role="status" className="mt-2 text-xs text-amber-800 dark:text-amber-300">
+      Nyare session inläst: {diagnosticDate}. Det sparade urvalet från {selection.date} visas fortfarande;
+      den nyare importen har inte gett ett nytt giltigt komplett urval. Importdatum är inte marknadsdag eller entrybekräftelse.
+      {!!diagnosticSessionId&&<Link href={`/sessions/${diagnosticSessionId}`} className="ml-1 underline">Visa senaste researchunderlaget</Link>}
+    </p>}
     <SourceProvenance reports={statusReports ?? reports} context={statusReports ? "senaste kvitton per källa" : "urvalets session"} />
     {quoteError && <p role="alert" className="mt-2 text-xs text-destructive">Kurshämtningen misslyckades. Planerna är oförändrade; försök igen eller kontrollera Avanza.</p>}
     <ResearchMarketSections picks={picks} signals={diagnosticSignals ?? signals} reports={diagnosticReports ?? reports}
@@ -151,6 +157,8 @@ export function PreliminaryResearchContent({ picks, sessionDate, signals = [], s
 
 /** The single prominent research surface for both markets. */
 export function SwedishResearch({ latestReports }: { latestReports?: readonly SessionSourceReport[] } = {}) {
+  const [refreshingReports,setRefreshingReports]=React.useState(false);
+  const [reportRefreshError,setReportRefreshError]=React.useState(false);
   const last = useGetLastValidTop3({ query: { queryKey: getGetLastValidTop3QueryKey(), retry: false } });
   const s = last.data?.selection ?? null;
   const canUsePreliminary = allowPreliminaryResearch(last.isSuccess, last.data?.selection);
@@ -183,9 +191,27 @@ export function SwedishResearch({ latestReports }: { latestReports?: readonly Se
   const map: Record<string, QuoteResult> = {};
   if (!quotes.isError) quotes.data?.forEach(q => { map[q.ticker] = q; });
   const loading = last.isLoading || (canUsePreliminary && (sessions.isLoading || detail.isLoading));
+  const refreshReports=async()=>{
+    setRefreshingReports(true);
+    try {
+      const results=await Promise.all([last.refetch(),sessions.refetch(),sourceStatus.refetch(),
+        ...(id>0?[detail.refetch()]:[]),...(latestId>0&&latestId!==id?[latestDetail.refetch()]:[])]);
+      setReportRefreshError(results.some(r=>r.isError));
+    } catch {setReportRefreshError(true);
+    } finally {setRefreshingReports(false);}
+  };
   return <section data-testid="swedish-research" aria-busy={loading} className="rounded-2xl bg-card p-4 sm:p-6 shadow-sm ring-1 ring-primary/20">
+    <div className="mb-2 flex justify-end">
+      <button type="button" onClick={()=>void refreshReports()} disabled={refreshingReports}
+        className="text-xs font-medium text-primary underline disabled:opacity-50" data-testid="button-refresh-reports">
+        {refreshingReports?"Kontrollerar rapporter…":"Kontrollera ny rapport"}
+      </button>
+    </div>
+    {reportRefreshError&&<p role="alert" className="mb-2 text-xs text-destructive">
+      Kunde inte uppdatera alla underlag. Det sparade urvalet behålls; ingen ny entry bekräftas.
+    </p>}
     {s ? <SwedishResearchContent selection={s} signals={(detail.data?.candidates ?? []) as ResearchSignal[]} reports={detail.data?.sourceReports ?? []} statusReports={sourceReports} quotes={map}
-      diagnosticSignals={latestDetail.data?.candidates} diagnosticReports={latestDetail.data?.sourceReports} diagnosticDate={latestDetail.data?.date}
+      diagnosticSignals={latestDetail.data?.candidates} diagnosticReports={latestDetail.data?.sourceReports} diagnosticDate={latestDetail.data?.date} diagnosticSessionId={latestId}
       today={stockholmToday()} marketDates={{ SE: signalSessionDate(new Date(), "SE"), US: signalSessionDate(new Date(), "US") }}
       onRefresh={params.tickers ? () => void quotes.refetch() : undefined}
       refreshing={quotes.isFetching} quoteError={quotes.isError} />

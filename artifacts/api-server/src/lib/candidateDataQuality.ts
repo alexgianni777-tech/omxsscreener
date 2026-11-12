@@ -31,10 +31,13 @@ export function edgeAiDataQuality(setup: Record<string, unknown>, dataAsOf: stri
  */
 export function textReportQuality(raw: string, reportDate: string, tickers: string[]) {
   const dates = [...raw.matchAll(/(?:dataAsOf|datadag|dataDate|marknadsdag)\s*(?:[:=·]|är)?\s*(\d{4}-\d{2}-\d{2})/gi),
-    ...raw.matchAll(/(?:baserad|baserat|baserade)\s+på\s+(\d{4}-\d{2}-\d{2})(?:-|\s+)(?:stängning|stängningen|stängningskurser)/gi)]
+    ...raw.matchAll(/(?:baserad|baserat|baserade)\s+på\s+(\d{4}-\d{2}-\d{2})(?:-|\s+)(?:stängning|stängningen|stängningskurser)/gi),
+    ...raw.matchAll(/\bgemensam\s+stängningsdata\s+från\s+(\d{4}-\d{2}-\d{2})\b/gi)]
     .map(match => match[1]);
-  const validDates = [...new Set(dates)].filter(d =>
-    new Date(`${d}T12:00:00Z`).toISOString().slice(0, 10) === d && d <= reportDate);
+  const validDates = [...new Set(dates)].filter(d => {
+    const time=Date.parse(`${d}T12:00:00Z`);
+    return Number.isFinite(time)&&new Date(time).toISOString().slice(0, 10) === d && d <= reportDate;
+  });
   if (validDates.length > 1 || validDates.length !== new Set(dates).size) {
     throw new Error("Motstridiga eller ogiltiga marknadsdatum i rapporten.");
   }

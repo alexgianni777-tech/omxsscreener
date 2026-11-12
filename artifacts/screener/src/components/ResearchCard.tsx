@@ -12,6 +12,7 @@ import { edgeAiMetrics, type EdgeAICandidateMetrics } from "../lib/edgeAiMetrics
 import { formatPrice } from "../lib/presentationNumbers";
 import { quoteLabels, researchQuoteForMarket } from "../lib/researchQuote";
 import { assessLiveEntry, LIVE_ENTRY_MAX_PRICE_AGE_MS } from "../lib/liveEntryGuard";
+import { summarizeResearchWarnings } from "../lib/researchWarnings";
 
 export type ResearchSignal = EdgeAICandidateMetrics & {
   review?: { status: string; reasons: string[] };
@@ -93,6 +94,8 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
   const entryLabel = priceSafe ? "BOARD REVIEW REQUIRED – inget ordergodkännande"
     : stale ? "HISTORISKT – ingen ny entry" : blocked ? "BLOCKERAD – ingen ny entry" : "AVVAKTA – entry ej bekräftad";
   const reasons = [...new Set([...noTradeReasons, ...warningList.slice(1)])];
+  const summary = summarizeResearchWarnings(reasons,{stale,dataDate,expectedDataDate});
+  const technicalReasons=summary.audit.filter(r=>r!==summary.primary&&!summary.details.includes(r));
   return <li data-testid={`research-card-${pick.candidateId}`} className="surface-lift min-w-0 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
       <strong className="font-mono text-lg font-semibold tracking-tight">{dailySymbol(pick.ticker, pick.market)}</strong>
@@ -111,10 +114,10 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
       className={`mt-3 rounded-lg px-3 py-2 text-xs ${decisionSafe ? "bg-success/10 text-success" : "bg-amber-500/10 text-amber-800 dark:text-amber-300"}`}>
       <p className="font-semibold" data-testid={`entry-status-${pick.candidateId}`}>{entryLabel}</p>
       {!decisionSafe && <>
-        <p className="mt-1 leading-relaxed">{reasons[0] || "Kontrollera datakvalitet och livekurs före eget beslut."}</p>
-        {reasons.length > 1 && <details className="mt-1">
+        <p className="mt-1 leading-relaxed">{summary.primary}</p>
+        {summary.details.length > 0 && <details className="mt-1">
           <summary className="cursor-pointer text-xs underline">Visa fler orsaker</summary>
-          <ul className="mt-1 list-inside list-disc">{reasons.slice(1).map(reason => <li key={reason}>{reason}</li>)}</ul>
+          <ul className="mt-1 list-inside list-disc">{summary.details.map(reason => <li key={reason}>{reason}</li>)}</ul>
         </details>}
       </>}
     </div>
@@ -134,6 +137,10 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
     {advisory && <p className="mt-2 text-xs text-muted-foreground">Rådgivande indextrend: {advisory} · inget entrygodkännande</p>}
     <details className="group mt-3 text-xs">
       <summary className="cursor-pointer select-none text-muted-foreground hover:text-foreground">Beslutsunderlag och datadetaljer</summary>
+      {technicalReasons.length>0&&<details className="mt-2">
+        <summary className="cursor-pointer text-muted-foreground">Originalbesked från kontrollerna</summary>
+        <ul className="mt-1 list-inside list-disc">{technicalReasons.map(reason=><li key={reason}>{reason}</li>)}</ul>
+      </details>}
       <div data-testid={`guard-${pick.candidateId}`}>
         <LiveEntryGuard plan={pick} quote={checkedQuote?.error ? null : checkedQuote ?? null}
           signal={{ signalDate: pick.signalDate, signalSource: pick.source, signalAgeBars: signal?.signalAgeBars,
