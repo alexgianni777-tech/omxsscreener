@@ -72,9 +72,9 @@ test("allowing negative SHORT expectancy retains all other risk and data gates",
     );
   }
   const unknownEarnings = { ...base, earningsKnowledge: "UNKNOWN" as const };
-  assert.equal(decideCandidate(
+  assert.notEqual(decideCandidate(
     unknownEarnings, reviewCandidate(unknownEarnings, "edgeai"), base.signalDate,
-  ).status, "BLOCKED");
+  ).status, "TRADEABLE"); // Other unverified evidence still prevents an entry; unknown report alone no longer blocks.
   const stale = { ...base, signalDate: "2020-01-01" };
   assert.equal(decideCandidate(stale, reviewCandidate(stale, "edgeai"), base.signalDate).status, "STALE");
 });

@@ -1,6 +1,7 @@
 import React, { useEffect, useReducer } from "react";
 import type { QuoteResult, CandidateDataQuality, SessionSourceReport } from "@workspace/api-client-react";
 import { marketRegime, qualifyResearch,verifiedUnderlyingAtr } from "../lib/researchQualification";
+import { manualReportNotice } from "@workspace/market-calendar/research-policy";
 import { CashResearch } from "./CashResearch";
 import { RiskPanel } from "./RiskPanel";
 import { BoardReview } from "./BoardReview";
@@ -53,7 +54,7 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
   const qualityReasons = sourceQualityReasons(pick.source, quality);
   const dateWarning = dataDateStatus === "UNKNOWN" ? "NO DATA – datadag eller börskalender ej verifierad; ingen entrybekräftelse."
     : dataDateStatus === "CONFLICT" ? "CONFLICT – datadag är inte föregående avslutade handelsdag; ingen entrybekräftelse." : null;
-  const blockedReasons = signal?.review?.status === "BLOCKED" ? signal.review.reasons :
+   const blockedReasons = signal?.review ? (signal.review.status === "BLOCKED" ? signal.review.reasons : []) :
     pick.decision?.status === "BLOCKED" || pick.decision?.status === "INVALID"
       ? pick.decision.reasons ?? [] : [];
   const warningList = [...new Set([dateWarning, ...blockedReasons, ...qualityReasons, ...warnings, signal?.importWarning].filter((value): value is string => !!value))];
@@ -109,7 +110,7 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
       Signal {pick.signalDate ?? unknown} · Datadag D−1 {dataDate ?? unknown}
     </p>
     <PlanGrid plan={pick} caption="Originalplan · D−1-underlag" />
-    <p className="mt-2 text-xs text-muted-foreground">Rapportkalender kontrolleras manuellt före orderläggning. Okänt datum eller rapport inom 5 handelsdagar hindrar kvalificering.</p>
+    <p className="mt-2 text-xs text-muted-foreground">{manualReportNotice({...signal,market:pick.market,signalDate:pick.signalDate})}</p>
     <div role={decisionSafe ? "status" : "alert"} data-testid={`decision-brief-${pick.candidateId}`}
       className={`mt-3 rounded-lg px-3 py-2 text-xs ${decisionSafe ? "bg-success/10 text-success" : "bg-amber-500/10 text-amber-800 dark:text-amber-300"}`}>
       <p className="font-semibold" data-testid={`entry-status-${pick.candidateId}`}>{entryLabel}</p>

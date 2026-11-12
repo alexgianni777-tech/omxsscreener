@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {candidateQualification,reviewCandidate,decideCandidate,screenCandidate} from "./screeningReview";
-import {qualifyResearch,marketRegime,boardArchive,BOARD_REVIEW_REQUIRED,hasVerifiedAtr} from "@workspace/market-calendar/research-policy";
+import {qualifyResearch,marketRegime,boardArchive,BOARD_REVIEW_REQUIRED,hasVerifiedAtr,manualReportNotice} from "@workspace/market-calendar/research-policy";
 import {mapEdgeAiSetup} from "./edgeAiMapping";
 import {buildTop3SelectionSnapshot} from "./top3SelectionPolicyCore";
 
@@ -121,4 +121,39 @@ test("manual protocol exports drafts/five perspectives, never AI approval; crede
   assert.match(full,/inte verifierat ordergodkännande/);assert.match(full,/Inga AI-signaturer/);
   assert.throws(()=>boardArchive("DEMO","",["password=DEMO_NOT_A_REAL_SECRET"],"2026-11-12"),/autentiseringsuppgifter/);
   assert.ok(full.startsWith(BOARD_REVIEW_REQUIRED));
+});
+test("manual report policy keeps strong SE/US long/short technical candidates qualified without report evidence",()=>{
+  for(const market of ["SE","US"])for(const direction of ["LONG","SHORT"])for(const signalSource of ["telegram","screener","edgeai"]){
+    const isShort=direction==="SHORT",ticker=market==="SE"?"SCA-B":"MSFT";
+    const atrEvidence={value:1,source:"DEMO DAILY OHLC",ticker,market,dataAsOf:"2026-11-11",
+      period:14,instrumentType:"UNDERLYING_EQUITY",unit:"PRICE",timeframe:"1d",method:"WILDER"};
+    const e={...base,ticker,market,direction,signalSource,rs3m:isShort?-2:2,perf1m:isShort?-2:2,
+      stopPrice:isShort?105:95,targetPrice:isShort?90:110,edgeExpectancyR:0.2,
+      earningsInDays:null,earningsKnowledge:"UNKNOWN" as const,
+      quarterlyReport:null,marginImproved:false,earningsGrowth:-10,
+      dataQuality:{dataAsOf:"2026-11-11",atrEvidence,entryEligible:true,eliteQualified:true,
+        validatedEdge:true,evidenceStatus:"VALIDATED",eliteStatus:"QUALIFIED"}};
+    const reports=[receipt(market,isShort?"BEARISH":"BULLISH")],context={reports};
+    const original=structuredClone(e),review=reviewCandidate(e,signalSource,now,context);
+    assert.equal(candidateQualification(e,signalSource,now,context).status,"QUALIFIED");
+    assert.equal(review.status,"APPROVED");
+    assert.equal(screenCandidate(e,review,e.signalDate,now,context).status,"TRADEABLE");
+    assert.equal(decideCandidate(e,review,e.signalDate,now,context).status,"WAIT");
+    assert.match(review.reasons.join(" "),/MANUELL RAPPORTKONTROLL KRÄVS.*ej verifierat/);
+    assert.deepEqual(e,original);
+  }
+});
+test("near reports only warn manually; bad price/stop, stale data and missing ATR still fail qualification",()=>{
+  const context={reports:[receipt()]},near={...base,earningsInDays:1};
+  assert.equal(candidateQualification(near,"telegram",now,context).status,"QUALIFIED");
+  assert.equal(reviewCandidate(near,"telegram",now,context).status,"APPROVED");
+  assert.match(manualReportNotice(near,now),/MANUELL RAPPORTKONTROLL KRÄVS.*inom 1 börshandelsdagar/);
+  for(const patch of [{entryPrice:NaN},{stopPrice:110},{volumeAsOf:"2026-11-10"},{atr:NaN}]){
+    const e={...near,...patch},review=reviewCandidate(e,"telegram",now,context);
+    assert.notEqual(candidateQualification(e,"telegram",now,context).status,"QUALIFIED");
+    assert.notEqual(screenCandidate(e,review,e.signalDate,now,context).status,"TRADEABLE");
+  }
+  const review=reviewCandidate({...near,price:NaN},"telegram",now,context);
+  assert.notEqual(screenCandidate({...near,price:NaN},review,near.signalDate,now,context).status,"TRADEABLE");
+  assert.match(decideCandidate(near,reviewCandidate(near,"telegram",now,context),near.signalDate,now,context).reasons[0],/BOARD REVIEW REQUIRED/);
 });

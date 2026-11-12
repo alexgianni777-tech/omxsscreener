@@ -1,14 +1,12 @@
 import { isAcceptedSignalDate } from "./signalDatePolicy";
-import { marketDate, signalSessionDate, observedReportDate, reportWindow, validMarketDate } from "@workspace/market-calendar";
+import { marketDate, signalSessionDate, validMarketDate } from "@workspace/market-calendar";
 import { resolveYahooTicker } from "./omxs30TickerMap";
-import { qualifyResearch,marketRegime,evidenceDataDate,hasVerifiedAtr,BOARD_REVIEW_REQUIRED,
+import { qualifyResearch,marketRegime,evidenceDataDate,hasVerifiedAtr,BOARD_REVIEW_REQUIRED,manualReportNotice,
   type SourceReport,type Qualification } from "@workspace/market-calendar/research-policy";
 
 export type ReviewStatus = "APPROVED" | "WARN" | "BLOCKED";
 
-/** Legacy provider-fetch switch. Strict stored-evidence validation below is
- * independent: do not enable new Yahoo requests while enforcing report safety.
- */
+/** Reports are manually reviewed by the board; no additional provider fetches. */
 export const AUTOMATIC_EARNINGS_CHECK_ENABLED = false;
 
 export type CandidateReviewInput = {
@@ -89,9 +87,6 @@ export function reviewCandidate(
   if (candidate.category === "STUDS" || candidate.category === "WEAKEST") {
     warnings.push("RESEARCH – modulen kräver oberoende verifierad netto-positiv expectancy före kvalificering.");
   }
-  const reportDate = observedReportDate(candidate.signalDate, candidate.earningsInDays, candidate.earningsKnowledge);
-  const report = reportWindow(reportDate, marketDate(now, candidate.market === "US" ? "US" : "SE"), candidate.market ?? "SE");
-  if (report.blocked) blockers.push(`${report.status} – ingen TRADEABLE/READY; manuell observation bevaras.`);
   if (candidate.ticker) {
     try { resolveYahooTicker(candidate.ticker, candidate.market); }
     catch (error) { blockers.push(error instanceof Error ? error.message : "Kräver instrumentverifiering."); }
@@ -166,7 +161,7 @@ export function reviewCandidate(
   }
 
   const reasons = [...blockers, ...warnings];
-  reasons.push(`Rapportkontroll: ${report.status} · observerat datum ${reportDate ?? "okänt"} · källa ${candidate.signalSource ?? source ?? "okänd"}.`);
+  reasons.push(manualReportNotice(candidate,now));
   // Explicit user policy: negative expectancy alone may not block SHORT.
   // This is information, not a warning that would turn approval into WAIT.
   if (isEdgeAi && isShort && edgeExpectancyR < 0) {
@@ -218,9 +213,6 @@ export function screenCandidate(
       reasons: [`EdgeAI-signalen har nått sin maxålder (${candidate.signalAgeBars}/${candidate.maxHoldDays} bars).`, ...review.reasons],
     };
   }
-  const storedReport = observedReportDate(candidate.signalDate,candidate.earningsInDays,candidate.earningsKnowledge);
-  const reportCheck = reportWindow(storedReport,marketDate(now,market),market);
-  if (reportCheck.blocked) return {status:"BLOCKED",reasons:[reportCheck.status,...review.reasons]};
 
   const invalid: string[] = [];
   if (!Number.isFinite(candidate.price) || candidate.price <= 0) {

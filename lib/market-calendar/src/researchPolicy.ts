@@ -10,6 +10,16 @@ export type ResearchEvidence = {
   volMultiplier?:number; earningsInDays?:number|null; earningsKnowledge?:string|null;
   review?:{status:string;reasons:string[]}; entryPrice?:number;stopPrice?:number;targetPrice?:number;
 };
+export const MANUAL_REPORT_NOTICE = "MANUELL RAPPORTKONTROLL KRÄVS";
+/** Advisory only: an unknown/near report is neither technical failure nor a score bonus. */
+export function manualReportNotice(e:ResearchEvidence,now=new Date()):string {
+  const date=observedReportDate(e.signalDate,e.earningsInDays,e.earningsKnowledge);
+  const window=reportWindow(date,marketDate(now,e.market==="US"?"US":"SE"),e.market??"SE");
+  const detail=window.status==="REPORT_WITHIN_5_TRADING_DAYS"
+    ? `Rapport inom ${window.tradingDays} börshandelsdagar – manuell prövning`
+    :window.status==="UNKNOWN_REPORT_DATE"?"Rapportdatum ej verifierat":`Observerat rapportdatum ${date}`;
+  return `${MANUAL_REPORT_NOTICE} – ${detail}. AG Invest-styrelsen kontrollerar rapport och rapporttid före varje affär; inte del av teknisk kvalitetspoäng.`;
+}
 const object=(v:unknown):Record<string,unknown> => v&&typeof v==="object"&&!Array.isArray(v)?v as Record<string,unknown>:{};
 const positive=(n:unknown):n is number=>typeof n==="number"&&Number.isFinite(n)&&n>0;
 const symbol=(s:unknown)=>typeof s==="string"?s.trim().toUpperCase().replace(/\.ST$/,"").replace(/\s+/g,"-"):"";
@@ -83,8 +93,6 @@ export function qualifyResearch(e:ResearchEvidence,regime:Regime={state:"UNKNOWN
     blocked.push("INVALID_PLAN – verifierad entry/stop/target och brutto-R/R ≥ 1,2 krävs.");
   if(e.review?.status==="BLOCKED")blocked.push(...e.review.reasons);
   else if(e.review?.status==="WARN")watch.push(...e.review.reasons);
-  const report=reportWindow(observedReportDate(e.signalDate,e.earningsInDays,e.earningsKnowledge),marketDate(now,market),e.market??"");
-  if(report.blocked)blocked.push(`${report.status} – rapportkontroll krävs före kvalificering.`);
   if(!positive(e.volMultiplier))blocked.push("Volymdata saknas/är ogiltig.");
   if(![e.perf1m,e.rs3m].every(n=>typeof n==="number"&&Number.isFinite(n)))blocked.push("Trendserien saknar ändliga perf1m/rs3m-värden.");
   const rsi=isEdge?e.signalRsi:e.rsi;

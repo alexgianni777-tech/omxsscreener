@@ -43,7 +43,9 @@ export function BoardReview({context}:{context:string}) {
       <input className={input} maxLength={1000} value={risk.source} onChange={e=>setRisk({...risk,source:e.target.value})}/></label>
     <p role="status" className="mt-2">{excessive?"BLOCKERAD – manuellt angivna belopp överskrider risktaket.":
       numeric?"Räkneexempel inom risktaken; belopp, FX och underlag är ännu inte systemverifierade.":"Riskunderlag saknas – ej godkänt."}</p>
-    <p className="mt-1">Kostnader/netto-R/R, rapportdatum och korrelation förblir okända tills verkligt underlag finns.
+    <p className="mt-1"><strong>MANUELL RAPPORTKONTROLL KRÄVS</strong> före varje affär, även vid okänt datum eller rapport inom fem handelsdagar.
+      Rapportkontrollen ingår i de fem uttryckliga styrelseutlåtandena, inte i teknisk kvalificering.
+      Kostnader/netto-R/R, rapportdatum och korrelation förblir okända tills verkligt underlag finns.
       Export arkiverar bara ditt utlåtande; den aktiverar inte TRADEABLE/READY och placerar aldrig order.
       Ingen automatisk lagring. Klistra inte in lösenord, tokens eller andra autentiseringsuppgifter.</p>
     <button type="button" onClick={archive} className="mt-2 rounded border border-border px-3 py-2 text-sm">Arkivera utlåtande (.txt)</button>
