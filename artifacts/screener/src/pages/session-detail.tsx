@@ -38,7 +38,7 @@ const DECISION_STYLE: Record<string, string> = {
 };
 
 const DECISION_LABEL: Record<string, string> = {
-  TRADEABLE: "Tradebar",
+  TRADEABLE: "Screening",
   WAIT: "Vänta",
   BLOCKED: "Blockerad",
   INVALID: "Ogiltig data",

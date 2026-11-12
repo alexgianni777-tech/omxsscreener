@@ -8,7 +8,7 @@ const base={ticker:"SCA-B",market:"SE",signalSource:"telegram",signalDate:"2026-
   volMultiplier:1,volumeAsOf:"2026-11-11",earningsInDays:20,earningsKnowledge:"SIGNAL_TIME" as const,
   entryPrice:100,stopPrice:95,targetPrice:110,rr:2,price:100};
 test("finite/range validation rejects bad market inputs without changing their audit values",()=>{
-  assert.equal(reviewCandidate(base,"telegram",now).status,"APPROVED");
+  assert.equal(reviewCandidate(base,"telegram",now).status,"WARN"); // No verified index regime in this fixture.
   for(const patch of [{perf1m:NaN},{perf1m:Infinity},{rs3m:-Infinity},{atr:0},{atr:NaN},{atr:-1},
     {volMultiplier:NaN},{volMultiplier:0},{volMultiplier:-2},{rsi:101},{rr:Infinity},{direction:"UNKNOWN"},{volumeAsOf:"2026-02-30"},
     {targetPrice:101,rr:2}]) {

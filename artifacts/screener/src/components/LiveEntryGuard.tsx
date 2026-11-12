@@ -1,5 +1,6 @@
 import React, { useEffect, useReducer } from "react";
 import { qualifyResearch, type Qualification, type ResearchEvidence } from "../lib/researchQualification";
+import {BOARD_REVIEW_REQUIRED} from "@workspace/market-calendar/research-policy";
 import { EntrySafety } from "./EntrySafety";
 import { DataFreshness } from "./DataFreshness";
 import { QuotePresentation } from "./QuotePresentation";
@@ -42,13 +43,16 @@ export function LiveEntryGuard({ plan, quote, signal, now }: {
   }, [quote?.asOf, now]);
   const qualityWarning = sourceQualityReasons(signal?.signalSource, signal?.dataQuality)[0];
   const qualification = signal?.qualification ?? qualifyResearch({ ...signal, ...plan });
-  const warning = (signal?.review?.status === "BLOCKED"
+  const warning = (signal?.review && signal.review.status !== "APPROVED"
     ? signal.review.reasons.join(" ") || "BLOCKERAD – signalens datakontroll är underkänd." : null) ||
     qualityWarning || signal?.importWarning || (qualification.status !== "QUALIFIED"
       ? qualification.reasons[0] ?? `${qualification.status} – ingen kvalificerad entry.` : null);
-  const assessment = warning
+  const priceAssessment = warning
     ? { ...assessLiveEntry(plan, null, now), status: "UNKNOWN" as const, reason: warning }
     : assessLiveEntry(plan, quote, now);
+  const assessment=priceAssessment.status==="READY"
+    ? {...priceAssessment,status:"UNKNOWN" as const,reason:BOARD_REVIEW_REQUIRED+" – prisvillkor är inte ordergodkännande."}
+    : priceAssessment;
   const age = signal?.signalAgeBars;
   const hasPrice = quote?.livePrice != null && Number.isFinite(quote.livePrice) && quote.livePrice > 0;
   const hasTime = !!quote?.asOf && Number.isFinite(Date.parse(quote.asOf));
@@ -67,6 +71,7 @@ export function LiveEntryGuard({ plan, quote, signal, now }: {
       <p role="status" className={`font-medium ${STYLES[assessment.status]}`}>
         {statusText}
       </p>
+      <p className="text-muted-foreground">{BOARD_REVIEW_REQUIRED} · underliggande aktie, manuellt fempartsprotokoll krävs.</p>
       {hasPrice && !hasTime && <p className="text-muted-foreground">Tidpunkt ej verifierad</p>}
       {assessment.liveRr != null && <p className="font-mono tabular-nums">Aktuellt R/R: {formatRR(assessment.liveRr)}</p>}
       {assessment.status === "READY" && assessment.driftR != null && assessment.driftR > 0 &&
@@ -83,12 +88,12 @@ export function LiveEntryGuard({ plan, quote, signal, now }: {
         {" · Setupålder "}{age != null && Number.isFinite(age) && age >= 0 ? `${age} bars vid rapporten` : "okänd"}
       </p>
       <p className="mt-2 text-xs text-muted-foreground">
-        TRADEABLE = screeningstatus, inte live-entrybesked. READY avser bara prisvillkoren, inte en order.
+        TRADEABLE = screeningstatus, inte live-entrybesked. Prisvillkor räcker inte: manuell styrelsegranskning och verifierat underlag krävs. Ingen automatisk order godkänns.
         {" "}Regel: öppen marknad, asOf högst 5 min, entry ±0,25R (R = original entry–stop), aktuellt R/R ≥1,2.
       </p>
       <DataFreshness reportDate={signal?.signalDate} source={signal?.signalSource}
         manual={signal?.signalSource === "manual"} />
-      <EntrySafety plan={plan} quote={warning ? null : quote} now={now} />
+      <EntrySafety plan={plan} quote={null} now={now} />
         </div>
       </details>
     </div>

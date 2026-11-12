@@ -11,3 +11,9 @@ Rapportkalendern kontrolleras manuellt före orderläggning. I den senare uttryc
 **Why:** Användaren bekräftade uttryckligen detta arbetsflöde och bad att befintliga funktioner bevaras utan mer rapporteringskomplexitet.
 
 **How to apply:** Kandidatvyer ska ge ett kompakt beslutsunderlag med tydlig källa, datum, originalplan och varningar. Journalen förblir frivillig. Lägg inte till automatisk exekvering eller fler godtyckliga signaler.
+
+Inför nya handelsbeslut kräver användaren uttrycklig manuell fempartsgranskning i chatten: Atlas strategi, Eleanor risk, Victor data, Harper marknad och Eric exekvering. Appen analyserar underliggande aktier. En QUALIFIED datasignal är inte ordergodkännande; utan verifierat underlag kvarstår BOARD REVIEW REQUIRED.
+
+**Why:** Användaren skärpte processen uttryckligen och förbjöd falska AI-signaturer eller automatiskt godkännande.
+
+**How to apply:** Dokumentera tes, entry, aktiestop, mål, verkliga kostnader/netto-R/R om känt, högst 20 % insats och 4 % planerad förlust, rapportstatus, FOMO, tidshorisont och korrelation. Ett manuellt utlåtande får arkiveras utan autentiseringsuppgifter; ifyllda formulär eller kryssrutor bevisar inte oberoende verifiering. Bevara tidigare utfall och håll screeningurval skilda från nya handelsbeslut.

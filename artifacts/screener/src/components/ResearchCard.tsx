@@ -1,8 +1,9 @@
 import React, { useEffect, useReducer } from "react";
 import type { QuoteResult, CandidateDataQuality, SessionSourceReport } from "@workspace/api-client-react";
-import { marketRegime, qualifyResearch } from "../lib/researchQualification";
+import { marketRegime, qualifyResearch,verifiedUnderlyingAtr } from "../lib/researchQualification";
 import { CashResearch } from "./CashResearch";
 import { RiskPanel } from "./RiskPanel";
+import { BoardReview } from "./BoardReview";
 import { sourceQualityReasons } from "../lib/sourceQuality";
 import { PlanGrid } from "./PlanGrid";
 import { LiveEntryGuard } from "./LiveEntryGuard";
@@ -56,15 +57,16 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
       ? pick.decision.reasons ?? [] : [];
   const warningList = [...new Set([dateWarning, ...blockedReasons, ...qualityReasons, ...warnings, signal?.importWarning].filter((value): value is string => !!value))];
   const regime = marketRegime(reports, pick.market, dataDate);
-  const baseQualification = qualifyResearch({ ...signal, category: pick.category, direction: pick.direction,
+  const atrProof=verifiedUnderlyingAtr(quality?.atrEvidence,pick.ticker,pick.market,dataDate);
+  const baseQualification = qualifyResearch({ ...signal, ticker:pick.ticker,dataQuality:quality,category: pick.category, direction: pick.direction,
     signalDate: pick.signalDate, signalSource: pick.source, market: pick.market, dataDate,
     entryPrice:pick.entryPrice,stopPrice:pick.stopPrice,targetPrice:pick.targetPrice }, regime);
   const qualification = warningList.length || stale || !dataDate || (dataDateStatus != null && dataDateStatus !== "CURRENT")
     ? { status: "BLOCKED" as const, reasons: [...warningList,...baseQualification.reasons] }
-    : baseQualification.status === "QUALIFIED" && pick.decision?.status !== "TRADEABLE"
-      ? { status: "WATCH" as const, reasons: ["Screeningkvalificering ej verifierad.",...baseQualification.reasons] }
+    : baseQualification.status === "QUALIFIED" && signal?.review?.status !== "APPROVED"
+      ? { status: "WATCH" as const, reasons: ["Backendkvalificering ej verifierad.",...baseQualification.reasons] }
       : baseQualification;
-  const screeningReady = pick.decision?.status === "TRADEABLE" && qualification.status === "QUALIFIED";
+  const screeningReady = signal?.review?.status === "APPROVED" && qualification.status === "QUALIFIED";
   const importWarning = warningList.join(" ") ||
     (stale ? "STALE eller obekräftat marknadsdatum – ingen entrybekräftelse" : !dataDate ? "Verifierat marknadsdatadatum saknas – ingen entrybekräftelse" : undefined);
   const m = signal ? edgeAiMetrics(signal) : null;
@@ -82,12 +84,13 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
     !screeningReady ? "Screeningkvalificering är inte verifierad; inget entrybesked." : null,
     guard && guard.status !== "READY" ? guard.reason : null,
   ].filter((reason): reason is string => !!reason);
-  const decisionSafe = screeningReady && !stale && !!dataDate && warningList.length === 0 &&
+  const priceSafe = screeningReady && !stale && !!dataDate && warningList.length === 0 &&
     guard?.status === "READY";
+  const decisionSafe = false; // Manual board/chat evidence is not verified by this UI.
   const blocked = stale || dataDateStatus === "CONFLICT" || (!!quality && qualityReasons.length > 0) || warningList.some(w => w.startsWith("Källkonflikt") || w.startsWith("Flera planer/")) ||
     signal?.review?.status === "BLOCKED" || (!!pick.decision?.status && !screeningReady) ||
     guard?.status === "PLAN_BROKEN" || guard?.status === "MISSED_ENTRY";
-  const entryLabel = decisionSafe ? "READY – entryvillkor verifierade, inte en order"
+  const entryLabel = priceSafe ? "BOARD REVIEW REQUIRED – inget ordergodkännande"
     : stale ? "HISTORISKT – ingen ny entry" : blocked ? "BLOCKERAD – ingen ny entry" : "AVVAKTA – entry ej bekräftad";
   const reasons = [...new Set([...noTradeReasons, ...warningList.slice(1)])];
   return <li data-testid={`research-card-${pick.candidateId}`} className="surface-lift min-w-0 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
@@ -141,6 +144,9 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
       <p className="mt-2 text-sm leading-relaxed text-foreground">{WHY[pick.category] ?? `Setup ${pick.category} enligt källan`}.</p>
       <p>Marknadsregim {pick.market}: {regime.state} · källa {regime.source ?? "ej verifierad"} · datadag {regime.dataDate ?? "okänd"}.
         Manuellt undantag är inte ett automatiskt godkännande.</p>
+      {pick.source==="edgeai"&&<p>ATR underliggande: {atrProof&&atrProof.value===signal?.atr
+        ?`${atrProof.value} · ${atrProof.source} · ${atrProof.dataAsOf} · ${atrProof.period} dagar/${atrProof.method}`
+        :"ej verifierad – numeriskt värde utan rätt instrument, källa och datadag godkänns inte."}</p>}
       {quality && <p className="mt-1 text-muted-foreground">
         Källkvalitet: {quality.evidenceStatus ?? "okänd"} / {quality.eliteStatus ?? "okänd"}
         {" · "}eliteQualified: {String(quality.eliteQualified ?? "okänt")}
@@ -165,5 +171,7 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
       </dl> : <p className="mt-2 text-muted-foreground">EdgeAI-statistik: {unknown} för denna källa. Ingen validerad edge anges.</p>}
     </details>
     <p className="mt-2 text-[11px] text-muted-foreground">Kurs vid nivå bekräftar inte köp. Eget beslut efter Avanza och ChatGPT.</p>
+    <BoardReview key={[pick.ticker,pick.signalDate,pick.entryPrice,pick.stopPrice,pick.targetPrice].join("|")}
+      context={`${pick.market} ${pick.ticker} ${pick.direction} · signal ${pick.signalDate??"okänd"} · datadag ${dataDate??"okänd"} · källa ${pick.source} · underliggande entry ${pick.entryPrice}, aktiestop ${pick.stopPrice}, mål ${pick.targetPrice} · datasignal ${qualification.status}`} />
   </li>;
 }

@@ -1,6 +1,8 @@
 import { isAcceptedSignalDate } from "./signalDatePolicy";
 import { marketDate, signalSessionDate, observedReportDate, reportWindow, validMarketDate } from "@workspace/market-calendar";
 import { resolveYahooTicker } from "./omxs30TickerMap";
+import { qualifyResearch,marketRegime,evidenceDataDate,hasVerifiedAtr,BOARD_REVIEW_REQUIRED,
+  type SourceReport,type Qualification } from "@workspace/market-calendar/research-policy";
 
 export type ReviewStatus = "APPROVED" | "WARN" | "BLOCKED";
 
@@ -35,7 +37,15 @@ export type CandidateReviewInput = {
   rr: number;
   signalSource?: string | null;
   signalDate?: string | null;
+  dataQuality?: unknown;
+  dataDate?: string | null;
 };
+export type PolicyContext={reports?:readonly SourceReport[];dataDate?:string|null};
+export function candidateQualification(candidate:CandidateReviewInput,source:string|null,now=new Date(),context:PolicyContext={}):Qualification {
+  const e={...candidate,signalSource:candidate.signalSource??source,
+    ...(context.dataDate!==undefined?{dataDate:context.dataDate}:{})};
+  return qualifyResearch(e,marketRegime(context.reports??[],e.market??"",evidenceDataDate(e),now),now);
+}
 
 export type SignalReview = {
   status: ReviewStatus;
@@ -58,6 +68,7 @@ export function reviewCandidate(
   candidate: CandidateReviewInput,
   source: string | null,
   now = new Date(),
+  context:PolicyContext={},
 ): SignalReview {
   const warnings: string[] = [];
   const blockers: string[] = [];
@@ -70,9 +81,9 @@ export function reviewCandidate(
   if (!isEdgeAi && (!Number.isFinite(candidate.rsi) || candidate.rsi < 0 || candidate.rsi > 100)) {
     blockers.push("RSI saknas eller ligger utanför 0–100.");
   }
-  if (isEdgeAi) {
+  if (isEdgeAi && !hasVerifiedAtr({...candidate,signalSource:"edgeai"})) {
     warnings.push("ATR för underliggande är inte verifierad; EdgeAI-edgefält används inte som ATR.");
-  } else if (typeof candidate.atr !== "number" || !Number.isFinite(candidate.atr) || candidate.atr <= 0) {
+  } else if (!isEdgeAi && (typeof candidate.atr !== "number" || !Number.isFinite(candidate.atr) || candidate.atr <= 0)) {
     blockers.push("ATR saknas eller är ogiltig; ingen kvalificering.");
   }
   if (candidate.category === "STUDS" || candidate.category === "WEAKEST") {
@@ -161,7 +172,10 @@ export function reviewCandidate(
   if (isEdgeAi && isShort && edgeExpectancyR < 0) {
     reasons.push(`SHORT tillåten trots negativ historisk förväntan (${edgeExpectancyR.toFixed(2)}R).`);
   }
-  return { status: statusFor(warnings, blockers), reasons };
+  const qualification=candidateQualification(candidate,source,now,context);
+  if(qualification.status==="BLOCKED")blockers.push(...qualification.reasons);
+  else if(qualification.status!=="QUALIFIED")warnings.push(...qualification.reasons);
+  return {status:statusFor(warnings,blockers),reasons:[...new Set([...reasons,...qualification.reasons])]};
 }
 
 /**
@@ -170,11 +184,12 @@ export function reviewCandidate(
  * that provenance is not stored with legacy candidates.  It only reports
  * missing/invalid values that are actually present in the candidate record.
  */
-export function decideCandidate(
+export function screenCandidate(
   candidate: CandidateReviewInput & { price: number },
   review: SignalReview,
   sessionDate: string,
   now = new Date(),
+  context:PolicyContext={},
 ): CandidateDecision {
   if (!candidate.signalDate) {
     return {
@@ -250,6 +265,9 @@ export function decideCandidate(
     };
   }
   if (review.status === "BLOCKED") return { status: "BLOCKED", reasons: review.reasons };
+  const qualification=candidateQualification(candidate,candidate.signalSource??null,now,context);
+  if(qualification.status==="BLOCKED")return {status:"BLOCKED",reasons:[...qualification.reasons,...review.reasons]};
+  if(qualification.status!=="QUALIFIED")return {status:"WAIT",reasons:[...qualification.reasons,...review.reasons]};
   if (review.status === "WARN") return { status: "WAIT", reasons: review.reasons };
   return {
     status: "TRADEABLE",
@@ -260,6 +278,15 @@ export function decideCandidate(
       ...review.reasons,
     ],
   };
+}
+
+/** Public decision is never an order authorization. Frozen screening uses
+ * screenCandidate internally, so the board gate cannot erase historical cohorts.
+ */
+export function decideCandidate(candidate:CandidateReviewInput&{price:number},review:SignalReview,sessionDate:string,now=new Date(),context:PolicyContext={}):CandidateDecision {
+  const screening=screenCandidate(candidate,review,sessionDate,now,context);
+  return {status:screening.status==="TRADEABLE"?"WAIT":screening.status,
+    reasons:[BOARD_REVIEW_REQUIRED+" – manuellt fempartsprotokoll och verifierat underlag krävs; inget ordergodkännande.",...screening.reasons]};
 }
 
 export function reviewSession(

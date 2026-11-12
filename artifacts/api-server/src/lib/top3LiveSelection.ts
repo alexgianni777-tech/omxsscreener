@@ -10,6 +10,7 @@ export type Top3LiveCandidate = PolicyCandidate & {
 };
 
 type LiveSession = {
+  sourceReports?: unknown;
   id: number;
   date: string;
   source: string | null;
@@ -76,6 +77,7 @@ export function buildTop3LiveSelection(
       session.date,
       session.source,
       now,
+      Array.isArray(session.sourceReports)?session.sourceReports:[],
     )
       .filter((selection) =>
         selection.selected &&

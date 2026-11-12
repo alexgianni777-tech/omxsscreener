@@ -18,7 +18,7 @@ export { buildTop3SelectionSnapshot, TOP3_POLICY_VERSION, TOP3_SELECTION_TYPE } 
  */
 export async function snapshotNewSessionTop3(
   tx: any,
-  session: { id: number; date: string; source: string | null },
+  session: { id: number; date: string; source: string | null;sourceReports?:any[]|null },
   incoming: any[],
   now = new Date(),
   replacedSources: string[] = [],
@@ -36,6 +36,7 @@ export async function snapshotNewSessionTop3(
     .select({
       top3SnapshotAt: screenerSessionsTable.top3SnapshotAt,
       top3CutoffEvaluatedAt: screenerSessionsTable.top3CutoffEvaluatedAt,
+      sourceReports: screenerSessionsTable.sourceReports,
     })
     .from(screenerSessionsTable)
     .where(eq(screenerSessionsTable.id, session.id));
@@ -50,7 +51,8 @@ export async function snapshotNewSessionTop3(
     .select()
     .from(candidatesTable)
     .where(eq(candidatesTable.sessionId, session.id));
-  await appendTop3Revision(tx, session, arrivals, incoming, now, replacedSources, displayEligible);
+  const reports=Array.isArray(storedSession.sourceReports)?storedSession.sourceReports:[];
+  await appendTop3Revision(tx, {...session,sourceReports:reports}, arrivals, incoming, now, replacedSources, displayEligible);
   if (storedSession.top3SnapshotAt || storedSession.top3CutoffEvaluatedAt) return;
   const cohort = arrivals.filter((candidate: any) =>
     candidate.createdAt instanceof Date &&
@@ -90,6 +92,7 @@ export async function snapshotNewSessionTop3(
       session.date,
       session.source,
       now,
+      reports,
     );
     if (rows.length > 0) await tx.insert(top3SelectionSnapshotsTable).values(
       rows.map(row => ({ ...row, displayEligible })),

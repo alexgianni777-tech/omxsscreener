@@ -1,5 +1,6 @@
 import { candidateSelectionScore, selectSourceBalancedCandidates } from "./candidateRanking.ts";
-import { decideCandidate, reviewCandidate } from "./screeningReview.ts";
+import { screenCandidate, reviewCandidate } from "./screeningReview.ts";
+import type { SourceReport } from "@workspace/market-calendar/research-policy";
 import { isAcceptedSignalDate } from "./signalDatePolicy";
 
 export const TOP3_POLICY_VERSION = "official-top3-v7";
@@ -105,10 +106,12 @@ export function buildTop3SelectionSnapshot(
   sessionDate: string,
   sessionSource: string | null,
   selectedAt = new Date(),
+  reports:readonly SourceReport[]=[],
 ): SnapshotInput[] {
   const evaluated = candidates.map((candidate) => {
-    const review = reviewCandidate(candidate, sessionSource);
-    const decision = decideCandidate(candidate, review, sessionDate, selectedAt);
+    const review = reviewCandidate(candidate, sessionSource,selectedAt,{reports});
+    // Signal selection is distinct from the public, mandatory board-review gate.
+    const decision = screenCandidate(candidate, review, sessionDate, selectedAt,{reports});
     const rawScore = candidateSelectionScore(candidate);
     return {
       candidate,

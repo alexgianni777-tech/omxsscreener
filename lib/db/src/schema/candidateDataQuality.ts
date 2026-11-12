@@ -10,4 +10,5 @@ export type CandidateDataQuality = {
   fullSessionVerified: boolean;
   entryEligible: boolean;
   reasons: string[];
+  atrEvidence?: Record<string, unknown> | null;
 };

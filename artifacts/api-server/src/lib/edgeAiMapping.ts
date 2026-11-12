@@ -13,6 +13,7 @@
 import { calculateOpeningGapPct, calculateWilderRsi } from "./marketIndicators.ts";
 import { edgeAiDirection, edgeAiSampleN, edgeAiSignalDate, validateEdgeAiSetup } from "./edgeAiValidation.ts";
 import { edgeAiDataQuality } from "./candidateDataQuality";
+import { verifiedUnderlyingAtr } from "@workspace/market-calendar/research-policy";
 
 export type EdgeAiCategory = "MOMENTUM" | "SQUEEZE" | "STUDS" | "WEAKEST";
 export type EdgeAiMarket = "SE" | "US";
@@ -73,10 +74,11 @@ export function mapEdgeAiSetup(
   const edgeExpectancyR = Number(s.edge.expectancyR);
   const edgeSampleN = edgeAiSampleN(s.edge);
   const maxHoldDays = category === "SQUEEZE" ? 15 : category === "STUDS" ? 5 : 10;
+  const atrEvidence=verifiedUnderlyingAtr(s.atrEvidence,ticker,market,dataAsOf);
 
   return {
     market,
-    dataQuality: edgeAiDataQuality(s, dataAsOf),
+    dataQuality: {...edgeAiDataQuality(s, dataAsOf),...(atrEvidence?{atrEvidence}:{})},
     signalDate: edgeAiSignalDate(s.signalT, market),
     category,
     rank: rankCounter[rankKey],
@@ -88,7 +90,7 @@ export function mapEdgeAiSetup(
     perf1m: 0,
     rsi: 0,
     pctB: 0,
-    atr: 0,
+    atr: atrEvidence?.value ?? 0, // legacy schema needs a number; zero remains unknown, never qualified
     volMultiplier: 0, // filled only from a verified completed Yahoo daily bar
     volumeAsOf: null as string | null,
     earningsInDays: null as number | null,

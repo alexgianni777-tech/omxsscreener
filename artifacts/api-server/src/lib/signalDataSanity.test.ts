@@ -24,7 +24,7 @@ test("Telegram SCA 44/0.02 stays intact but cannot qualify for STUDS or entry", 
 
 test("STUDS OR thresholds are strict: either qualifying field suffices", () => {
   for (const [rsi, pctB, blocked] of [[34.99, 0.02, false], [44, -0.01, false], [35, 0, true]]) {
-    assert.equal(reviewCandidate({ ...candidate, rsi: Number(rsi), pctB: Number(pctB) }, "telegram").status,
+    assert.equal(reviewCandidate({ ...candidate, rsi: Number(rsi), pctB: Number(pctB) }, "telegram",new Date("2026-11-06T10:00:00Z")).status,
       blocked ? "BLOCKED" : "WARN"); // Valid STUDS stays RESEARCH under the new policy.
   }
 });

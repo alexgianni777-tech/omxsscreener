@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { decideCandidate, reviewCandidate } from "./screeningReview.ts";
+import {previousMarketDay,signalSessionDate} from "@workspace/market-calendar";
 
 const edgeCandidate = {
+  market:"SE",
   signalDate: new Intl.DateTimeFormat("sv-SE", {
     timeZone: "Europe/Stockholm", year: "numeric", month: "2-digit", day: "2-digit",
   }).format(new Date()),
@@ -18,7 +20,7 @@ const edgeCandidate = {
   signalRsi: 50,
   signalGapPct: 0,
   volMultiplier: 1,
-  volumeAsOf: "2026-07-10",
+  volumeAsOf: previousMarketDay(signalSessionDate(new Date(),"SE"),"SE"),
   earningsInDays: 10,
   earningsKnowledge: "SIGNAL_TIME" as const,
   entryPrice: 100,
@@ -98,7 +100,7 @@ test("EdgeAI review prefers dedicated expectancy over legacy RSI compatibility",
   assert.doesNotMatch(decision.reasons.join(" "), /RSI-data saknas/);
 });
 
-test("a fully enriched same-day Telegram candidate is tradeable", () => {
+test("legacy Telegram fixture without verified D-1/regime is not tradeable", () => {
   const signalDate = "2026-07-10";
   const telegramCandidate = {
     signalDate,
@@ -134,8 +136,8 @@ test("a fully enriched same-day Telegram candidate is tradeable", () => {
   assert.equal(telegramCandidate.signalGapPct, 0.8);
   assert.equal(telegramCandidate.signalRsi, 54);
   assert.equal(telegramCandidate.earningsKnowledge, "SIGNAL_TIME");
-  assert.equal(review.status, "APPROVED");
-  assert.equal(decision.status, "TRADEABLE");
+  assert.equal(review.status, "BLOCKED");
+  assert.notEqual(decision.status, "TRADEABLE");
 });
 
 test("legacy EdgeAI expectancy in RSI remains supported when explicit field is absent", () => {
@@ -170,12 +172,12 @@ test("stale comparison uses the Stockholm calendar date", () => {
   const approved = { status: "APPROVED" as const, reasons: [] };
   const justAfterMidnightStockholm = new Date("2026-07-10T22:30:00.000Z");
   const decision = decideCandidate(
-    { ...edgeCandidate, signalDate: "2026-07-11", rsi: 20 },
+    { ...edgeCandidate, signalDate: "2026-07-11", volumeAsOf:"2026-07-10",rsi: 20 },
     approved,
     "2026-07-11",
     justAfterMidnightStockholm,
   );
-  assert.equal(decision.status, "TRADEABLE");
+  assert.equal(decision.status, "WAIT"); // Board gate; the local date itself is not STALE.
 });
 
 test("a later trading target date is stale relative to the immutable source date", () => {
@@ -217,7 +219,7 @@ test("EdgeAI signal age boundary is an eligibility rule, not only a score penalt
   const beforeExpiry = decideCandidate({ ...base, signalAgeBars: 9 }, approved, base.signalDate);
   const atExpiry = decideCandidate({ ...base, signalAgeBars: 10 }, approved, base.signalDate);
   const afterExpiry = decideCandidate({ ...base, signalAgeBars: 11 }, approved, base.signalDate);
-  assert.equal(beforeExpiry.status, "TRADEABLE");
+  assert.equal(beforeExpiry.status, "WAIT"); // Board review remains mandatory before expiry.
   assert.equal(atExpiry.status, "STALE");
   assert.equal(afterExpiry.status, "STALE");
   assert.match(atExpiry.reasons.join(" "), /maxålder/);

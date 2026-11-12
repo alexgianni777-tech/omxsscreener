@@ -636,13 +636,13 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     const latest = [...receipts].reverse().find((r: any) => r.status !== "FAILED" && r.source === candidate.signalSource && r.signalDate === candidate.signalDate) as any;
     const importWarning = latest?.quarantinedIdentities?.includes(candidateIdentity(candidate))
       ? "Isolerad: källrapporten innehåller tvetydiga eller ogiltiga planer för denna signal. Originalscreening och historik är oförändrade." : null;
-    const review = reviewCandidate(candidate, session.source ?? null);
+    const review = reviewCandidate(candidate, session.source ?? null,now,{reports:receipts});
     const officialSelection = selectionByCandidate.get(candidate.id);
     return {
       importWarning,
       ...mapCandidate(candidate, linkedIds.has(candidate.id)),
       review,
-      decision: decideCandidate(candidate, review, session.date),
+      decision: decideCandidate(candidate, review, session.date,now,{reports:receipts}),
       officialSelection: officialSelection ? {
         selected: officialSelection.selected,
         rank: officialSelection.rank,

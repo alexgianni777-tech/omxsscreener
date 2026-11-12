@@ -1259,6 +1259,10 @@ components:
       type: object
       required: [source, dataAsOf, evidenceStatus, eliteStatus, eliteQualified, validatedEdge, barSource, fullSessionVerified, entryEligible, reasons]
       properties:
+        atrEvidence:
+          type: ["object", "null"]
+          additionalProperties: true
+          description: "Optional underlying equity ATR evidence; validated against symbol, market, data day, value, source and period. Never inferred from edge statistics."
         source:
           type: string
         dataAsOf:

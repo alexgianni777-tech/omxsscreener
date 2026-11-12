@@ -59,7 +59,7 @@ export function buildRevisionInputs(
 
 /** Called under the same session lock and transaction as every import. */
 export async function appendTop3Revision(
-  tx: any, session: { id: number; date: string; source: string | null },
+  tx: any, session: { id: number; date: string; source: string | null;sourceReports?:any[]|null },
   persisted: any[], incoming: any[], now: Date,
   replacedSources: string[] = [],
   displayEligible = true,
@@ -74,7 +74,7 @@ export async function appendTop3Revision(
     .update(JSON.stringify({ policy: TOP3_POLICY_VERSION, inputs })).digest("hex");
   if (previous?.fingerprint === fingerprint || (inputs.length === 0 && !previous)) return;
   const selections = available
-    ? buildTop3SelectionSnapshot(inputs, session.id, session.date, session.source, now)
+    ? buildTop3SelectionSnapshot(inputs, session.id, session.date, session.source, now,session.sourceReports??[])
     : [];
   await tx.insert(top3SelectionRevisionsTable).values({
     sessionId: session.id, revision: (previous?.revision ?? 0) + 1,
