@@ -1,4 +1,5 @@
 import { SwedishResearch } from "../components/SwedishResearch";
+import { quoteRequestTicker } from "../lib/researchQuote";
 import { DailyCandidates } from "../components/DailyCandidates";
 import { SavedTop3 } from "../components/SavedTop3";
 import { MarketIntelSection } from "./dashboard";
@@ -331,11 +332,11 @@ export function Today() {
 
   const currentRevision = [...(session?.top3Revisions ?? [])].sort((a, b) => b.revision - a.revision)[0];
   const entryTickers = [...new Set([
-    ...picks.map(p => p.ticker),
-    ...(currentRevision?.picks ?? []).map(p => p.ticker),
+    ...picks.map(p => quoteRequestTicker(p.ticker, p.market)),
+    ...(currentRevision?.picks ?? []).map(p => quoteRequestTicker(p.ticker, p.market)),
     ...(session?.top3LiveSelection?.picks ?? []).flatMap(p => {
       const candidate = session?.candidates.find(c => c.id === p.candidateId);
-      return candidate ? [candidate.ticker] : [];
+      return candidate ? [quoteRequestTicker(candidate.ticker, candidate.market)] : [];
     }),
   ])];
   const fetchLivePrices = async () => {
@@ -361,7 +362,7 @@ export function Today() {
 
   /** Returns "WIN", "LOSS", or null based on live price vs stop/target */
   function autoDetectOutcome(candidate: Candidate): "WIN" | "LOSS" | null {
-    const q = quotes[candidate.ticker];
+    const q = quotes[quoteRequestTicker(candidate.ticker, candidate.market)];
     if (!q?.livePrice) return null;
     const price = q.livePrice;
     if (candidate.direction === "LONG") {
@@ -767,7 +768,7 @@ export function Today() {
             const allocatedRisk = riskForCandidate(candidate);
             const winPnl = allocatedRisk != null ? Math.round(allocatedRisk * candidate.rr) : null;
             const lossPnl = allocatedRisk != null ? Math.round(-allocatedRisk) : null;
-            const quote = quotes[candidate.ticker];
+            const quote = quotes[quoteRequestTicker(candidate.ticker, candidate.market)];
             const autoHit = isToday && !isDone ? autoDetectOutcome(candidate) : null;
             const edgeMetrics = edgeAiMetrics(candidate);
 

@@ -1,4 +1,5 @@
 import { useListSessions, useGetSession, getGetSessionQueryKey, useGetQuotes, getGetQuotesQueryKey, type QuoteResult } from "@workspace/api-client-react";
+import { quoteRequestTicker } from "../lib/researchQuote";
 import { CurrentTop3Selection } from "./CurrentTop3Selection";
 import { DailyCandidates } from "./DailyCandidates";
 
@@ -8,7 +9,7 @@ export function DashboardLiveTop3() {
   const id = sessions.data?.[0]?.id ?? 0;
   const detail = useGetSession(id, { query: { enabled: id > 0, queryKey: getGetSessionQueryKey(id) } });
   const current = [...(detail.data?.top3Revisions ?? [])].sort((a, b) => b.revision - a.revision)[0];
-  const params = { tickers: [...new Set(current?.picks.map(p => p.ticker) ?? [])].join(",") };
+  const params = { tickers: [...new Set(current?.picks.map(p => quoteRequestTicker(p.ticker, p.market)) ?? [])].join(",") };
   const quotes = useGetQuotes(params, { query: { enabled: false, queryKey: getGetQuotesQueryKey(params), retry: false } });
   const quoteMap: Record<string, QuoteResult> = {};
   quotes.data?.forEach(q => { quoteMap[q.ticker] = quotes.isError ? { ...q, error: "Kurshämtningen misslyckades." } : q; });

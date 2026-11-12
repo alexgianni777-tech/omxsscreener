@@ -99,7 +99,7 @@ test("a US Yahoo symbol cannot be shown as a verified current price for a Swedis
   const sel = { ...selection, revision: { ...selection.revision, picks: [{
     ...pick(8, "SHORT"), ticker: "EQT", entryPrice: 289.5, stopPrice: 296.48, targetPrice: 272.04,
   }] } };
-  const html = render({ selection: sel, quotes: { EQT: quote } });
+  const html = render({ selection: sel, quotes: { "SE:EQT": quote } });
   assert.ok(html.includes("Kurs ej verifierad"));
   assert.ok(html.includes("Yahoo-symbol EQT"));
   assert.ok(html.includes('data-entry-status="UNKNOWN"'));
@@ -180,7 +180,7 @@ test("quote labels show actual quote fields, missing asOf is not verified, D-1 r
   const q: any = { ticker: "T1", yahooTicker: "T1.ST", livePrice: 101.5, marketState: "REGULAR", asOf: null };
   assert.equal(quoteLabels(q)!.asOf, "Tidpunkt ej verifierad");
   assert.ok(quoteLabels(q)!.source.includes("T1.ST"));
-  const html = render({ quotes: { T1: q } });
+  const html = render({ quotes: { "SE:T1": q } });
   for (const s of ["Tidpunkt ej verifierad", "REGULAR", "Yahoo Finance · T1.ST", "Planerad entry – inte stängningskurs"]) assert.ok(html.includes(s), s);
   assert.ok(quoteLabels({ ...q, asOf: "2026-10-12T08:00:00Z" })!.asOf.includes("Europe/Stockholm"));
 });
@@ -201,7 +201,7 @@ test("today is the single prominent research surface; historical dashboard stays
 test("single entry verdict remains visible; technical guard is disclosed; invalid asOf not verified", () => {
   const q: any = { ticker: "T1", yahooTicker: "T1.ST", livePrice: 101, marketState: "REGULAR", asOf: "garbage" };
   assert.equal(quoteLabels(q)!.asOf, "Tidpunkt ej verifierad");
-  const html = render({ quotes: { T1: q } });
+  const html = render({ quotes: { "SE:T1": q } });
   assert.ok(!html.includes("Invalid Date") && !html.includes("D−1-referens"));
   const card = readFileSync(new URL("./ResearchCard.tsx", import.meta.url), "utf8");
   const guard = card.indexOf("<LiveEntryGuard");
@@ -219,7 +219,7 @@ test("GETI-B quarantined saved plan stays visible with source-conflict warning a
     quarantinedIdentities: ["SE|MOMENTUM|GETI-B|LONG|2026-10-09|edgeai"] };
   const html = renderToStaticMarkup(React.createElement(Router, { ssrPath: "/" }, React.createElement(SwedishResearchContent, {
     selection: sel, today: "2026-10-12", reports: [report],
-    quotes: { "GETI B": { ticker: "GETI B", yahooTicker: "GETI-B.ST", livePrice: 100, marketState: "REGULAR", asOf: new Date().toISOString() } } })));
+    quotes: { "SE:GETI B": { ticker: "GETI B", yahooTicker: "GETI-B.ST", livePrice: 100, marketState: "REGULAR", asOf: new Date().toISOString() } } })));
   assert.ok(html.includes("research-card-9"));
   assert.ok(html.includes("Källkonflikt – ingen entrybekräftelse"));
   assert.ok(html.includes('data-entry-status="UNKNOWN"'));

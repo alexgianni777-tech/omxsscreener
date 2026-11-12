@@ -1,4 +1,5 @@
 import { useGetSession, getGetSessionQueryKey, useGetQuotes, getGetQuotesQueryKey, Candidate as ApiCandidate, CandidateOutcomeProperty, useUpdateCandidateOutcome, QuoteResult, ImportDiff } from "@workspace/api-client-react";
+import { quoteRequestTicker } from "../lib/researchQuote";
 import { useParams, Link } from "wouter";
 import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
 import { ArrowLeft, TrendingUp, TrendingDown, Target, ShieldAlert, Crosshair, RefreshCw, BarChart2, Activity, AlertTriangle, Clock, ExternalLink, CandlestickChart as CandlestickIcon, Star, Briefcase } from "lucide-react";
@@ -153,7 +154,7 @@ export function SessionDetail() {
   const id = parseInt(params.id || "0", 10);
   const { data: session, isLoading, isError, refetch } = useGetSession(id, { query: { enabled: !!id, queryKey: getGetSessionQueryKey(id), refetchInterval: 30_000 } });
 
-  const tickers = session?.candidates.map((c) => c.ticker) ?? [];
+  const tickers = session?.candidates.map((c) => quoteRequestTicker(c.ticker, c.market)) ?? [];
   const tickersParam = tickers.join(",");
   const quoteParams = { tickers: tickersParam };
   const { data: quotes, isError: quoteError } = useGetQuotes(
@@ -459,7 +460,7 @@ export function SessionDetail() {
                     key={candidate.id}
                     candidate={candidate}
                     sessionId={id}
-                    quote={quoteMap[candidate.ticker]}
+                    quote={quoteMap[quoteRequestTicker(candidate.ticker, candidate.market)]}
                     daysOld={daysOld}
                     isEdgeAI={candidate.signalSource === "edgeai"}
                     rank={idx + 1}

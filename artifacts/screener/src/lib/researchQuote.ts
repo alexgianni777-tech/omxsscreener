@@ -2,6 +2,11 @@ import type { QuoteResult } from "@workspace/api-client-react";
 import { formatPrice } from "./presentationNumbers";
 import { LIVE_ENTRY_MAX_PRICE_AGE_MS } from "./liveEntryGuard";
 
+/** Keep exchange identity in request/cache keys and response lookup keys. */
+export function quoteRequestTicker(ticker: string, market?: string | null): string {
+  return market === "SE" || market === "US" ? `${market}:${ticker.trim()}` : ticker.trim();
+}
+
 /** UI safety only: keep the fetched price/mapping intact, but flag a different quote market. */
 export function researchQuoteForMarket(market: string, quote: QuoteResult | null | undefined) {
   if (!quote) return quote;

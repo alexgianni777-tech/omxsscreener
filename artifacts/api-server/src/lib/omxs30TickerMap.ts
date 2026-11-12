@@ -93,6 +93,8 @@ export function resolveYahooTicker(screenerTicker: string, market?: string | nul
     throw new InstrumentVerificationError(`${ticker}: kräver instrumentverifiering — ange marknad och exakt aktieslag.`);
   };
   if (market === "US") return upper.endsWith(".ST") ? reject() : upper;
+  // These bare symbols also occur on other exchanges (e.g. ABB/ABB.ST).
+  if (!market && SE_BASE_TICKERS.has(upper)) return reject();
   const explicitClass = upper.match(/^([A-Z0-9]+)[ -]([AB])(?:\.ST)?$/);
   if (explicitClass && SWEDISH_CLASS_BASES.has(explicitClass[1])) {
     return `${explicitClass[1]}-${explicitClass[2]}.ST`;
@@ -104,4 +106,15 @@ export function resolveYahooTicker(screenerTicker: string, market?: string | nul
   if (upper === "NDA-SE" || upper === "ALIV-SDB") return `${upper}.ST`;
   if (market === "SE") return reject();
   return ticker; // e.g. BRK-B stays US; an unknown hyphen is not evidence of Sweden.
+}
+
+/** Market-qualified identity in the existing comma-separated ticker parameter.
+ * Preserve this request identity in the quote response, so SE:ABB and US:ABB
+ * cannot overwrite each other's prices or React Query cache entries.
+ */
+export function resolveQuoteTicker(requestTicker: string): string {
+  const qualified = requestTicker.match(/^(SE|US):(.+)$/);
+  if (qualified) return resolveYahooTicker(qualified[2], qualified[1]);
+  if (requestTicker.includes(":")) throw new InstrumentVerificationError("Kräver instrumentverifiering — marknad ska vara SE eller US.");
+  return resolveYahooTicker(requestTicker);
 }

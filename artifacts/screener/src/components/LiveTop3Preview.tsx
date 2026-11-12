@@ -1,4 +1,5 @@
 import React from "react";
+import { quoteRequestTicker } from "../lib/researchQuote";
 import { Link } from "wouter";
 import type { Top3LiveSelection } from "@workspace/api-client-react";
 import { CheckCircle2, AlertTriangle, ChevronRight } from "lucide-react";
@@ -10,6 +11,7 @@ export type LiveSelection = Top3LiveSelection;
 type Cand = {
   id: number;
   ticker: string;
+  market?: string | null;
   entryPrice: number;
   stopPrice: number;
   targetPrice: number;
@@ -194,7 +196,7 @@ export function LiveTop3Preview({
                   </div>
                   {c && <PlanGrid plan={c} caption="Originalplan · D−1-underlag" />}
                   {c && <LiveEntryGuard plan={{ ...c, direction: p.direction }}
-                    quote={quotes?.[c.ticker]} signal={c} />}
+                    quote={quotes?.[quoteRequestTicker(c.ticker, c.market)]} signal={c} />}
                   <details className="mt-1 text-[11px] text-muted-foreground">
                     <summary className="cursor-pointer select-none">Visa detaljer</summary>
                     <p className="mt-1">{p.market} · {p.direction === "SHORT" ? "Sälj" : "Köp"} · {NAMES[p.signalSource]} · poäng {p.score.toFixed(2)}</p>

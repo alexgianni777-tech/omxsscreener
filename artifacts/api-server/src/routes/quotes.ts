@@ -1,13 +1,14 @@
 import { Router, type IRouter } from "express";
 import YahooFinance from "yahoo-finance2";
-import { InstrumentVerificationError, resolveYahooTicker } from "../lib/omxs30TickerMap";
+import { InstrumentVerificationError, resolveQuoteTicker } from "../lib/omxs30TickerMap";
 import { isE2ETestMode } from "../lib/e2eTestSafety";
 import { quoteEarningsDate } from "../lib/quoteEarningsDate";
 
 const router: IRouter = Router();
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
-// GET /screener/quotes?tickers=SSAB,Getinge,SEB
+// GET /screener/quotes?tickers=SE:ABB,US:ABB,SE:SSAB-B
+// The original request key is echoed unchanged; no market guess is made for ABB.
 router.get("/screener/quotes", async (req, res): Promise<void> => {
   const tickersParam = req.query.tickers;
   if (!tickersParam || typeof tickersParam !== "string") {
@@ -48,7 +49,7 @@ router.get("/screener/quotes", async (req, res): Promise<void> => {
     tickers.map(async (ticker) => {
       let yahooTicker = ticker;
       try {
-        yahooTicker = resolveYahooTicker(ticker);
+        yahooTicker = resolveQuoteTicker(ticker);
         const quote = await yf.quote(yahooTicker);
         const earningsTs: Date | null = (quote as any).earningsTimestamp ?? null;
         const { earningsInDays, earningsDate } = quoteEarningsDate(earningsTs, yahooTicker);

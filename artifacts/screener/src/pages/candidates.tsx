@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { quoteRequestTicker } from "../lib/researchQuote";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePruneUnusedCandidates, getListCandidatesQueryKey, getListSessionsQueryKey, getGetLastValidTop3QueryKey, useListCandidates, useGetQuotes, getGetQuotesQueryKey, type QuoteResult } from "@workspace/api-client-react";
 import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
@@ -20,7 +21,7 @@ export function Candidates() {
   const { data: candidates, isLoading, isError } = useListCandidates(params);
 
   // Deduplicated tickers for live price lookup
-  const tickers = [...new Set(candidates?.map((c) => c.ticker) ?? [])];
+  const tickers = [...new Set(candidates?.map((c) => quoteRequestTicker(c.ticker, c.market)) ?? [])];
   const quoteParams = { tickers: tickers.join(",") };
   const { data: quotes, isError: quoteError } = useGetQuotes(
     quoteParams,
@@ -112,8 +113,9 @@ export function Candidates() {
                 <tr><td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">No candidates match these filters.</td></tr>
               ) : (
                 candidates.map(c => {
-                  const live = quoteMap[c.ticker];
-                  const chg = changePctMap[c.ticker];
+                  const quoteKey = quoteRequestTicker(c.ticker, c.market);
+                  const live = quoteMap[quoteKey];
+                  const chg = changePctMap[quoteKey];
                   return (
                     <tr key={c.id} className="hover:bg-muted/50 transition-colors group">
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -123,7 +125,7 @@ export function Candidates() {
                       </td>
                       <td className="px-4 py-3 min-w-[320px]">
                         <strong>{c.ticker}</strong>
-                        <LiveEntryGuard plan={c} quote={entryQuotes[c.ticker]} signal={c} />
+                        <LiveEntryGuard plan={c} quote={entryQuotes[quoteKey]} signal={c} />
                       </td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 rounded text-xs font-bold ${c.direction === 'LONG' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
@@ -145,11 +147,11 @@ export function Candidates() {
                             )}
                             <details className="max-w-[240px] text-left">
                               <summary className="cursor-pointer text-xs text-muted-foreground">
-                                {entryQuotes[c.ticker]?.asOf && Number.isFinite(Date.parse(entryQuotes[c.ticker].asOf!))
+                                {entryQuotes[quoteKey]?.asOf && Number.isFinite(Date.parse(entryQuotes[quoteKey].asOf!))
                                   ? "Kurstid och källa" : "Tidpunkt ej verifierad"}
                               </summary>
-                              <QuotePresentation showPrice={false} quote={entryQuotes[c.ticker]}
-                                source={entryQuotes[c.ticker]?.yahooTicker ? "Yahoo Finance" : null} />
+                              <QuotePresentation showPrice={false} quote={entryQuotes[quoteKey]}
+                                source={entryQuotes[quoteKey]?.yahooTicker ? "Yahoo Finance" : null} />
                             </details>
                           </div>
                         ) : (

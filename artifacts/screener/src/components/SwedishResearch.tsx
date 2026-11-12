@@ -9,7 +9,7 @@ import {
 import { ResearchCard, type ResearchSignal } from "./ResearchCard";
 import { marketDailyPicks, oldSignalWarning, isolatedDailyPick, dailySymbol, type DailyPick } from "../lib/dailyCandidates";
 import { stockholmToday } from "../lib/persistentTop3Display";
-import { savedDataDate } from "../lib/researchQuote";
+import { savedDataDate, quoteRequestTicker } from "../lib/researchQuote";
 import { trendAlignment } from "../lib/sourceMarketEvidence";
 import { SourceProvenance } from "./SourceProvenance";
 import { ResearchMarketSections, type MarketEvidenceSignal } from "./ResearchMarketSections";
@@ -63,7 +63,7 @@ export function SwedishResearchContent({ selection, signals = [], reports = [], 
       sessionDate={diagnosticDate ?? selection.date} renderPick={p => <ResearchCard key={p.candidateId} pick={p}
           signal={signals.find(c => c.id === p.candidateId && (c.signalDate ?? null) === (p.signalDate ?? null) &&
             c.entryPrice === p.entryPrice && c.stopPrice === p.stopPrice && c.targetPrice === p.targetPrice)}
-          dataDate={savedDataDate(selection.dataDates, p.source, p.signalDate, p.market)} quote={quotes[p.ticker]}
+          dataDate={savedDataDate(selection.dataDates, p.source, p.signalDate, p.market)} quote={quotes[quoteRequestTicker(p.ticker, p.market)]}
           advisory={trendAlignment(statusReports ?? reports, p.market, p.direction, savedDataDate(selection.dataDates, p.source, p.signalDate, p.market))}
           dataDateStatus={freshness(p).status}
           expectedDataDate={previousMarketDay(reference(p), p.market)}
@@ -144,7 +144,7 @@ export function PreliminaryResearchContent({ picks, sessionDate, signals = [], s
       sessionDate={sessionDate} renderPick={p => <ResearchCard key={p.candidateId} pick={p}
           signal={signals.find(c => c.id === p.candidateId && (c.signalDate ?? null) === (p.signalDate ?? null) &&
             c.entryPrice === p.entryPrice && c.stopPrice === p.stopPrice && c.targetPrice === p.targetPrice)}
-          dataDate={null} quote={quotes[p.ticker]} advisory="avvakta"
+          dataDate={null} quote={quotes[quoteRequestTicker(p.ticker, p.market)]} advisory="avvakta"
           warnings={pickWarnings(p, [], signals as Conflictable[], statusReports ?? [])} stale />} />
   </>;
 }
@@ -178,7 +178,7 @@ export function SwedishResearch({ latestReports }: { latestReports?: readonly Se
       ticker: c.ticker, signalDate: c.signalDate, category: c.category, entryPrice: c.entryPrice, stopPrice: c.stopPrice, targetPrice: c.targetPrice, rr: c.rr }] : [];
   }).filter(p => !isolatedDailyPick(p, detail.data!.sourceReports ?? [])) : [];
   const shown = (["SE", "US"] as const).flatMap(market => marketDailyPicks(s ? researchPicks(s) : prelim, market).flatMap(g => g.picks));
-  const params = { tickers: [...new Set(shown.map(p => p.ticker))].join(",") };
+  const params = { tickers: [...new Set(shown.map(p => quoteRequestTicker(p.ticker, p.market)))].join(",") };
   const quotes = useGetQuotes(params, { query: { enabled: false, retry: false, queryKey: getGetQuotesQueryKey(params) } });
   const map: Record<string, QuoteResult> = {};
   if (!quotes.isError) quotes.data?.forEach(q => { map[q.ticker] = q; });

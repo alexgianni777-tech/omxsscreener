@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { decideCandidate, reviewCandidate } from "./screeningReview";
-import { resolveYahooTicker } from "./omxs30TickerMap";
+import { resolveQuoteTicker, resolveYahooTicker } from "./omxs30TickerMap";
 
 const candidate = {
   ticker: "SCA-B", market: "SE", signalSource: "telegram", signalDate: "2026-11-06",
@@ -57,4 +57,18 @@ test("US hyphens stay US, explicit market prevents Swedish name collisions", () 
   assert.equal(resolveYahooTicker("SSAB", "US"), "SSAB");
   assert.throws(() => resolveYahooTicker("BRK-B", "SE"), /instrumentverifiering/);
   assert.throws(() => resolveYahooTicker("SCA-B.ST", "US"), /instrumentverifiering/);
+});
+
+test("quote request market is preserved: SE:ABB differs from US:ABB, unqualified ABB refuses guessing", () => {
+  assert.equal(resolveQuoteTicker("SE:ABB"), "ABB.ST");
+  assert.equal(resolveQuoteTicker("US:ABB"), "ABB");
+  assert.throws(() => resolveQuoteTicker("ABB"), /instrumentverifiering/);
+  assert.throws(() => resolveQuoteTicker("XX:ABB"), /instrumentverifiering/);
+  assert.throws(() => resolveQuoteTicker("US:ABB.ST"), /instrumentverifiering/);
+  assert.equal(resolveQuoteTicker("ABB.ST"), "ABB.ST");
+  assert.equal(resolveQuoteTicker("SE:SCA B"), "SCA-B.ST");
+  assert.equal(resolveQuoteTicker("SE:SSAB A"), "SSAB-A.ST");
+  assert.equal(resolveQuoteTicker("SE:SSAB-B"), "SSAB-B.ST");
+  assert.equal(resolveQuoteTicker("US:BRK-B"), "BRK-B");
+  assert.equal(resolveQuoteTicker("BF-B"), "BF-B");
 });

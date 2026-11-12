@@ -1,4 +1,5 @@
 import React from "react";
+import { quoteRequestTicker } from "../lib/researchQuote";
 import { Link } from "wouter";
 import { currentSavedRevision, stockholmToday } from "../lib/persistentTop3Display";
 import type { Top3Revision } from "@workspace/api-client-react";
@@ -35,7 +36,7 @@ function Picks({ revision, quotes, candidates }: { revision: Top3Revision } & Gu
                   </div>
                   <PlanGrid plan={pick}
                     caption="Originalplan · D−1-underlag" />
-                  <LiveEntryGuard plan={pick} quote={quotes?.[pick.ticker]} signal={{
+                  <LiveEntryGuard plan={pick} quote={quotes?.[quoteRequestTicker(pick.ticker, pick.market)]} signal={{
                     importWarning: candidates?.find(c => c.id === pick.candidateId)?.importWarning,
                     signalDate: pick.signalDate, signalSource: pick.source,
                     dataQuality: candidates?.find((c) => c.id === pick.candidateId &&
