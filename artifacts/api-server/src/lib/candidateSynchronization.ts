@@ -12,6 +12,7 @@ import {
 import { ImportDataError, normalizeImportSymbol, type ImportReport } from "./importReport";
 import { isAcceptedSignalDate } from "./signalDatePolicy";
 import { top3CutoffForDate } from "./top3SelectionPolicyCore";
+import { sessionMarketEvidence } from "./sourceMarketContext";
 
 type CandidateInput = Record<string, unknown> & {
   market?: string | null;
@@ -262,8 +263,10 @@ export async function synchronizeCandidates(
     if (receipts.some((row: any) => row.status !== "FAILED" && row.fingerprint === report.fingerprint)) {
       return { candidates: existing, diff: { added: [], updated: [], removed: [] }, duplicateReport: true };
     }
+    const sourceReports = [...receipts, { ...report, importedAt: now.toISOString() }];
     await tx.update(screenerSessionsTable).set({
-      sourceReports: [...receipts, { ...report, importedAt: now.toISOString() }],
+      sourceReports,
+      ...sessionMarketEvidence({ sourceReports }).fields,
     }).where(eq(screenerSessionsTable.id, sessionId));
   }
   const existingByIdentity = new Map<string, any>(

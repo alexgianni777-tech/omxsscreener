@@ -2,19 +2,10 @@ import { Router, type IRouter } from "express";
 import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "../lib/omxs30TickerMap";
 import { isE2ETestMode } from "../lib/e2eTestSafety";
+import { quoteEarningsDate } from "../lib/quoteEarningsDate";
 
 const router: IRouter = Router();
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
-
-/** How many calendar days from today until `ts` (yahoo-finance2 returns a Date). Negative = past. */
-function daysUntil(ts: Date | number | undefined | null): number | null {
-  if (ts == null) return null;
-  const ms = ts instanceof Date ? ts.getTime() : ts * 1000;
-  if (!ms || isNaN(ms)) return null;
-  const todayUtc = new Date();
-  todayUtc.setUTCHours(0, 0, 0, 0);
-  return Math.round((ms - todayUtc.getTime()) / 86_400_000);
-}
 
 // GET /screener/quotes?tickers=SSAB,Getinge,SEB
 router.get("/screener/quotes", async (req, res): Promise<void> => {
@@ -59,11 +50,7 @@ router.get("/screener/quotes", async (req, res): Promise<void> => {
       try {
         const quote = await yf.quote(yahooTicker);
         const earningsTs: Date | null = (quote as any).earningsTimestamp ?? null;
-        const earningsInDays = daysUntil(earningsTs);
-        const earningsDate =
-          earningsTs instanceof Date
-            ? earningsTs.toISOString().slice(0, 10)
-            : null;
+        const { earningsInDays, earningsDate } = quoteEarningsDate(earningsTs, yahooTicker);
         // regularMarketTime is when Yahoo's underlying price was last updated —
         // this can lag far behind `fetchedAt` outside market hours or on stale feeds.
         const marketTime: Date | null = (quote as any).regularMarketTime ?? null;

@@ -17,6 +17,6 @@ Source-quality restrictions are a safety overlay, not permission to retune strat
 
 Keep source-specific market evidence separate from the legacy session-wide market-weather summary. Older receipts without their own weather remain unknown; do not reconstruct them from a summary or later import. Advisory trends never qualify a candidate.
 
-**Why:** The user requested independent Telegram/EdgeAI evidence without changing strategies or ranking. Legacy summary fields still serve existing calculations; replacing those calculations would exceed the approved scope.
+**Why:** The user requested independent Telegram/EdgeAI evidence without changing strategies or ranking. The user subsequently approved removing last-writer-wins from the shared Swedish summary as a data-integrity correction.
 
-**How to apply:** Use each receipt's own market/date for source displays and compare the Swedish Telegram report only against Sweden. New optional source fields do not justify rewriting history or adding price polling.
+**How to apply:** Use each receipt's own market/date for source displays and compare the Swedish Telegram report only against Sweden. The Swedish summary deterministically prefers evidenced Telegram/OMXS30, then manual, then EdgeAI; disclose the selected source/date. Untraceable legacy summaries and same-source same-period conflicts must not verify the session regime. Do not rewrite history or add polling.

@@ -305,7 +305,7 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
       rawText,
     };
     const [stored] = existing
-      ? await tx.update(screenerSessionsTable).set(sessionRow).where(eq(screenerSessionsTable.id, existing.id)).returning()
+      ? await tx.update(screenerSessionsTable).set({ rawText }).where(eq(screenerSessionsTable.id, existing.id)).returning()
       : await tx.insert(screenerSessionsTable).values({ date, ...sessionRow }).returning();
     const existingCandidates = existing
       ? await tx

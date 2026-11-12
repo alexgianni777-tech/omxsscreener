@@ -203,12 +203,6 @@ async function runImport(date: string): Promise<boolean> {
         await tx
           .update(screenerSessionsTable)
           .set({
-            omxsValue: mw.omxsValue,
-            perf5d: mw.perf5d,
-            perf1m: mw.perf1m,
-            perf3m: mw.perf3m,
-            marketRsi: mw.marketRsi,
-            trendLabel: se?.regime?.label ?? "n/a",
             edgeRegime: JSON.stringify(se?.regime ?? {}),
             edgeExpectancy: se?.edge?.expectancyR ?? null,
             edgeWinRate: se?.edge?.winRate != null

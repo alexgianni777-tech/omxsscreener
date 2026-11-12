@@ -5,18 +5,19 @@ description: Calendar-day handling for Yahoo earnings timestamps in screener and
 
 ## Rule
 
-Treat a Yahoo earnings timestamp as a calendar event. Compare the UTC calendar
-date components of the event and reference date; do not round a raw elapsed-hour
-difference.
+Treat a Yahoo earnings timestamp as a calendar event. For current quote labels,
+compare event and reference calendar dates in the instrument's exchange zone:
+Europe/Stockholm for Swedish equities and America/New_York for US equities.
+Do not round a raw elapsed-hour difference.
 
 **Why:** Yahoo sends a time of day for many earnings events. An after-close
 event on the current date can be 20:00 UTC, and rounding its elapsed time from
 UTC midnight incorrectly turns “today” into “tomorrow”.
 
-**How to apply:** Use the shared market-calendar helper for the earnings
-screener, EdgeAI imports, scheduler imports, and any future Rule 7 report-date
-calculation. Keep imported historical-session dates relative to that session's
-calendar date rather than the later viewing date.
+**How to apply:** Use the shared market-calendar date formatter for current
+quote labels. Keep imported historical-session dates relative to that session's
+calendar date rather than the later viewing date; do not change historical Rule 7
+inputs while correcting live display labels.
 
 ## QuoteSummary value shape
 

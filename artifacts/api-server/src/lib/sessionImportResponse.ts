@@ -2,6 +2,7 @@ import { ImportSessionResponse } from "@workspace/api-zod";
 import type { screenerSessionsTable } from "@workspace/db";
 import { describeTop3Snapshot } from "./top3SnapshotStatus";
 import { buildTop3LiveSelection, type Top3LiveCandidate } from "./top3LiveSelection";
+import { sessionMarketEvidence } from "./sourceMarketContext";
 
 /** Both import endpoints return the same complete session contract. */
 export function parseSessionImportResponse(
@@ -18,14 +19,7 @@ export function parseSessionImportResponse(
     createdAt: session.createdAt ?? null,
     lastImportAt: session.lastImportAt ?? null,
     sourceReports: Array.isArray(session.sourceReports) ? session.sourceReports : [],
-    marketWeather: {
-      omxsValue: session.omxsValue,
-      perf5d: session.perf5d,
-      perf1m: session.perf1m,
-      perf3m: session.perf3m,
-      rsi: session.marketRsi,
-      trendLabel: session.trendLabel,
-    },
+    marketWeather: sessionMarketEvidence(session).weather,
     candidates,
     importDiff,
     top3SelectionSnapshot: describeTop3Snapshot(session, now),

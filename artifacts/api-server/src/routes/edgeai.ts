@@ -289,13 +289,7 @@ router.post(
         const [updated] = await tx
           .update(screenerSessionsTable)
           .set({
-            trendLabel: se.regime?.label ?? "n/a",
             rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt}`,
-            omxsValue,
-            perf5d,
-            perf1m,
-            perf3m,
-            marketRsi,
           })
           .where(eq(screenerSessionsTable.id, existingId))
           .returning();

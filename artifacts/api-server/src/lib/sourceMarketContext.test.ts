@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { screenerSessionsTable } from "@workspace/db";
 import { makeImportReport } from "./importReport";
-import { sourceMarketContext } from "./sourceMarketContext";
+import { sessionMarketEvidence, sourceMarketContext } from "./sourceMarketContext";
 import { synchronizeCandidates } from "./candidateSynchronization";
 import { latestSourceReceipts } from "./sourceReportStatus";
 import { parseScreenerText } from "./screenerParser";
@@ -28,7 +28,8 @@ const reports = [
 test("both real synchronization orders persist independent receipt weather without touching recorded trades", async () => {
   const outcomes = [];
   for (const order of [reports, [...reports].reverse()]) {
-    const session = { date: "2026-11-06", sourceReports: [] as unknown[], top3SnapshotAt: new Date("2026-11-06T06:00:00Z") };
+    const session = { date: "2026-11-06", sourceReports: [] as unknown[], top3SnapshotAt: new Date("2026-11-06T06:00:00Z"),
+      omxsValue: 0, marketRsi: 0, trendLabel: "" };
     const history = [{ id: 7, ticker: "RECORDED", market: "SE", signalSource: "telegram",
       signalDate: "2026-11-05", category: "MOMENTUM", direction: "LONG", outcome: "WIN", realizedR: 2, entryPrice: 100, stopPrice: 95, targetPrice: 110 }];
     const before = structuredClone(history);
@@ -58,6 +59,10 @@ test("both real synchronization orders persist independent receipt weather witho
       await synchronizeCandidates(tx, 1, [], new Date("2026-11-06T08:00:00Z"), report);
     }
     assert.deepEqual(history, before);
+    assert.equal(session.omxsValue, 3300);
+    assert.equal(session.marketRsi, 55);
+    assert.equal(session.trendLabel, "MEDVIND");
+    assert.match(sessionMarketEvidence(session).weather.trendLabel, /Telegram\/OMXS30 · 2026-11-05/);
     const receipts = latestSourceReceipts([session]);
     outcomes.push(Object.fromEntries(receipts.map(r => [r.source, r.marketContext])));
     assert.deepEqual(receipts.find(r => r.source === "telegram")?.dataDates, { SE: "2026-11-05", US: null });
@@ -70,6 +75,38 @@ test("both real synchronization orders persist independent receipt weather witho
   assert.equal(outcomes[0].telegram?.SE?.weather?.omxsValue, 3300);
   assert.equal(outcomes[0].edgeai?.SE?.indexSnapshot?.close, 3301.09);
   assert.equal(outcomes[0].telegram?.US, undefined);
+});
+
+test("source policy, not import time, determines the summary; missing legacy evidence stays unverified", () => {
+  const edge = { ...reports[1], importedAt: "2026-11-06T12:00:00Z",
+    marketContext: { SE: { dataAsOf: "2026-11-05", weather: {
+      omxsValue: 3400, rsi: 65, perf5d: 4, perf1m: 5, perf3m: 6, trendLabel: "EDGE",
+    } } } };
+  const tg = { ...reports[0], importedAt: "2026-11-06T08:00:00Z" };
+  const before = JSON.stringify([tg, edge]);
+  const first = sessionMarketEvidence({ sourceReports: [edge, tg] });
+  assert.deepEqual(first, sessionMarketEvidence({ sourceReports: [tg, edge] }));
+  assert.equal(first.weather.rsi, 55);
+  assert.equal(sessionMarketEvidence({ sourceReports: [edge] }).weather.rsi, 65);
+  const unknown = sessionMarketEvidence({ marketRsi: 55, omxsValue: 3300 });
+  assert.equal(unknown.verified, false);
+  assert.match(unknown.weather.trendLabel, /OKÄND KÄLLA/);
+  assert.deepEqual(unknown.fields, {});
+  assert.equal(sessionMarketEvidence({ sourceReports: [{ ...tg, status: "FAILED" }] }).verified, false);
+  assert.equal(sessionMarketEvidence({ sourceReports: [{ ...tg, dataDates: { SE: "2026-11-04" } }] }).verified, false);
+  assert.equal(JSON.stringify([tg, edge]), before);
+});
+
+test("same-source same-period conflicting weather is unknown, not picked by import order", () => {
+  const original = { ...reports[0], importedAt: "2026-11-06T08:00:00Z" };
+  const changed = structuredClone(original);
+  changed.marketContext!.SE!.weather!.rsi = 75;
+  changed.fingerprint = "different";
+  const a = sessionMarketEvidence({ sourceReports: [original, changed], marketRsi: 55 });
+  assert.equal(a.verified, false);
+  assert.match(a.weather.trendLabel, /CONFLICT/);
+  assert.deepEqual(a.fields, {});
+  assert.deepEqual(a, sessionMarketEvidence({ sourceReports: [changed, original], marketRsi: 55 }));
 });
 
 test("legacy receipts stay unknown; optional trend is preserved only as independent source evidence", () => {

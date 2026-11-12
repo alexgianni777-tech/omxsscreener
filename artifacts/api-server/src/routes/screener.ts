@@ -28,6 +28,7 @@ import { resolveYahooTicker } from "../lib/omxs30TickerMap";
 import { fetchCompletedVolumeBatch } from "../lib/completedVolumeBatch";
 import { calendarDaysBetween } from "../lib/marketCalendar";
 import { AUTOMATIC_EARNINGS_CHECK_ENABLED, decideCandidate, reviewCandidate, reviewSession } from "../lib/screeningReview";
+import { sessionMarketEvidence } from "../lib/sourceMarketContext";
 import { logger } from "../lib/logger";
 import { candidateOrigin } from "../lib/candidateOrigin";
 import { withRetry } from "../lib/retry";
@@ -252,12 +253,6 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
       const [updatedSession] = await tx
         .update(screenerSessionsTable)
         .set({
-          omxsValue: session.marketWeather.omxsValue,
-          perf5d: session.marketWeather.perf5d,
-          perf1m: session.marketWeather.perf1m,
-          perf3m: session.marketWeather.perf3m,
-          marketRsi: session.marketWeather.rsi,
-          trendLabel: session.marketWeather.trendLabel,
           rawText: parsed.data.rawText,
         })
         .where(eq(screenerSessionsTable.id, existingId))
@@ -428,12 +423,6 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
       const [updatedSession] = await tx
         .update(screenerSessionsTable)
         .set({
-          omxsValue: parsedSession.marketWeather.omxsValue,
-          perf5d: parsedSession.marketWeather.perf5d,
-          perf1m: parsedSession.marketWeather.perf1m,
-          perf3m: parsedSession.marketWeather.perf3m,
-          marketRsi: parsedSession.marketWeather.rsi,
-          trendLabel: parsedSession.marketWeather.trendLabel,
           rawText: bodyParsed.data.rawText,
         })
         .where(eq(screenerSessionsTable.id, params.data.id))
@@ -554,14 +543,7 @@ router.get("/screener/sessions", async (req, res): Promise<void> => {
       return {
         id: s.id,
         date: s.date,
-        marketWeather: {
-          omxsValue: s.omxsValue,
-          perf5d: s.perf5d,
-          perf1m: s.perf1m,
-          perf3m: s.perf3m,
-          rsi: s.marketRsi,
-          trendLabel: s.trendLabel,
-        },
+        marketWeather: sessionMarketEvidence(s).weather,
         momentumCount,
         squeezeCount,
         studsCount,
@@ -676,9 +658,10 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
       } : null,
     };
   });
+  const marketEvidence = sessionMarketEvidence(session);
   const sessionReview = reviewSession(
     candidatesWithReview.map((candidate) => candidate.review),
-    session.marketRsi,
+    marketEvidence.verified ? marketEvidence.weather.rsi : 0,
   );
   // Only live recommendations are filtered. Immutable cohorts/revisions and
   // stored candidate screening statuses remain available as historical evidence.
@@ -692,14 +675,7 @@ router.get("/screener/sessions/:id", async (req, res): Promise<void> => {
     createdAt: session.createdAt ?? null,
     lastImportAt: session.lastImportAt ?? null,
     sourceReports: Array.isArray(session.sourceReports) ? session.sourceReports : [],
-    marketWeather: {
-      omxsValue: session.omxsValue,
-      perf5d: session.perf5d,
-      perf1m: session.perf1m,
-      perf3m: session.perf3m,
-      rsi: session.marketRsi,
-      trendLabel: session.trendLabel,
-    },
+    marketWeather: marketEvidence.weather,
     candidates: candidatesWithReview,
     sessionReview,
     importDiff: (session.lastImportDiff as any) ?? undefined,
