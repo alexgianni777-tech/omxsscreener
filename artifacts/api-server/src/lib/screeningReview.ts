@@ -1,5 +1,6 @@
 import { isAcceptedSignalDate } from "./signalDatePolicy";
 import { marketDate, signalSessionDate } from "@workspace/market-calendar";
+import { resolveYahooTicker } from "./omxs30TickerMap";
 
 export type ReviewStatus = "APPROVED" | "WARN" | "BLOCKED";
 
@@ -7,12 +8,14 @@ export type ReviewStatus = "APPROVED" | "WARN" | "BLOCKED";
 export const AUTOMATIC_EARNINGS_CHECK_ENABLED = false;
 
 export type CandidateReviewInput = {
+  ticker?: string;
   market?: string | null;
   category: string;
   direction: string;
   rs3m: number;
   perf1m: number;
   rsi: number;
+  pctB?: number | null;
   edgeExpectancyR?: number | null;
   edgeSampleN?: number | null;
   signalAgeBars?: number | null;
@@ -56,6 +59,15 @@ export function reviewCandidate(
   const blockers: string[] = [];
   const isShort = candidate.direction === "SHORT";
   const isEdgeAi = (candidate.signalSource ?? source) === "edgeai";
+  if (candidate.ticker) {
+    try { resolveYahooTicker(candidate.ticker, candidate.market); }
+    catch (error) { blockers.push(error instanceof Error ? error.message : "Kräver instrumentverifiering."); }
+  }
+  if ((candidate.signalSource ?? source) === "telegram" && candidate.category === "STUDS" &&
+      Number.isFinite(candidate.rsi) && typeof candidate.pctB === "number" && Number.isFinite(candidate.pctB) &&
+      candidate.rsi >= 35 && candidate.pctB >= 0) {
+    blockers.push("Inkonsekvent Telegram-kategori STUDS: kräver RSI < 35 eller %B < 0; signalens rådata har bevarats.");
+  }
   // Legacy EdgeAI imports stored expectancyR * 100 in `rsi`. Keep that
   // compatibility only for EdgeAI rows; new imports use edgeExpectancyR.
   const edgeExpectancyR = candidate.edgeExpectancyR != null

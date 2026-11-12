@@ -15,6 +15,7 @@ const STYLES: Record<EntryStatus, string> = {
   UNKNOWN: "text-muted-foreground",
 };
 export type SignalMetadata = {
+  review?: { status: string; reasons: string[] };
   dataQuality?: CandidateDataQuality | null;
   importWarning?: string | null;
   signalDate?: string | null;
@@ -38,7 +39,9 @@ export function LiveEntryGuard({ plan, quote, signal, now }: {
     return () => clearTimeout(timer);
   }, [quote?.asOf, now]);
   const qualityWarning = sourceQualityReasons(signal?.signalSource, signal?.dataQuality)[0];
-  const warning = qualityWarning || signal?.importWarning;
+  const warning = (signal?.review?.status === "BLOCKED"
+    ? signal.review.reasons.join(" ") || "BLOCKERAD – signalens datakontroll är underkänd." : null) ||
+    qualityWarning || signal?.importWarning;
   const assessment = warning
     ? { ...assessLiveEntry(plan, null, now), status: "UNKNOWN" as const, reason: warning }
     : assessLiveEntry(plan, quote, now);

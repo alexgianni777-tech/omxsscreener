@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ResearchCard } from "./ResearchCard";
+import { LiveEntryGuard } from "./LiveEntryGuard";
 import { SourceProvenance } from "./SourceProvenance";
 import { pickWarnings } from "./SwedishResearch";
 import { qualifiedEdgeQuality } from "../lib/sourceQuality.fixtures";
@@ -22,6 +23,30 @@ const quote: any = { ticker: "EVO", yahooTicker: "EVO.ST", livePrice: 100, marke
 const card = (props: any = {}) => renderToStaticMarkup(React.createElement(ResearchCard, {
   pick, signal, dataDate: "2026-11-02", quote, ...props,
 }));
+
+test("blocked Telegram STUDS or uncertain instrument never renders a READY entry despite a fresh quote", () => {
+  for (const reason of ["Inkonsekvent Telegram-kategori STUDS: kräver RSI < 35 eller %B < 0.",
+    "SCA: kräver instrumentverifiering — ange marknad och exakt aktieslag."]) {
+    const html = card({ pick: { ...pick, source: "telegram", category: "STUDS",
+      decision: { status: "BLOCKED", reasons: [reason] } } });
+    assert.match(html, /BLOCKERAD – ingen ny entry/);
+    assert.doesNotMatch(html, /READY – entryvillkor verifierade/);
+    assert.ok(html.includes(reason.replaceAll("<", "&lt;")));
+  }
+});
+
+test("current blocked review prevents READY for a retained original selection and the standalone guard", () => {
+  const review = { status: "BLOCKED", reasons: ["Inkonsekvent Telegram-kategori STUDS"] };
+  const html = card({ signal: { ...signal, review } });
+  assert.match(html, /BLOCKERAD – ingen ny entry/);
+  assert.doesNotMatch(html, /READY – entryvillkor verifierade/);
+  const guard = renderToStaticMarkup(React.createElement(LiveEntryGuard, {
+    plan: { entryPrice: 100, stopPrice: 95, targetPrice: 110, direction: "LONG" },
+    quote, signal: { review },
+  }));
+  assert.match(guard, /Inkonsekvent Telegram-kategori STUDS/);
+  assert.doesNotMatch(guard, /READY · prisvillkor uppfyllda/);
+});
 
 test("global raw diagnostics occur once in source disclosure, never on unrelated EVO card", () => {
   const warnings = pickWarnings(pick, [receipt], []);

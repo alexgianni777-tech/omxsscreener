@@ -20,3 +20,9 @@ Keep source-specific market evidence separate from the legacy session-wide marke
 **Why:** The user requested independent Telegram/EdgeAI evidence without changing strategies or ranking. The user subsequently approved removing last-writer-wins from the shared Swedish summary as a data-integrity correction.
 
 **How to apply:** Use each receipt's own market/date for source displays and compare the Swedish Telegram report only against Sweden. The Swedish summary deterministically prefers evidenced Telegram/OMXS30, then manual, then EdgeAI; disclose the selected source/date. Untraceable legacy summaries and same-source same-period conflicts must not verify the session regime. Do not rewrite history or add polling.
+
+Telegram's documented STUDS condition is RSI < 35 or Bollinger %B < 0. Preserve contradictory original data but do not qualify entry. Do not apply that definition to EdgeAI pullback/reversal setups. An ambiguous share class requires instrument verification, never an arbitrary A/B choice.
+
+**Why:** The user explicitly requested these source-specific data-integrity safeguards while keeping raw signals, historical selections and other trading rules intact.
+
+**How to apply:** Treat a current data-quality block separately from immutable historical approval. A retained original selection or a fresh quote must not override that block.

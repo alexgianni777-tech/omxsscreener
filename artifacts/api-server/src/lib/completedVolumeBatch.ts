@@ -25,7 +25,7 @@ export async function fetchCompletedVolumeBatch(
         return;
       }
       try {
-        const ticker = resolveYahooTicker(request.ticker);
+        const ticker = resolveYahooTicker(request.ticker, request.market);
         // A 16:30 signal cannot use a partial current-day daily volume bar.
         // The prior *completed* bar is context, recorded with its real date.
         const result = isCurrentSessionIncomplete(request.asOfDate, request.market)

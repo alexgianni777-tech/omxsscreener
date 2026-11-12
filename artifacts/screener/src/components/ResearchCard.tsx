@@ -10,6 +10,7 @@ import { quoteLabels, researchQuoteForMarket } from "../lib/researchQuote";
 import { assessLiveEntry, LIVE_ENTRY_MAX_PRICE_AGE_MS } from "../lib/liveEntryGuard";
 
 export type ResearchSignal = EdgeAICandidateMetrics & {
+  review?: { status: string; reasons: string[] };
   dataQuality?: CandidateDataQuality | null;
   id: number; signalDate?: string | null; entryPrice: number; stopPrice: number; targetPrice: number;
   importWarning?: string | null; volumeAsOf?: string | null; price?: number | null;
@@ -45,7 +46,10 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
   const qualityReasons = sourceQualityReasons(pick.source, quality);
   const dateWarning = dataDateStatus === "UNKNOWN" ? "NO DATA – datadag eller börskalender ej verifierad; ingen entrybekräftelse."
     : dataDateStatus === "CONFLICT" ? "CONFLICT – datadag är inte föregående avslutade handelsdag; ingen entrybekräftelse." : null;
-  const warningList = [...new Set([dateWarning, ...qualityReasons, ...warnings, signal?.importWarning].filter((value): value is string => !!value))];
+  const blockedReasons = signal?.review?.status === "BLOCKED" ? signal.review.reasons :
+    pick.decision?.status === "BLOCKED" || pick.decision?.status === "INVALID"
+      ? pick.decision.reasons ?? [] : [];
+  const warningList = [...new Set([dateWarning, ...blockedReasons, ...qualityReasons, ...warnings, signal?.importWarning].filter((value): value is string => !!value))];
   const screeningReady = pick.decision?.status === "TRADEABLE";
   const importWarning = warningList.join(" ") ||
     (stale ? "STALE eller obekräftat marknadsdatum – ingen entrybekräftelse" : !dataDate ? "Verifierat marknadsdatadatum saknas – ingen entrybekräftelse" : undefined);
@@ -66,7 +70,7 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
   const decisionSafe = screeningReady && !stale && !!dataDate && warningList.length === 0 &&
     guard?.status === "READY";
   const blocked = stale || dataDateStatus === "CONFLICT" || (!!quality && qualityReasons.length > 0) || warningList.some(w => w.startsWith("Källkonflikt") || w.startsWith("Flera planer/")) ||
-    (!!pick.decision?.status && !screeningReady) ||
+    signal?.review?.status === "BLOCKED" || (!!pick.decision?.status && !screeningReady) ||
     guard?.status === "PLAN_BROKEN" || guard?.status === "MISSED_ENTRY";
   const entryLabel = decisionSafe ? "READY – entryvillkor verifierade, inte en order"
     : stale ? "HISTORISKT – ingen ny entry" : blocked ? "BLOCKERAD – ingen ny entry" : "AVVAKTA – entry ej bekräftad";

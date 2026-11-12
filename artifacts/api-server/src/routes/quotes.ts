@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import YahooFinance from "yahoo-finance2";
-import { resolveYahooTicker } from "../lib/omxs30TickerMap";
+import { InstrumentVerificationError, resolveYahooTicker } from "../lib/omxs30TickerMap";
 import { isE2ETestMode } from "../lib/e2eTestSafety";
 import { quoteEarningsDate } from "../lib/quoteEarningsDate";
 
@@ -30,7 +30,7 @@ router.get("/screener/quotes", async (req, res): Promise<void> => {
   if (isE2ETestMode()) {
     res.json(tickers.map((ticker) => ({
       ticker,
-      yahooTicker: resolveYahooTicker(ticker),
+      yahooTicker: ticker,
       livePrice: null,
       change: null,
       changePct: null,
@@ -46,8 +46,9 @@ router.get("/screener/quotes", async (req, res): Promise<void> => {
 
   const results = await Promise.all(
     tickers.map(async (ticker) => {
-      const yahooTicker = resolveYahooTicker(ticker);
+      let yahooTicker = ticker;
       try {
+        yahooTicker = resolveYahooTicker(ticker);
         const quote = await yf.quote(yahooTicker);
         const earningsTs: Date | null = (quote as any).earningsTimestamp ?? null;
         const { earningsInDays, earningsDate } = quoteEarningsDate(earningsTs, yahooTicker);
@@ -68,7 +69,7 @@ router.get("/screener/quotes", async (req, res): Promise<void> => {
           earningsInDays,
           error: null,
         };
-      } catch {
+      } catch (error) {
         return {
           ticker,
           yahooTicker,
@@ -80,7 +81,7 @@ router.get("/screener/quotes", async (req, res): Promise<void> => {
           fetchedAt,
           earningsDate: null,
           earningsInDays: null,
-          error: `Could not fetch quote for ${yahooTicker}`,
+          error: error instanceof InstrumentVerificationError ? error.message : `Could not fetch quote for ${yahooTicker}`,
         };
       }
     })

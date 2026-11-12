@@ -261,7 +261,7 @@ router.post(
         try {
           const isSignalDay = signalDate === stockholmCalendarDate();
           if (AUTOMATIC_EARNINGS_CHECK_ENABLED && isSignalDay) {
-            const q = (await withRetry(() => yf.quote(resolveYahooTicker(c.ticker), {}, { validateResult: false }))) as any;
+            const q = (await withRetry(() => yf.quote(resolveYahooTicker(c.ticker, c.market), {}, { validateResult: false }))) as any;
             const earningsInDays = daysUntil(q.earningsTimestamp);
             if (earningsInDays != null) {
               c.earningsInDays = earningsInDays;
