@@ -6,6 +6,22 @@ export const execution: any = { id: "real", input: { mode: "REAL", instrumentKin
   priceCurrency: "SEK", financingCostKr: 2, commissionKr: 8, spreadCostKr: 4, slippageCostKr: 3 },
   metrics: { riskCashKr: 50, netPnlKr: 90, netR: 1.8 }, signal: { ticker: "TEST", stopPrice: 95, targetPrice: 110 } };
 const now = Date.parse("2026-10-02T10:00:00Z");
+test("net expectancy, profit factor and chronological drawdown exclude simulations and incomplete records",()=>{
+  const trade=(id:string,exit:number,time:string,mode="REAL")=>({...execution,id,
+    signal:{...execution.signal,source:"telegram",bucket:"MOMENTUM",direction:"LONG"},
+    input:{...execution.input,mode,exitPrice:exit,exitTime:time,financingCostKr:0,commissionKr:0},
+    metrics:{riskCashKr:50,netPnlKr:(exit-100)*10,netR:(exit-100)/5}});
+  const a=trade("a",110,"2026-10-01T09:00:00Z"),b=trade("b",95,"2026-10-01T10:00:00Z"),c=trade("c",105,"2026-10-01T11:00:00Z");
+  const rows=[c,a,b,trade("sim",200,"2026-10-01T11:30:00Z","SIMULATED"),
+    {...a,id:"missing",input:{...a.input,commissionKr:null}}];
+  const result=journalAnalysis(rows,now);
+  assert.equal(result.net.n,3);assert.equal(result.net.netExpectancy,2/3);
+  assert.equal(result.net.profitFactor,3);assert.equal(result.net.maxDrawdownR,1);
+  assert.equal(result.net.status,"INSUFFICIENT_DATA");
+  assert.equal(result.groups.length,1);assert.match(result.groups[0].key,/regim UNKNOWN/);
+  assert.equal(journalAnalysis([a],now).net.profitFactor,null);
+  assert.equal(journalAnalysis([],now).net.status,"NOT_VERIFIED");
+});
 test("real fills produce gross/net and no double deducted spread/slippage or leverage multiplication", () => {
   const before = JSON.stringify(execution);
   const r = executionAnalysis(execution, now);

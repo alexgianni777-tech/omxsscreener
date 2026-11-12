@@ -1,5 +1,8 @@
 import React, { useEffect, useReducer } from "react";
-import type { QuoteResult, CandidateDataQuality } from "@workspace/api-client-react";
+import type { QuoteResult, CandidateDataQuality, SessionSourceReport } from "@workspace/api-client-react";
+import { marketRegime, qualifyResearch } from "../lib/researchQualification";
+import { CashResearch } from "./CashResearch";
+import { RiskPanel } from "./RiskPanel";
 import { sourceQualityReasons } from "../lib/sourceQuality";
 import { PlanGrid } from "./PlanGrid";
 import { LiveEntryGuard } from "./LiveEntryGuard";
@@ -15,6 +18,7 @@ export type ResearchSignal = EdgeAICandidateMetrics & {
   id: number; signalDate?: string | null; entryPrice: number; stopPrice: number; targetPrice: number;
   importWarning?: string | null; volumeAsOf?: string | null; price?: number | null;
   earningsInDays?: number | null; earningsKnowledge?: "SIGNAL_TIME" | "UNKNOWN" | null;
+  atr?: number | null; rsi?: number | null; signalRsi?: number | null; perf1m?: number; rs3m?: number; volMultiplier?: number;
 };
 const WHY: Record<string, string> = {
   MOMENTUM: "Momentum-setup enligt källan", SQUEEZE: "Squeeze/kompression enligt källan",
@@ -23,12 +27,13 @@ const WHY: Record<string, string> = {
 const SOURCE: Record<string, string> = { edgeai: "GitHub/EdgeAI", telegram: "Telegram", manual: "Manuell" };
 const unknown = "okänd";
 
-export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], stale = false, dataDateStatus, expectedDataDate, advisory }: {
+export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], stale = false, dataDateStatus, expectedDataDate, advisory, reports = [] }: {
   pick: DailyPick & { decision?: { status?: string | null; reasons?: readonly string[] | null } }; signal?: ResearchSignal;
   dataDate: string | null; quote?: QuoteResult; warnings?: readonly string[]; stale?: boolean;
   dataDateStatus?: "CURRENT" | "STALE" | "UNKNOWN" | "CONFLICT";
   expectedDataDate?: string | null;
   advisory?: string;
+  reports?: readonly SessionSourceReport[];
 }) {
   const [, expireQuote] = useReducer(n => n + 1, 0);
   useEffect(() => {
@@ -50,7 +55,16 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
     pick.decision?.status === "BLOCKED" || pick.decision?.status === "INVALID"
       ? pick.decision.reasons ?? [] : [];
   const warningList = [...new Set([dateWarning, ...blockedReasons, ...qualityReasons, ...warnings, signal?.importWarning].filter((value): value is string => !!value))];
-  const screeningReady = pick.decision?.status === "TRADEABLE";
+  const regime = marketRegime(reports, pick.market, dataDate);
+  const baseQualification = qualifyResearch({ ...signal, category: pick.category, direction: pick.direction,
+    signalDate: pick.signalDate, signalSource: pick.source, market: pick.market, dataDate,
+    entryPrice:pick.entryPrice,stopPrice:pick.stopPrice,targetPrice:pick.targetPrice }, regime);
+  const qualification = warningList.length || stale || !dataDate || (dataDateStatus != null && dataDateStatus !== "CURRENT")
+    ? { status: "BLOCKED" as const, reasons: [...warningList,...baseQualification.reasons] }
+    : baseQualification.status === "QUALIFIED" && pick.decision?.status !== "TRADEABLE"
+      ? { status: "WATCH" as const, reasons: ["Screeningkvalificering ej verifierad.",...baseQualification.reasons] }
+      : baseQualification;
+  const screeningReady = pick.decision?.status === "TRADEABLE" && qualification.status === "QUALIFIED";
   const importWarning = warningList.join(" ") ||
     (stale ? "STALE eller obekräftat marknadsdatum – ingen entrybekräftelse" : !dataDate ? "Verifierat marknadsdatadatum saknas – ingen entrybekräftelse" : undefined);
   const m = signal ? edgeAiMetrics(signal) : null;
@@ -61,6 +75,7 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
     ? null
     : assessLiveEntry(pick, checkedQuote ?? null);
   const noTradeReasons = [
+    ...qualification.reasons,
     stale ? `Signal eller marknadsdag är STALE.${expectedDataDate ? ` D−1 kräver marknadsdag ${expectedDataDate}; sparat underlag är ${dataDate ?? "okänt"}.` : ""}` : null,
     warningList[0] ?? null,
     !dataDate ? "Verifierat marknadsdatadatum saknas." : null,
@@ -82,13 +97,13 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
       <span aria-label="Screeningstatus" className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
         {stale ? "STALE · historiskt urval, ej aktivt" : dateWarning ? dataDateStatus === "CONFLICT" ? "CONFLICT · datadag" : "NO DATA · datadag ej verifierad" : qualityReasons.length ? quality ? "RESEARCH ONLY · kvalitet ej kvalificerad" : "Källkvalitet okänd · ej entrybesked" : screeningReady ? "Aktuell D−1-signal · ej entrybesked" : `Screening: ${pick.decision?.status ?? unknown}`}
       </span>
-      <span className="text-xs text-muted-foreground">{SOURCE[pick.source] ?? pick.source} · {pick.category}</span>
+      <span className="text-xs text-muted-foreground">{qualification.status} · {SOURCE[pick.source] ?? pick.source} · {pick.category}</span>
     </div>
     <p className="mt-1 text-xs text-muted-foreground" data-testid={`text-basis-${pick.candidateId}`}>
       Signal {pick.signalDate ?? unknown} · Datadag D−1 {dataDate ?? unknown}
     </p>
     <PlanGrid plan={pick} caption="Originalplan · D−1-underlag" />
-    <p className="mt-2 text-xs text-muted-foreground">Rapportkalender kontrolleras manuellt före orderläggning</p>
+    <p className="mt-2 text-xs text-muted-foreground">Rapportkalender kontrolleras manuellt före orderläggning. Okänt datum eller rapport inom 5 handelsdagar hindrar kvalificering.</p>
     <div role={decisionSafe ? "status" : "alert"} data-testid={`decision-brief-${pick.candidateId}`}
       className={`mt-3 rounded-lg px-3 py-2 text-xs ${decisionSafe ? "bg-success/10 text-success" : "bg-amber-500/10 text-amber-800 dark:text-amber-300"}`}>
       <p className="font-semibold" data-testid={`entry-status-${pick.candidateId}`}>{entryLabel}</p>
@@ -119,10 +134,13 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
       <div data-testid={`guard-${pick.candidateId}`}>
         <LiveEntryGuard plan={pick} quote={checkedQuote?.error ? null : checkedQuote ?? null}
           signal={{ signalDate: pick.signalDate, signalSource: pick.source, signalAgeBars: signal?.signalAgeBars,
+            qualification,
             dataQuality: quality,
             importWarning: importWarning ? "Entry ej verifierad; se kortets orsaker och källstatus." : undefined }} />
       </div>
       <p className="mt-2 text-sm leading-relaxed text-foreground">{WHY[pick.category] ?? `Setup ${pick.category} enligt källan`}.</p>
+      <p>Marknadsregim {pick.market}: {regime.state} · källa {regime.source ?? "ej verifierad"} · datadag {regime.dataDate ?? "okänd"}.
+        Manuellt undantag är inte ett automatiskt godkännande.</p>
       {quality && <p className="mt-1 text-muted-foreground">
         Källkvalitet: {quality.evidenceStatus ?? "okänd"} / {quality.eliteStatus ?? "okänd"}
         {" · "}eliteQualified: {String(quality.eliteQualified ?? "okänt")}
@@ -130,6 +148,8 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
         {" · "}{quality.barSource === "RECONSTRUCTED_INTRADAY" ? "Rekonstruerad intradag – ej verifierad dagsslutkurs" : "Officiell dagsstängning ej självständigt verifierad"}
       </p>}
       <p className="mt-1 text-muted-foreground">Invalidation enligt ursprungsplan: stop {formatPrice(pick.stopPrice)}. Ingen planändring har gjorts.</p>
+      <RiskPanel plan={pick} />
+      <CashResearch ticker={pick.ticker} />
       <p className="mt-1 text-muted-foreground">{signal?.earningsKnowledge === "SIGNAL_TIME" && signal.earningsInDays != null
         ? `Källans rapportavstånd: ${signal.earningsInDays} dagar; verifiera rapporttid manuellt.`
         : "Rapportdatum ej verifierat här; kontrollera manuellt före beslut."}</p>

@@ -63,7 +63,7 @@ export function SwedishResearchContent({ selection, signals = [], reports = [], 
       sessionDate={diagnosticDate ?? selection.date} renderPick={p => <ResearchCard key={p.candidateId} pick={p}
           signal={signals.find(c => c.id === p.candidateId && (c.signalDate ?? null) === (p.signalDate ?? null) &&
             c.entryPrice === p.entryPrice && c.stopPrice === p.stopPrice && c.targetPrice === p.targetPrice)}
-          dataDate={savedDataDate(selection.dataDates, p.source, p.signalDate, p.market)} quote={quotes[quoteRequestTicker(p.ticker, p.market)]}
+          reports={reports} dataDate={savedDataDate(selection.dataDates, p.source, p.signalDate, p.market)} quote={quotes[quoteRequestTicker(p.ticker, p.market)]}
           advisory={trendAlignment(statusReports ?? reports, p.market, p.direction, savedDataDate(selection.dataDates, p.source, p.signalDate, p.market))}
           dataDateStatus={freshness(p).status}
           expectedDataDate={previousMarketDay(reference(p), p.market)}
@@ -144,7 +144,7 @@ export function PreliminaryResearchContent({ picks, sessionDate, signals = [], s
       sessionDate={sessionDate} renderPick={p => <ResearchCard key={p.candidateId} pick={p}
           signal={signals.find(c => c.id === p.candidateId && (c.signalDate ?? null) === (p.signalDate ?? null) &&
             c.entryPrice === p.entryPrice && c.stopPrice === p.stopPrice && c.targetPrice === p.targetPrice)}
-          dataDate={null} quote={quotes[quoteRequestTicker(p.ticker, p.market)]} advisory="avvakta"
+          reports={statusReports} dataDate={null} quote={quotes[quoteRequestTicker(p.ticker, p.market)]} advisory="avvakta"
           warnings={pickWarnings(p, [], signals as Conflictable[], statusReports ?? [])} stale />} />
   </>;
 }

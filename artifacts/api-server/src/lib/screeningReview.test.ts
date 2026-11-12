@@ -39,16 +39,16 @@ test("negative EdgeAI expectancy blocks independently of conventional RSI", () =
   assert.doesNotMatch(decision.reasons.join(" "), /RSI-data saknas/);
 });
 
-test("negative EdgeAI SHORT expectancy is informative, not a BLOCKED or WAIT gate", () => {
+test("negative SHORT expectancy remains informational, but unverified ATR/research prevents qualification", () => {
   const short = {
     ...edgeCandidate, category: "WEAKEST", direction: "SHORT",
     stopPrice: 105, targetPrice: 90,
   };
   const review = reviewCandidate(short, "edgeai");
-  assert.equal(review.status, "APPROVED");
+  assert.equal(review.status, "WARN");
   assert.match(review.reasons.join(" "), /SHORT tillåten trots negativ historisk förväntan/);
   const decision = decideCandidate(short, review, short.signalDate);
-  assert.equal(decision.status, "TRADEABLE");
+  assert.equal(decision.status, "WAIT");
   assert.match(decision.reasons.join(" "), /-0.20R/);
 });
 
@@ -72,7 +72,7 @@ test("allowing negative SHORT expectancy retains all other risk and data gates",
   const unknownEarnings = { ...base, earningsKnowledge: "UNKNOWN" as const };
   assert.equal(decideCandidate(
     unknownEarnings, reviewCandidate(unknownEarnings, "edgeai"), base.signalDate,
-  ).status, "TRADEABLE");
+  ).status, "BLOCKED");
   const stale = { ...base, signalDate: "2020-01-01" };
   assert.equal(decideCandidate(stale, reviewCandidate(stale, "edgeai"), base.signalDate).status, "STALE");
 });
@@ -81,20 +81,20 @@ test("legacy EdgeAI SHORT expectancy compatibility also permits negative values"
   const { edgeExpectancyR: _expectancy, ...legacy } = edgeCandidate;
   const short = { ...legacy, rsi: -20, direction: "SHORT", stopPrice: 105, targetPrice: 90 };
   const review = reviewCandidate(short, "edgeai");
-  assert.equal(review.status, "APPROVED");
-  assert.equal(decideCandidate(short, review, short.signalDate).status, "TRADEABLE");
+  assert.equal(review.status, "WARN");
+  assert.equal(decideCandidate(short, review, short.signalDate).status, "WAIT");
 });
 
 test("EdgeAI review prefers dedicated expectancy over legacy RSI compatibility", () => {
   const candidate = { ...edgeCandidate, edgeExpectancyR: 0.1, rsi: -50 };
   const review = reviewCandidate(candidate, "edgeai");
-  assert.equal(review.status, "APPROVED");
+  assert.equal(review.status, "WARN");
   const decision = decideCandidate(
     candidate,
     review,
     candidate.signalDate,
   );
-  assert.equal(decision.status, "TRADEABLE");
+  assert.equal(decision.status, "WAIT");
   assert.doesNotMatch(decision.reasons.join(" "), /RSI-data saknas/);
 });
 
@@ -107,6 +107,7 @@ test("a fully enriched same-day Telegram candidate is tradeable", () => {
     rs3m: 1.2,
     perf1m: 2.1,
     rsi: 54,
+    atr: 1,
     signalRsi: 54,
     signalGapPct: 0.8,
     volMultiplier: 1.4,
@@ -122,7 +123,7 @@ test("a fully enriched same-day Telegram candidate is tradeable", () => {
     price: 100,
   };
 
-  const review = reviewCandidate(telegramCandidate, "telegram");
+  const review = reviewCandidate(telegramCandidate, "telegram",new Date(`${signalDate}T10:00:00Z`));
   const decision = decideCandidate(
     telegramCandidate,
     review,

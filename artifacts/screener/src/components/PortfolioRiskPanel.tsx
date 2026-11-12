@@ -27,6 +27,7 @@ export function PortfolioRiskPanel({ positions, now = Date.now() }: { positions:
       Inga korrelationstal uppskattas.</p>
     <div className="grid gap-2 sm:grid-cols-2">{risk.rows.map(r => <article key={r.id} className="rounded border border-border p-2 text-xs break-words">
       <strong>{r.ticker}</strong> · {r.product ? "produkt" : "aktie/registrerad position"} · instrumentsida {r.side ?? "okänd"}
+      <p role="status">{r.stopStatus} · Kontorisk {r.accountRiskStatus}</p>
       <p>Entryvärde {number(r.capital)} · stop-risk {number(r.stop)} · maximal instrumentförlust {r.unbounded ? "potentiellt obegränsad" : number(r.maximum)}</p>
       <p>Hävstång {number(r.leverage)} · barriär {number(r.barrier)}. Inget av dessa tal används för att förstora P&amp;L.</p>
       <p>Kurs asOf {positions.find(p => p.id === r.id)?.quoteAsOf ?? "okänd"} · ålder {
@@ -37,5 +38,7 @@ export function PortfolioRiskPanel({ positions, now = Date.now() }: { positions:
         {" "}Helg-/kursgap och spread kan passera stop; faktisk gapförlust okänd.</p>
     </article>)}</div>
     {!positions.length && <p className="text-xs text-muted-foreground">Inga registrerade positioner. Inga nya positioner skapas.</p>}
+    <p className="text-xs">Riskpolicy: högst 20 % insats och 4 % portföljrisk. Försiktighetsexempel 0,5–1 %.
+      Inget PASS utan verifierat kontokapital, valuta/FX och maximal instrumentförlust; stop garanterar inte denna gräns.</p>
   </section>;
 }

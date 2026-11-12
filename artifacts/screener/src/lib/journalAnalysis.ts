@@ -8,6 +8,24 @@ const instant = (s: string | null | undefined) => {
 const close = (a: number, b: number) => finite(a) && finite(b) &&
   Math.abs(a - b) <= 1e-7 * Math.max(1, Math.abs(a), Math.abs(b));
 
+function netStatistics(rows: ReturnType<typeof executionAnalysis>[]) {
+  const sample = rows.filter(r=>r.executed && r.netR!=null).sort((a,b)=>
+    Date.parse(a.record.input.exitTime!)-Date.parse(b.record.input.exitTime!) || a.record.id.localeCompare(b.record.id));
+  const values=sample.map(r=>r.netR!);
+  const wins=values.filter(r=>r>0), losses=values.filter(r=>r<0);
+  const sum=(a:number[])=>a.reduce((s,n)=>s+n,0);
+  let equity=0,peak=0,drawdown=0;
+  for (const value of values) { equity+=value; peak=Math.max(peak,equity); drawdown=Math.max(drawdown,peak-equity); }
+  const average=(a:number[])=>a.length?sum(a)/a.length:null;
+  const profitFactor=losses.length?sum(wins)/Math.abs(sum(losses)):null;
+  const payoff=wins.length&&losses.length?average(wins)!/Math.abs(average(losses)!):null;
+  const valid=[equity,drawdown].every(Number.isFinite);
+  return { n:sample.length, status:!sample.length||!valid?"NOT_VERIFIED":sample.length<20?"INSUFFICIENT_DATA":"DESCRIPTIVE_ONLY",
+    netExpectancy:valid?average(values):null, winRate:sample.length?wins.length/sample.length:null,
+    profitFactor:finite(profitFactor)?profitFactor:null, payoff:finite(payoff)?payoff:null,
+    maxDrawdownR:sample.length&&valid?drawdown:null };
+}
+
 /** Execution evidence only. Never backfills from the signal's plan/outcome. */
 export function executionAnalysis(record: JournalRecord, now = Date.now()) {
   const i = record.input, m = record.metrics;
@@ -52,7 +70,14 @@ export function journalAnalysis(records: readonly JournalRecord[], now = Date.no
     return finite(value) ? value : null;
   };
   const winR = mean(wins), lossR = mean(losses);
+  const groups = new Map<string, typeof sample>();
+  for (const r of sample) {
+    // Journal contract has no historical SMA regime. Never fill it using today's index.
+    const key = `${r.record.signal.source ?? "UNKNOWN"} · ${r.record.signal.bucket ?? "UNKNOWN"} · ${r.record.signal.direction ?? "UNKNOWN"} · regim UNKNOWN`;
+    groups.set(key,[...(groups.get(key)??[]),r]);
+  }
   return { rows, real: real.length, sample: sample.length, excluded: real.length - sample.length,
+    net:netStatistics(sample), groups:[...groups].map(([key,rows])=>({key,...netStatistics(rows)})),
     winRate: sample.length ? wins.length / sample.length : null, winR, lossR,
     payoff: winR != null && lossR != null && lossR < 0 && finite(winR / Math.abs(lossR)) ? winR / Math.abs(lossR) : null,
     simulated: rows.filter(r => r.record.input.mode === "SIMULATED").length,

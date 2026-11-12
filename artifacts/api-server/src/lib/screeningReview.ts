@@ -1,10 +1,12 @@
 import { isAcceptedSignalDate } from "./signalDatePolicy";
-import { marketDate, signalSessionDate } from "@workspace/market-calendar";
+import { marketDate, signalSessionDate, observedReportDate, reportWindow, validMarketDate } from "@workspace/market-calendar";
 import { resolveYahooTicker } from "./omxs30TickerMap";
 
 export type ReviewStatus = "APPROVED" | "WARN" | "BLOCKED";
 
-/** The trader checks the calendar manually; importers must not fetch it. */
+/** Legacy provider-fetch switch. Strict stored-evidence validation below is
+ * independent: do not enable new Yahoo requests while enforcing report safety.
+ */
 export const AUTOMATIC_EARNINGS_CHECK_ENABLED = false;
 
 export type CandidateReviewInput = {
@@ -16,6 +18,7 @@ export type CandidateReviewInput = {
   perf1m: number;
   rsi: number;
   pctB?: number | null;
+  atr?: number | null;
   edgeExpectancyR?: number | null;
   edgeSampleN?: number | null;
   signalAgeBars?: number | null;
@@ -54,11 +57,30 @@ function statusFor(reasons: string[], blockers: string[]): ReviewStatus {
 export function reviewCandidate(
   candidate: CandidateReviewInput,
   source: string | null,
+  now = new Date(),
 ): SignalReview {
   const warnings: string[] = [];
   const blockers: string[] = [];
   const isShort = candidate.direction === "SHORT";
   const isEdgeAi = (candidate.signalSource ?? source) === "edgeai";
+  if (!["LONG", "SHORT"].includes(candidate.direction)) blockers.push("Ogiltig eller okänd riktning.");
+  if (!Number.isFinite(candidate.perf1m) || !Number.isFinite(candidate.rs3m)) {
+    blockers.push("Trenddata perf1m/rs3m saknas eller är ogiltiga; ingen kvalificering.");
+  }
+  if (!isEdgeAi && (!Number.isFinite(candidate.rsi) || candidate.rsi < 0 || candidate.rsi > 100)) {
+    blockers.push("RSI saknas eller ligger utanför 0–100.");
+  }
+  if (isEdgeAi) {
+    warnings.push("ATR för underliggande är inte verifierad; EdgeAI-edgefält används inte som ATR.");
+  } else if (typeof candidate.atr !== "number" || !Number.isFinite(candidate.atr) || candidate.atr <= 0) {
+    blockers.push("ATR saknas eller är ogiltig; ingen kvalificering.");
+  }
+  if (candidate.category === "STUDS" || candidate.category === "WEAKEST") {
+    warnings.push("RESEARCH – modulen kräver oberoende verifierad netto-positiv expectancy före kvalificering.");
+  }
+  const reportDate = observedReportDate(candidate.signalDate, candidate.earningsInDays, candidate.earningsKnowledge);
+  const report = reportWindow(reportDate, marketDate(now, candidate.market === "US" ? "US" : "SE"), candidate.market ?? "SE");
+  if (report.blocked) blockers.push(`${report.status} – ingen TRADEABLE/READY; manuell observation bevaras.`);
   if (candidate.ticker) {
     try { resolveYahooTicker(candidate.ticker, candidate.market); }
     catch (error) { blockers.push(error instanceof Error ? error.message : "Kräver instrumentverifiering."); }
@@ -76,7 +98,7 @@ export function reviewCandidate(
 
   if (!Number.isFinite(candidate.volMultiplier) || candidate.volMultiplier <= 0) {
     blockers.push("Volymdata saknas — ingen kvalificerad trade.");
-  } else if (!candidate.volumeAsOf || !/^\d{4}-\d{2}-\d{2}$/.test(candidate.volumeAsOf)) {
+  } else if (!validMarketDate(candidate.volumeAsOf)) {
     blockers.push("Volymens avslutade kursdatum är inte verifierat — ingen kvalificerad trade.");
   } else if (candidate.volMultiplier < 0.2) {
     warnings.push(`Låg relativ volym (${candidate.volMultiplier.toFixed(1)}x).`);
@@ -98,12 +120,16 @@ export function reviewCandidate(
     blockers.push("Tradeplanens riktning stämmer inte med entry, stop och target.");
   }
 
-  if (candidate.rr < 1.2) blockers.push(`R:R ${candidate.rr.toFixed(2)} är under miniminivån 1,2.`);
+  if (!Number.isFinite(candidate.rr) || candidate.rr < 1.2) blockers.push("R:R saknas, är ogiltigt eller under miniminivån 1,2.");
+  const actualRisk = Math.abs(candidate.entryPrice-candidate.stopPrice);
+  const actualReward = isShort ? candidate.entryPrice-candidate.targetPrice : candidate.targetPrice-candidate.entryPrice;
+  const actualRR = actualReward/actualRisk;
+  if (!Number.isFinite(actualRR) || actualRisk<=0 || actualRR<1.2)
+    blockers.push("Beräknat brutto-R/R från entry/stop/target är ogiltigt eller under 1,2.");
   if (isEdgeAi && edgeExpectancyR < 0 && !isShort) {
     blockers.push(`Negativ historisk förväntan (${edgeExpectancyR.toFixed(2)}R).`);
   }
-  // The trader explicitly owns the earnings-calendar check. Keep any stored
-  // observations intact, but do not use missing or near-term earnings as a gate.
+  // Stored signal-time observations remain immutable; unknown dates fail closed.
 
   const targetDistance = candidate.entryPrice > 0 && candidate.targetPrice > 0
     ? Math.abs((candidate.targetPrice - candidate.entryPrice) / candidate.entryPrice) * 100
@@ -129,7 +155,7 @@ export function reviewCandidate(
   }
 
   const reasons = [...blockers, ...warnings];
-  reasons.push("Rapportkalender kontrolleras manuellt före trade — automatisk Regel 7-spärr är avstängd.");
+  reasons.push(`Rapportkontroll: ${report.status} · observerat datum ${reportDate ?? "okänt"} · källa ${candidate.signalSource ?? source ?? "okänd"}.`);
   // Explicit user policy: negative expectancy alone may not block SHORT.
   // This is information, not a warning that would turn approval into WAIT.
   if (isEdgeAi && isShort && edgeExpectancyR < 0) {
@@ -177,6 +203,9 @@ export function decideCandidate(
       reasons: [`EdgeAI-signalen har nått sin maxålder (${candidate.signalAgeBars}/${candidate.maxHoldDays} bars).`, ...review.reasons],
     };
   }
+  const storedReport = observedReportDate(candidate.signalDate,candidate.earningsInDays,candidate.earningsKnowledge);
+  const reportCheck = reportWindow(storedReport,marketDate(now,market),market);
+  if (reportCheck.blocked) return {status:"BLOCKED",reasons:[reportCheck.status,...review.reasons]};
 
   const invalid: string[] = [];
   if (!Number.isFinite(candidate.price) || candidate.price <= 0) {
@@ -184,7 +213,7 @@ export function decideCandidate(
   }
   if (!Number.isFinite(candidate.volMultiplier) || candidate.volMultiplier <= 0) {
     invalid.push("Volymdata saknas eller är ogiltig.");
-  } else if (!candidate.volumeAsOf || !/^\d{4}-\d{2}-\d{2}$/.test(candidate.volumeAsOf) || candidate.volumeAsOf > candidate.signalDate) {
+  } else if (!validMarketDate(candidate.volumeAsOf) || candidate.volumeAsOf > candidate.signalDate) {
     invalid.push("Volymens avslutade kursdatum saknas eller är ogiltigt.");
   }
   const isEdgeAi = (candidate.signalSource ?? null) === "edgeai";

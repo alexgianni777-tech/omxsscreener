@@ -26,3 +26,9 @@ Telegram's documented STUDS condition is RSI < 35 or Bollinger %B < 0. Preserve 
 **Why:** The user explicitly requested these source-specific data-integrity safeguards while keeping raw signals, historical selections and other trading rules intact.
 
 **How to apply:** Treat a current data-quality block separately from immutable historical approval. A retained original selection or a fresh quote must not override that block.
+
+Asset Screen 2.0 selectively permits Momentum/Squeeze qualification. STUDS and SVAGAST/WEAKEST remain research unless independent net-positive evidence is verified. Unknown report dates are now a qualification blocker, not merely the neutral manual reminder used previously. Research remains visible, but it must not gain entry approval through a fresh quote or imported performance claims.
+
+**Why:** The user explicitly tightened these requirements in the implementation request; this supersedes the older manual-report-only presentation policy, without authorizing historical rewrites or new automatic data collection.
+
+**How to apply:** Preserve the human review workflow and optional journal. Use the correct market/calendar and actual evidence. Missing financials, product costs, FX, account capital or historical regime must remain missing rather than becoming a verified CASH classification, net-R/R, risk PASS or backtest.

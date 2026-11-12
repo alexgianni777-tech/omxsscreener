@@ -26,8 +26,21 @@ test("unknown product ownership/stop/leverage/sector stay unknown; instrument sh
   assert.equal(result.unknownSector, 2);
   assert.equal(result.banks, 0);
 });
-test("profit-lock stops have zero planned loss, not a guarantee; missing/overflow fields never turn into fabricated totals", () => {
-  assert.equal(portfolioRisk([{ ...position, stopPrice: 105 }]).stop.value, 0);
+test("reversed or equal stops are invalid, never a risk-free position; invalid fields stay unknown", () => {
+  for (const change of [{stopPrice:110}, {stopPrice:100}, {direction:"SHORT", stopPrice:90}, {direction:"SHORT", stopPrice:100}]) {
+    const r = portfolioRisk([{...position, ...change}]);
+    assert.equal(r.rows[0].stopStatus, "INVALID_STOP");
+    assert.equal(r.rows[0].stop, null);
+    assert.equal(r.stop.unknown, 1);
+    assert.equal(r.stop.value, null);
+    assert.equal(r.rows[0].accountRiskStatus, "NOT_VERIFIED");
+  }
+  for (const change of [{shares:NaN}, {shares:Infinity}, {shares:-1}, {shares:0}, {entryPrice:0}, {stopPrice:NaN}]) {
+    const r = portfolioRisk([{...position,...change}]);
+    assert.equal(r.rows[0].stop, null);
+    assert.equal(r.rows[0].stopStatus, "UNKNOWN_RISK");
+  }
+  assert.equal(portfolioRisk([{...position,direction:"SHORT",stopPrice:110}]).rows[0].stop,100);
   const r = portfolioRisk([{ ...position, entryPrice: NaN, positionSizeKr: NaN }, { ...position, shares: Number.MAX_VALUE }]);
   assert.equal(r.capital.unknown, 2);
   assert.equal(r.stop.unknown, 2);

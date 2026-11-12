@@ -1,4 +1,5 @@
 import React, { useEffect, useReducer } from "react";
+import { qualifyResearch, type Qualification, type ResearchEvidence } from "../lib/researchQualification";
 import { EntrySafety } from "./EntrySafety";
 import { DataFreshness } from "./DataFreshness";
 import { QuotePresentation } from "./QuotePresentation";
@@ -14,7 +15,8 @@ const STYLES: Record<EntryStatus, string> = {
   STALE_PRICE: "text-amber-700 dark:text-amber-400",
   UNKNOWN: "text-muted-foreground",
 };
-export type SignalMetadata = {
+export type SignalMetadata = ResearchEvidence & {
+  qualification?: Qualification;
   review?: { status: string; reasons: string[] };
   dataQuality?: CandidateDataQuality | null;
   importWarning?: string | null;
@@ -39,9 +41,11 @@ export function LiveEntryGuard({ plan, quote, signal, now }: {
     return () => clearTimeout(timer);
   }, [quote?.asOf, now]);
   const qualityWarning = sourceQualityReasons(signal?.signalSource, signal?.dataQuality)[0];
+  const qualification = signal?.qualification ?? qualifyResearch({ ...signal, ...plan });
   const warning = (signal?.review?.status === "BLOCKED"
     ? signal.review.reasons.join(" ") || "BLOCKERAD – signalens datakontroll är underkänd." : null) ||
-    qualityWarning || signal?.importWarning;
+    qualityWarning || signal?.importWarning || (qualification.status !== "QUALIFIED"
+      ? qualification.reasons[0] ?? `${qualification.status} – ingen kvalificerad entry.` : null);
   const assessment = warning
     ? { ...assessLiveEntry(plan, null, now), status: "UNKNOWN" as const, reason: warning }
     : assessLiveEntry(plan, quote, now);

@@ -11,7 +11,10 @@ test("entry view renders separate status, both R/Rs, exact quote provenance and 
   const html = renderToStaticMarkup(createElement(LiveEntryGuard, {
     plan, now,
     quote: { livePrice: 99, asOf: "2026-10-02T11:59:00Z", marketState: "REGULAR" },
-    signal: { signalDate: "2026-10-01", signalSource: "edgeai", signalAgeBars: 3, dataQuality: qualifiedEdgeQuality },
+    // Price-rendering test: complete qualification is supplied by the caller.
+    // Its full rules are exercised in assetScreenV2.test.ts.
+    signal: { signalDate: "2026-10-01", signalSource: "edgeai", signalAgeBars: 3, dataQuality: qualifiedEdgeQuality,
+      qualification:{status:"QUALIFIED",reasons:[]} },
   }));
   for (const expected of [
     'data-entry-status="READY"', "original: 2,00", "aktuellt: 1,50",

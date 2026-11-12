@@ -15,6 +15,22 @@ export function JournalAnalysis({ records, now }: { records: readonly JournalRec
       <div><dt>Genomsnittlig förlust-R</dt><dd>{fmt(analysis.lossR)}</dd></div>
       <div><dt>Payoff-ratio</dt><dd>{fmt(analysis.payoff)}</dd></div>
     </dl>
+    <dl className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+      <div><dt>Netto expectancy</dt><dd>{fmt(analysis.net.netExpectancy)} R</dd></div>
+      <div><dt>Profit Factor</dt><dd>{fmt(analysis.net.profitFactor)}</dd></div>
+      <div><dt>Max drawdown</dt><dd>{fmt(analysis.net.maxDrawdownR)} R</dd></div>
+      <div><dt>Evidens (n={analysis.net.n})</dt><dd>{analysis.net.status}</dd></div>
+    </dl>
+    <details><summary className="cursor-pointer text-xs">Källa / modul / signalriktning / historisk regim</summary>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">{analysis.groups.map(g=><article key={g.key} className="min-w-0 rounded border p-2 text-xs break-words">
+        <strong>{g.key}</strong><p>n={g.n} · {g.status}</p>
+        <p>Netto E[R] {fmt(g.netExpectancy)} · win rate {g.winRate==null?"okänd":`${fmt(g.winRate*100)} %`} · payoff {fmt(g.payoff)}</p>
+        <p>Profit Factor {fmt(g.profitFactor)} · max drawdown {fmt(g.maxDrawdownR)} R</p>
+      </article>)}</div>
+      <p className="text-xs">Regim UNKNOWN: historisk SMA-regim lagras inte i befintliga journalposter.
+        Under 20 avslut markeras INSUFFICIENT_DATA; 20 är en visningsgräns, inte statistiskt bevis för edge.
+        Profit Factor utan förlustobservationer är okänd. Importerad EdgeAI-statistik är inte lokalt verifierad journalanalys.</p>
+    </details>
     <p className="text-xs text-amber-700 dark:text-amber-400">Små urval och saknade kostnader ger osäker statistik, inte bevisad edge.
       Win rate inkluderar nollresultat i nämnaren; payoff kräver både vinst och förlust.
       MFE/MAE: ej tillgängligt — faktiska high/low-tidsserier under affären saknas.</p>

@@ -4,6 +4,29 @@
  * Half days remain trading days. Unknown years/markets fail closed.
  */
 export type EquityMarket = "SE" | "US";
+
+/** An explicit signal-time observation, never a guessed upcoming report. */
+export function observedReportDate(signalDate: unknown, days: unknown, knowledge: unknown): string | null {
+  if (knowledge !== "SIGNAL_TIME" || !validMarketDate(signalDate) ||
+    typeof days !== "number" || !Number.isSafeInteger(days) || days < 0 || days > 366) return null;
+  return shifted(signalDate, days);
+}
+
+/** Reports today or within five exchange trading days prevent qualification.
+ * Date-only inputs are exchange-local days, not elapsed UTC hours.
+ */
+export function reportWindow(date: unknown, reference: string, market: string) {
+  if (!validMarketDate(date) || !validMarketDate(reference) || date < reference ||
+    isTradingDay(reference, market) == null || isTradingDay(date, market) == null)
+    return { status: "UNKNOWN_REPORT_DATE" as const, tradingDays: null, blocked: true };
+  let day = reference, count = 0;
+  while (day < date) {
+    day = shifted(day, 1);
+    if (isTradingDay(day, market)) count++;
+  }
+  return { status: count <= 5 ? "REPORT_WITHIN_5_TRADING_DAYS" as const : "VERIFIED_REPORT_WINDOW" as const,
+    tradingDays: count, blocked: count <= 5 };
+}
 const CLOSED: Record<EquityMarket, readonly string[]> = {
   SE: [
     "2025-12-24", "2025-12-25", "2025-12-26", "2025-12-31",

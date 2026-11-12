@@ -53,7 +53,7 @@ test("global raw diagnostics occur once in source disclosure, never on unrelated
   assert.ok(!warnings.some(w => w.includes("ELUX")));
   const html = card({ warnings });
   assert.ok(!html.includes(raw));
-  assert.ok(html.includes("AVVAKTA – entry ej bekräftad"));
+  assert.ok(html.includes("BLOCKERAD – ingen ny entry"));
   assert.ok(html.includes("ej fullständigt verifierad omfattning"));
   const source = renderToStaticMarkup(React.createElement(SourceProvenance, { reports: [receipt] }));
   assert.equal((source.match(/SE ELUX-B SHORT\/WEAKEST/g) ?? []).length, 1);
@@ -84,12 +84,12 @@ test("same-identity plans conflict, other setup periods and sources do not; miss
   assert.ok(pickWarnings(pick, [], [{ ...alternative, signalSource: undefined }])[0].includes("osäker"));
 });
 
-test("READY requires all existing conditions; missing evidence awaits; stale and passed plans block", () => {
-  assert.ok(card().includes("READY – entryvillkor verifierade, inte en order"));
+test("a fresh quote cannot revive an old selection with missing SMA/ATR/report evidence", () => {
+  assert.ok(!card().includes("READY – entryvillkor verifierade, inte en order"));
   for (const props of [{ quote: undefined }, { quote: { ...quote, asOf: null } }, { signal: undefined },
     { dataDate: null }, { warnings: ["Källans omfattning är osäker"] }]) {
     const html = card(props);
-    assert.ok(html.includes("AVVAKTA – entry ej bekräftad"));
+    assert.ok(html.includes("AVVAKTA – entry ej bekräftad") || html.includes("BLOCKERAD – ingen ny entry"));
     assert.ok(!html.includes("READY – entryvillkor verifierade"));
   }
   assert.ok(card({ stale: true }).includes("HISTORISKT – ingen ny entry"));

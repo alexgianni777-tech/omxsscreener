@@ -6,9 +6,9 @@ import { resolveQuoteTicker, resolveYahooTicker } from "./omxs30TickerMap";
 const candidate = {
   ticker: "SCA-B", market: "SE", signalSource: "telegram", signalDate: "2026-11-06",
   category: "STUDS", direction: "LONG", rsi: 44, pctB: 0.02,
-  rs3m: 1, perf1m: 1, signalRsi: 44, signalGapPct: 0,
-  volMultiplier: 1, volumeAsOf: "2026-11-05", earningsInDays: null,
-  earningsKnowledge: "UNKNOWN" as const, entryPrice: 100, stopPrice: 95,
+  rs3m: 1, perf1m: 1, atr:1, signalRsi: 44, signalGapPct: 0,
+  volMultiplier: 1, volumeAsOf: "2026-11-05", earningsInDays: 30,
+  earningsKnowledge: "SIGNAL_TIME" as const, entryPrice: 100, stopPrice: 95,
   targetPrice: 110, rr: 2, price: 100,
 };
 
@@ -25,7 +25,7 @@ test("Telegram SCA 44/0.02 stays intact but cannot qualify for STUDS or entry", 
 test("STUDS OR thresholds are strict: either qualifying field suffices", () => {
   for (const [rsi, pctB, blocked] of [[34.99, 0.02, false], [44, -0.01, false], [35, 0, true]]) {
     assert.equal(reviewCandidate({ ...candidate, rsi: Number(rsi), pctB: Number(pctB) }, "telegram").status,
-      blocked ? "BLOCKED" : "APPROVED");
+      blocked ? "BLOCKED" : "WARN"); // Valid STUDS stays RESEARCH under the new policy.
   }
 });
 
