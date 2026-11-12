@@ -1,0 +1,33 @@
+---
+name: Earnings Calendar Dates
+description: Calendar-day handling for Yahoo earnings timestamps in screener and EdgeAI imports.
+---
+
+## Rule
+
+Treat a Yahoo earnings timestamp as a calendar event. For current quote labels,
+compare event and reference calendar dates in the instrument's exchange zone:
+Europe/Stockholm for Swedish equities and America/New_York for US equities.
+Do not round a raw elapsed-hour difference.
+
+**Why:** Yahoo sends a time of day for many earnings events. An after-close
+event on the current date can be 20:00 UTC, and rounding its elapsed time from
+UTC midnight incorrectly turns “today” into “tomorrow”.
+
+**How to apply:** Use the shared market-calendar date formatter for current
+quote labels. Keep imported historical-session dates relative to that session's
+calendar date rather than the later viewing date; do not change historical Rule 7
+inputs while correcting live display labels.
+
+## QuoteSummary value shape
+
+Treat Yahoo QuoteSummary earnings values as either primitives or legacy
+`{ raw }` wrappers. EPS history, surprise percentages, revisions, estimates,
+and analyst targets must be unwrapped before they are used.
+
+**Why:** The installed yahoo-finance2 version returns plain numbers and ISO
+date strings for these modules. Code that assumes every value has a `raw`
+property silently converts complete earnings histories into empty UI values.
+
+**How to apply:** Keep the compatibility unwrapping at the API boundary rather
+than teaching UI components about provider-specific response formats.

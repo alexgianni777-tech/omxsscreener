@@ -10,6 +10,7 @@ import {
   updateSession,
   type SessionData,
 } from '../lib/auth';
+import { logger } from '../lib/logger';
 
 declare global {
   namespace Express {
@@ -66,47 +67,83 @@ export async function authMiddleware(
     return;
   }
 
-  const session = await getSession(sid);
-  if (!session?.user?.id) {
-    await clearSession(res, sid);
-    next();
-    return;
+  try {
+    const session = await getSession(sid);
+    if (!session?.user?.id) {
+      await clearSession(res, sid);
+      next();
+      return;
+    }
+
+    const refreshed = await refreshIfExpired(sid, session);
+    if (!refreshed) {
+      await clearSession(res, sid);
+      next();
+      return;
+    }
+
+    req.user = refreshed.user;
+  } catch {
+    // DB/session error — treat as unauthenticated, don't crash the request
   }
 
-  const refreshed = await refreshIfExpired(sid, session);
-  if (!refreshed) {
-    await clearSession(res, sid);
-    next();
-    return;
-  }
-
-  req.user = refreshed.user;
   next();
 }
 
-
-export function requireAuth(
+/** Require a valid browser or mobile session after authMiddleware has hydrated req.user. */
+export function requireAuthentication(
   req: Request,
   res: Response,
   next: NextFunction,
 ) {
   if (!req.isAuthenticated()) {
-    res.status(401).json({ error: 'Authentication required' });
+    res.status(401).json({ error: "Authentication required" });
     return;
   }
-
-  // Optional owner allowlist. Leave unset to allow any authenticated account.
-  // Set APP_ALLOWED_USER_IDS to comma-separated OIDC subject IDs to make the
-  // deployed screener owner-only without changing code.
-  const allowed = (process.env.APP_ALLOWED_USER_IDS ?? '')
-    .split(',')
-    .map((v) => v.trim())
-    .filter(Boolean);
-
-  if (allowed.length > 0 && !allowed.includes(req.user.id)) {
-    res.status(403).json({ error: 'Access denied' });
-    return;
-  }
-
   next();
+}
+
+/**
+ * Trading data is private. The Repl owner is always the bootstrap administrator;
+ * optional allowlists make it possible to grant a second explicitly approved
+ * account access without turning ordinary login into authorization.
+ */
+export function requireAdministrator(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
+  if (isAdministrator(req.user)) {
+    next();
+    return;
+  }
+
+  logger.warn({ userId: req.user.id }, "Denied trading-data access for non-admin user");
+  res.status(403).json({ error: "This account is not approved to access trading data" });
+}
+
+export function isAdministrator(user: Express.User): boolean {
+  const allowedIds = new Set(
+    [
+      process.env.REPL_OWNER_ID,
+      process.env.REPL_USERID,
+      ...(process.env.ADMIN_USER_IDS ?? "").split(","),
+    ]
+      .map((value) => value?.trim())
+      .filter((value): value is string => Boolean(value)),
+  );
+  const allowedEmails = new Set(
+    (process.env.ADMIN_EMAILS ?? "")
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const email = user.email?.trim().toLowerCase();
+
+  return allowedIds.has(user.id) || Boolean(email && allowedEmails.has(email));
 }

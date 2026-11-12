@@ -1,0 +1,142 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "LHjTlLFZaKWRE8b0ak1VA"
+uri = "file://exports/claude-trading-analysis-review.md"
+type = "text"
+title = "Kodunderlag för Claude – tradinganalys"
+description = "Självbärande Markdown-dokument med granskningsprompt och central kod för signalregler, EdgeAI-mappning, ranking, risk, utfall, portfölj och datamodell."
+logical_id = "94323e27-2bc3-468f-b6cb-231437a6bc8f"
+content_hash = "sha256:18f46bd70b9fa7b399a511dd3176c4ff55eebba7eeb34c78e0eaa62774ef562e"
+size = 76242
+mtime_ms = 1789805652677
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/94323e27-2bc3-468f-b6cb-231437a6bc8f/cd57ecf4-0d39-4017-b2ff-17890c804414"
+storage_version_token = "1789805653291243"
+content_type = "text/markdown"
+
+[[outputs]]
+id = "dvfD0sncRRvJBmvpapxXT"
+uri = "file://exports/omxs30-screener-full-code.txt"
+type = "text"
+title = "OMXS30 Screener – hela koden"
+description = "Ett dokument med 254 fullständiga källfiler: webbapp, API, delade bibliotek, databasschema, migrationer, tester och konfiguration. Inga hemligheter eller byggfiler."
+logical_id = "7946b892-0d46-46d9-b476-c775d688c1da"
+content_hash = "sha256:1a44bc9d6cdd1e41e7556555e6db25bf69fcb861499d726bc8cd86bbab086298"
+size = 1154450
+mtime_ms = 1790571167858
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/7946b892-0d46-46d9-b476-c775d688c1da/1392b05b-95b9-4fc1-83d1-69c8c0cd2ad8"
+storage_version_token = "1790571173229911"
+content_type = "text/plain"
+
+[[outputs]]
+id = "xyr2LrjohTCnNaCP53LFv"
+uri = "file://exports/omxs30-screener-full-code-2026-09-28.txt"
+type = "text"
+title = "Hela uppdaterade koden – text för ChatGPT"
+description = "Aktuellt källkodspaket för granskning, 265 projektfiler med tydliga filavsnitt. Inga hemligheter, uppladdningar eller databasposter."
+logical_id = "bcc63a6b-91e3-448e-9dfd-a5c745d72e50"
+content_hash = "sha256:c89d4c22b58de3cb6d841c4c34e1a13fddce5c003beaa33b180611953e18d224"
+size = 1393931
+mtime_ms = 1790578039534
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/bcc63a6b-91e3-448e-9dfd-a5c745d72e50/8265aacd-b2e8-4491-8f25-d031d696226f"
+storage_version_token = "1790578061102927"
+content_type = "text/plain"
+
+[[outputs]]
+id = "ao5mbk5SDLSM0FBO6E3CC"
+uri = "file://exports/omxs30-screener-source-2026-09-28.zip"
+type = "unspecified"
+title = "Hela uppdaterade koden – ZIP"
+description = "Samma aktuella projektkällkod som separata filer, med migrationsjournal, tester och konfiguration."
+logical_id = "d8a3060c-6335-4b53-be2e-810564b225b5"
+content_hash = "sha256:0a67811672424b64b848354dafc5ddd51862ec0805245108cf0c1f0a4bc7820f"
+size = 418154
+mtime_ms = 1790578039594
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/d8a3060c-6335-4b53-be2e-810564b225b5/f0fea10d-5d77-4236-b212-f1e6f78eee32"
+storage_version_token = "1790578061679082"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "BWgGN7JjD-x9sQ1mkbxvd"
+uri = "file://exports/omxs30-screener-full-code-2026-09-28-correctness.txt"
+type = "text"
+title = "Ny komplett källkod för granskning – text"
+description = "Senaste versionen efter Top 3- och datumrättelserna. 310 textfiler med tydliga filrubriker, redo för ChatGPT."
+logical_id = "2a3c26d8-e466-406f-9700-7c82881631d0"
+content_hash = "sha256:fc8e5542bc779db89de740486509106b4f3c0976b574bd364a16cc91101bb6b1"
+size = 1617694
+mtime_ms = 1790581250994
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/2a3c26d8-e466-406f-9700-7c82881631d0/b7800600-8dbb-4558-9aa3-5ddf2544d9a5"
+storage_version_token = "1790581264128924"
+content_type = "text/plain"
+
+[[outputs]]
+id = "owXVpVSY25KihsqlN8rvV"
+uri = "file://exports/omxs30-screener-source-2026-09-28-correctness.zip"
+type = "unspecified"
+title = "Ny komplett källkod för granskning – ZIP"
+description = "Samma aktuella projekt med 312 filer: tester, migrationsfiler, API-kontrakt och CI, utan hemligheter eller användardata."
+logical_id = "c2af421d-5042-4a8f-ad0b-fa2408ef3310"
+content_hash = "sha256:bbd781d6421ca8509e3cfe99ed6187377d75470242879d00dca878e4f9921e6a"
+size = 464989
+mtime_ms = 1790581251058
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/c2af421d-5042-4a8f-ad0b-fa2408ef3310/bc16350d-0e64-4b35-b5de-ce3fdda4547b"
+storage_version_token = "1790581265047634"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "_uAaD8oPKci1llN9TaUg7"
+uri = "file://exports/omxs30-screener-source-2026-09-28-final.zip"
+type = "unspecified"
+title = "OMXS30 Screener – fullständig källkod (ZIP)"
+description = "Källkod, tester, migrationer och genererade API-kontrakt efter sista correctness-passet."
+logical_id = "a6244373-d3af-4ed2-b36b-312603c75360"
+content_hash = "sha256:3f4ba4bb5be4a83d5363f194d5ff81835d2d3b6857028253fb76ef6013ead3aa"
+size = 466212
+mtime_ms = 1790587692941
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/a6244373-d3af-4ed2-b36b-312603c75360/41889e0a-4416-4566-a200-972d00b8c029"
+storage_version_token = "1790587709912051"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "lI0fCfi_4IPrqx9VzER5A"
+uri = "file://exports/omxs30-screener-full-code-2026-09-28-final.txt"
+type = "text"
+title = "OMXS30 Screener – källkod som text"
+description = "Samma slutliga källkod med tydliga filavgränsningar för granskning."
+logical_id = "65978ba7-a7bd-4a89-bd84-ef9f914cb890"
+content_hash = "sha256:dc5a19331603442c5a2c91ca8163b87094dd7f5edbdb7b26fc16fda9d2fc3d12"
+size = 1702842
+mtime_ms = 1790587692853
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/65978ba7-a7bd-4a89-bd84-ef9f914cb890/b5ce1cd1-2929-4191-afb4-02d9bbf86627"
+storage_version_token = "1790587710645277"
+content_type = "text/plain"
+
+[[outputs]]
+id = "5IPEMHQFioGKL8VmSLhYD"
+uri = "file://generated-artifacts/qa/usa-mobile.jpg"
+type = "image"
+title = "USA på mobil – isolerad visuell kontroll"
+description = "402×874. Renderade produktionskomponenter med tydligt isolerade testdata: USA Long och Short, tomt urval, verklighetstrogna datumspärrar och STALE. Inte en inloggad produktionssession."
+logical_id = "71af4bba-0256-4559-a4f2-f83941c74327"
+content_hash = "sha256:949b2b192bfc4f0e03ab4d0678c89098feba1c3af87ecd9144eb63b640224c49"
+size = 60086
+mtime_ms = 1793699531402
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/71af4bba-0256-4559-a4f2-f83941c74327/56a604c5-1b4d-4267-9946-60df84287a55"
+storage_version_token = "1793699666985671"
+content_type = "image/jpeg"
+
+[[outputs]]
+id = "I3WQV3VKB20VeFx7HqyT_"
+uri = "file://generated-artifacts/qa/warnings-mobile.jpg"
+type = "image"
+title = "Mobilkontroll – renare varningshantering"
+description = "Isolerad DEMO-rendering av riktiga komponenter vid 402×874. EVO visar AVVAKTA utan ELUX-B:s råvarning; berört ELUX-B-kort visar BLOCKERAD. Inte en inloggad produktionskontroll."
+logical_id = "12b1dbe0-b5e5-43c8-89a0-87bb0addf700"
+content_hash = "sha256:2f31d0bac032c9dbf519e3cb985c975415334bc1856ce33d60a6d43f3b819cd4"
+size = 141390
+mtime_ms = 1793709527028
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:9fb6f780-db8c-453e-8598-61ef2001e35e/12b1dbe0-b5e5-43c8-89a0-87bb0addf700/bfcc5c1f-787f-4a96-8adf-9986737e23c4"
+storage_version_token = "1793709554515248"
+content_type = "image/jpeg"

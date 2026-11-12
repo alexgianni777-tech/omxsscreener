@@ -1,0 +1,146 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1787129503722,
+      "tag": "0000_magenta_reaper",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787215106885,
+      "tag": "0001_amused_whistler",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787289498824,
+      "tag": "0002_flaky_victor_mancha",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787375890000,
+      "tag": "0003_earnings_signal_provenance",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787375900000,
+      "tag": "0004_realized_outcomes",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787376000000,
+      "tag": "0005_resolution_input_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787376100000,
+      "tag": "0006_screener_import_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787376200000,
+      "tag": "0007_candidate_signal_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789813920000,
+      "tag": "0008_edge_fields_and_time_exit",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790579867926,
+      "tag": "0009_mean_hex",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790580398169,
+      "tag": "0010_adorable_major_mapleleaf",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790580543529,
+      "tag": "0011_huge_ricochet",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790584251683,
+      "tag": "0012_skinny_radioactive_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790698761337,
+      "tag": "0013_famous_proteus",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790932945238,
+      "tag": "0014_top3_selection_revisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1791446400000,
+      "tag": "0015_trade_journal",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791446400001,
+      "tag": "0016_source_report_receipts",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791446400002,
+      "tag": "0017_ground_zero_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791446400003,
+      "tag": "0018_persistent_top3_display",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793793600000,
+      "tag": "0019_candidate_data_quality",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { useImportSession, getListSessionsQueryKey } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { Terminal, Upload, AlertTriangle, RefreshCw, X, ShieldAlert, Zap, CheckCircle2 } from "lucide-react";
+import { useImportSession, getListSessionsQueryKey, getGetSessionQueryKey, getGetLastValidTop3QueryKey } from "@workspace/api-client-react";
+import { useAuthContext } from "../lib/auth-context";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -13,11 +14,21 @@ type AffectedOutcome = {
   exitPrice: number | null;
 };
 
+type RemovedCandidatePreview = {
+  ticker: string;
+  category: string;
+  direction: string;
+  market?: string | null;
+};
+
 type ConflictInfo = {
   sessionId: number;
   date: string;
   affectedOutcomes: AffectedOutcome[];
+  wouldRemove: RemovedCandidatePreview[];
   rawText: string;
+  targetDate?: string;
+  confirmedTelegram?: boolean;
 };
 
 const OUTCOME_COLORS: Record<string, string> = {
@@ -29,37 +40,70 @@ const OUTCOME_COLORS: Record<string, string> = {
 type EdgeAIStatus =
   | { kind: "idle" }
   | { kind: "loading" }
-  | { kind: "success"; setupCount: number; date: string; generatedAt: string }
+  | {
+      kind: "success";
+      setupCount: number;
+      date: string;
+      generatedAt: string;
+      stale?: boolean;
+      ageDescription?: string;
+    }
+  | { kind: "auth"; message: string }
   | { kind: "error"; message: string };
 
 export function Import() {
   const [rawText, setRawText] = useState("");
+  const [useTodayAsTradingDate, setUseTodayAsTradingDate] = useState(false);
+  const [confirmedTelegram, setConfirmedTelegram] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<ConflictInfo | null>(null);
   const [edgeStatus, setEdgeStatus] = useState<EdgeAIStatus>({ kind: "idle" });
   const [, setLocation] = useLocation();
   const importSession = useImportSession();
   const queryClient = useQueryClient();
+  const { login } = useAuthContext();
 
-  const runImport = (text: string, force: boolean) => {
+  const stockholmToday = () =>
+    new Intl.DateTimeFormat("sv-SE", {
+      timeZone: "Europe/Stockholm",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+
+  const runImport = (text: string, force: boolean, targetDate?: string, telegramConfirmed = false) => {
     setError(null);
     importSession.mutate(
-      { data: { rawText: text, force } },
+      { data: { rawText: text, force, targetDate, confirmedTelegram: telegramConfirmed } },
       {
         onSuccess: (data) => {
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetLastValidTop3QueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(data.id) });
           setLocation(`/sessions/${data.id}`);
         },
         onError: (err: any) => {
           // ApiError wraps the response body in `.data`; fall back to top-level for safety.
           const body = err?.data ?? err;
+          // 401 → the session expired mid-use (e.g. a token refresh failure). A generic
+          // error here is a dead end; offer the same re-login path as the EdgeAI import.
+          if (err?.status === 401) {
+            setEdgeStatus({
+              kind: "auth",
+              message: "Din inloggning har gått ut. Logga in igen och försök importen på nytt.",
+            });
+            return;
+          }
           // 409 conflict with outcome details → show confirmation modal
           if (body?.sessionId !== undefined && Array.isArray(body?.affectedOutcomes)) {
             setConflict({
               sessionId: body.sessionId,
               date: body.date,
               affectedOutcomes: body.affectedOutcomes,
+              wouldRemove: body.wouldRemove ?? [],
               rawText: text,
+              targetDate,
+              confirmedTelegram: telegramConfirmed,
             });
           } else {
             setError(body?.error || err?.message || "Failed to parse and import session. Check format.");
@@ -74,13 +118,13 @@ export function Import() {
       setError("Please paste screener output first.");
       return;
     }
-    runImport(rawText, false);
+    runImport(rawText, false, useTodayAsTradingDate ? stockholmToday() : undefined, confirmedTelegram);
   };
 
   const handleForceReimport = () => {
     if (!conflict) return;
     setConflict(null);
-    runImport(conflict.rawText, true);
+    runImport(conflict.rawText, true, conflict.targetDate, conflict.confirmedTelegram);
   };
 
   const handleEdgeAIImport = async (force = false) => {
@@ -90,15 +134,38 @@ export function Import() {
       const res = await fetch(`${BASE}/api/screener/sessions/import-from-edgeai`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ force }),
       });
-      const data = await res.json();
+      const responseText = await res.text();
+      let data: any = null;
+      try {
+        data = responseText ? JSON.parse(responseText) : null;
+      } catch {
+        // A proxy or server failure may return an HTML error page. Do not
+        // surface a misleading JSON parsing error to the trader.
+      }
+      if (!data && !res.ok) {
+        setEdgeStatus({
+          kind: "error",
+          message: `Importtjänsten svarade med ${res.status}. Försök igen om en minut.`,
+        });
+        return;
+      }
+      if (res.status === 401) {
+        setEdgeStatus({
+          kind: "auth",
+          message: "Din inloggning har gått ut. Logga in igen och försök importen på nytt.",
+        });
+        return;
+      }
       if (res.status === 409) {
         // Reuse the same conflict modal as manual import
         setConflict({
           sessionId: data.sessionId,
           date: data.date,
           affectedOutcomes: data.affectedOutcomes,
+          wouldRemove: data.wouldRemove ?? [],
           rawText: "__edgeai__", // sentinel — not used for edge import
         });
         setEdgeStatus({ kind: "idle" });
@@ -109,7 +176,16 @@ export function Import() {
         return;
       }
       queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
-      setEdgeStatus({ kind: "success", setupCount: data.setupCount, date: data.date, generatedAt: data.generatedAt });
+      queryClient.invalidateQueries({ queryKey: getGetLastValidTop3QueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(data.id) });
+      setEdgeStatus({
+        kind: "success",
+        setupCount: data.setupCount,
+        date: data.date,
+        generatedAt: data.generatedAt,
+        stale: data.stale,
+        ageDescription: data.ageDescription,
+      });
       setTimeout(() => setLocation(`/sessions/${data.id}`), 1200);
     } catch (e: any) {
       setEdgeStatus({ kind: "error", message: e.message ?? "Nätverksfel" });
@@ -146,21 +222,30 @@ export function Import() {
           <div className="min-w-0">
             <p className="text-sm font-medium">Importera från EdgeAI</p>
             <p className="text-xs text-muted-foreground truncate">
-              Hämtar dagens SE-setups direkt från{" "}
+              Hämtar senaste SE/US-setups direkt från{" "}
               <span className="font-mono text-blue-400/80">edgeai/public/data.json</span>
               {edgeStatus.kind === "success" && (
                 <span className="text-emerald-400 ml-1">
                   · {edgeStatus.setupCount} setups ({edgeStatus.date})
+                  {edgeStatus.stale && (
+                    <span className="text-amber-400">
+                      {" "}
+                      · {edgeStatus.ageDescription ?? "äldre snapshot"}
+                    </span>
+                  )}
                 </span>
               )}
               {edgeStatus.kind === "error" && (
                 <span className="text-red-400 ml-1">· {edgeStatus.message}</span>
               )}
+              {edgeStatus.kind === "auth" && (
+                <span className="text-amber-400 ml-1">· {edgeStatus.message}</span>
+              )}
             </p>
           </div>
         </div>
         <button
-          onClick={() => handleEdgeAIImport(false)}
+          onClick={() => edgeStatus.kind === "auth" ? login() : handleEdgeAIImport(false)}
           disabled={edgeStatus.kind === "loading"}
           className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           data-testid="btn-edgeai-import"
@@ -169,6 +254,8 @@ export function Import() {
             <span className="animate-pulse">Hämtar…</span>
           ) : edgeStatus.kind === "success" ? (
             <><CheckCircle2 className="w-4 h-4" /> Importerad</>
+          ) : edgeStatus.kind === "auth" ? (
+            <>Logga in igen</>
           ) : (
             <><Zap className="w-4 h-4" /> Hämta & importera</>
           )}
@@ -207,6 +294,40 @@ MARKNADSVÄDER  OMXS30 3305.0 | 5d  2.7% | 1m  1.8% | 3m  8.9% | RSI  79
           spellCheck={false}
           data-testid="input-raw-text"
         />
+        <label className="flex items-start gap-3 border-t border-border bg-muted/30 px-4 py-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={confirmedTelegram}
+            onChange={(event) => setConfirmedTelegram(event.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-primary"
+            data-testid="input-confirm-telegram"
+          />
+          <span>
+            <span className="block text-sm font-medium">Jag bekräftar att den inklistrade listan kommer från Telegram</span>
+            <span className="block text-xs text-muted-foreground mt-0.5">
+              Den här importen registreras som Telegram-källa, med manuellt ursprung.
+              Rapportens signaldatum behålls. Dagens Top 3 räknas om direkt
+              vid återimport när båda källorna finns. Föregående handelsdags rapporter
+              accepteras med sitt riktiga datum. Tidigare urval och trades bevaras.
+              Tidigare manuella rader märks inte om och kan finnas kvar separat.
+            </span>
+          </span>
+        </label>
+        <label className="flex items-start gap-3 border-t border-border bg-muted/30 px-4 py-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={useTodayAsTradingDate}
+            onChange={(event) => setUseTodayAsTradingDate(event.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-primary"
+          />
+          <span>
+            <span className="block text-sm font-medium">Visa i dagens session (en handelsdags fördröjning accepteras)</span>
+            <span className="block text-xs text-muted-foreground mt-0.5">
+              Visar kandidaterna under {stockholmToday()}, men deras ursprungliga signaldatum ändras inte.
+              Föregående handelsdags rapport accepteras; äldre rapporter förblir inaktuella. Övriga handelsregler gäller fortfarande.
+            </span>
+          </span>
+        </label>
       </div>
 
       <div className="flex justify-end">
@@ -252,16 +373,23 @@ MARKNADSVÄDER  OMXS30 3305.0 | 5d  2.7% | 1m  1.8% | 3m  8.9% | RSI  79
 
             {/* Body */}
             <div className="p-5 space-y-4">
+              {conflict.rawText !== "__edgeai__" && (
+                <p className="text-sm font-medium" data-testid="text-conflict-import-source">
+                  Källa för denna import: {conflict.confirmedTelegram ? "bekräftad Telegram" : "manuell (ej bekräftad Telegram)"}.
+                  {" "}Aktuell Top 3 räknas om; tidigare urval, källmärkning och registrerade trades bevaras.
+                </p>
+              )}
               {conflict.affectedOutcomes.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No outcomes have been logged yet. Re-importing will replace all candidates.
+                  No outcomes have been logged yet. The new import will be merged
+                  with candidates already in this session.
                 </p>
               ) : (
                 <>
                   <p className="text-sm text-muted-foreground">
-                    The following outcomes are already logged. They will be{" "}
-                    <span className="text-foreground font-medium">preserved</span> on re-import
-                    if the ticker still appears in the new screener output.
+                     The following outcomes are already logged. They will be{" "}
+                     <span className="text-foreground font-medium">preserved</span>.
+                     Candidates from both imports will remain in the session.
                   </p>
 
                   <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
@@ -290,11 +418,35 @@ MARKNADSVÄDER  OMXS30 3305.0 | 5d  2.7% | 1m  1.8% | 3m  8.9% | RSI  79
                   {loggedOutcomes.length > 0 && (
                     <p className="text-xs text-amber-400/80 flex items-start gap-1.5">
                       <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                      Tickers that disappear from the new screener output will lose their
-                      logged outcomes permanently.
+                       Existing candidates from the other screener source will not be removed.
                     </p>
                   )}
                 </>
+              )}
+
+              {conflict.wouldRemove.length > 0 && (
+                <div className="space-y-1.5 pt-1 border-t border-border">
+                  <p className="text-sm text-muted-foreground pt-3">
+                    These still-pending picks are{" "}
+                    <span className="text-foreground font-medium">not present</span>{" "}
+                    in the new import and will be{" "}
+                    <span className="text-destructive font-medium">removed</span> (no outcome
+                    was logged for them, so nothing tracked is lost):
+                  </p>
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                    {conflict.wouldRemove.map((c) => (
+                      <div
+                        key={`${c.ticker}-${c.category}-${c.direction}`}
+                        className="flex items-center justify-between rounded-md px-3 py-2 bg-destructive/5 border border-destructive/20 text-sm"
+                      >
+                        <span className="font-mono font-medium">{c.ticker}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {c.category} · {c.direction}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
 
@@ -317,7 +469,7 @@ MARKNADSVÄDER  OMXS30 3305.0 | 5d  2.7% | 1m  1.8% | 3m  8.9% | RSI  79
                 ) : (
                   <>
                     <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-                    Re-import anyway
+                     Merge & update
                   </>
                 )}
               </button>

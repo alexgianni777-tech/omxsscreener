@@ -1,3 +1,8 @@
+import { makeImportReport } from "../lib/importReport";
+import { isolateEdgeAiPlans } from "../lib/edgeAiPlanIsolation";
+import { approveImportedTop3 } from "../lib/persistentTop3";
+import { recordImportFailure } from "../lib/importFailure";
+import { respectStoredEdgeAiBackoff, attachFetchDiagnostic } from "../lib/storedSourceBackoff";
 /**
  * POST /screener/sessions/import-from-edgeai
  *
@@ -5,306 +10,379 @@
  * and creates a screener session — no copy-paste needed.
  */
 import { Router, type IRouter } from "express";
-import { and, eq, isNull, or } from "drizzle-orm";
-import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
+import { and, eq, inArray } from "drizzle-orm";
+import {
+  db,
+  screenerSessionsTable,
+  candidatesTable,
+  top3SelectionSnapshotsTable,
+  survivalTradesTable,
+} from "@workspace/db";
 import YahooFinance from "yahoo-finance2";
+import { resolveYahooTicker } from "../lib/omxs30TickerMap";
+import { fetchOmxsMarketWeather } from "../lib/omxsMarketWeather";
+import { completedVolumeKey, fetchCompletedVolumeBatch } from "../lib/completedVolumeBatch";
+import {
+  edgeAiSessionDate,
+  edgeAiDataFreshness,
+  EdgeAiDataFreshnessError,
+  fetchFreshEdgeAiData,
+} from "../lib/edgeAiSource";
+import { calendarDaysUntil } from "../lib/marketCalendar";
+import { logger } from "../lib/logger";
+import { withRetry } from "../lib/retry";
+import {
+  deduplicateCandidates,
+  lockScreenerSession,
+  mergeCandidateInputs,
+  pendingCandidatesToRemove,
+  synchronizeCandidates,
+  candidateIdentity,
+} from "../lib/candidateSynchronization";
+import { mapEdgeAiSetup } from "../lib/edgeAiMapping";
+import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
+import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
+import { stockholmSignalDate } from "../lib/signalDatePolicy";
+import { AUTOMATIC_EARNINGS_CHECK_ENABLED } from "../lib/screeningReview";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
 const router: IRouter = Router();
 
-const EDGEAI_URL = "https://alexgianni777-tech.github.io/edgeai/public/data.json";
-
-function normalizeRate(value: unknown): number {
-  const n = Number(value ?? 0);
-  if (!Number.isFinite(n)) return 0;
-  return Math.abs(n) > 1 ? n / 100 : n;
-}
-
-function mapSetupToCategory(
-  dir: string,
-  setupName: string,
-): "MOMENTUM" | "SQUEEZE" | "STUDS" | "WEAKEST" {
-  if (dir === "short") return "WEAKEST";
-  const n = setupName.toLowerCase();
-  if (n.includes("squeeze") || n.includes("bollinger") || n.includes("reversion") || n.includes("mean"))
-    return "SQUEEZE";
-  if (n.includes("pullback") || n.includes("stud") || n.includes("reversal"))
-    return "STUDS";
-  return "MOMENTUM"; // breakout, momentum, flag, trend, default
+function daysUntil(date: Date | number | null | undefined): number | null {
+  return calendarDaysUntil(date);
 }
 
 router.post(
   "/screener/sessions/import-from-edgeai",
   async (req, res): Promise<void> => {
     // 1. Fetch latest EdgeAI data
-    let edgeData: any;
+    let fetched: Awaited<ReturnType<typeof fetchFreshEdgeAiData>>;
     try {
-      const resp = await fetch(EDGEAI_URL, {
-        headers: { Accept: "application/json" },
-        signal: AbortSignal.timeout(10_000),
-      });
-      if (!resp.ok) {
-        res.status(502).json({ error: `EdgeAI fetch failed: ${resp.status}` });
+      // Manual and scheduled imports share the same one-previous-close limit.
+      await respectStoredEdgeAiBackoff();
+      fetched = await fetchFreshEdgeAiData(10_000);
+    } catch (err: any) {
+      const failureDate = stockholmSignalDate();
+      const message = err instanceof Error ? err.message : "EdgeAI fetch failed";
+      const report = makeImportReport("edgeai", failureDate, { failure: message });
+      attachFetchDiagnostic(report, err);
+      try {
+        await recordImportFailure(failureDate, report, message);
+      } catch (recordError) {
+        logger.warn({ err: recordError instanceof Error ? recordError.message : "unknown" }, "Could not save EdgeAI failure receipt");
+      }
+      if (err instanceof EdgeAiDataFreshnessError) {
+        res.status(422).json({ error: err.message, generatedAt: err.generatedAt });
         return;
       }
-      edgeData = await resp.json();
-    } catch (err: any) {
-      res.status(502).json({ error: `Could not reach EdgeAI: ${err.message}` });
+      res.status(502).json({ error: `Could not reach EdgeAI: ${message}` });
       return;
     }
+    const edgeData = fetched.data;
 
-    const se = edgeData?.markets?.SE;
-    if (!se) {
-      res.status(502).json({ error: "EdgeAI response missing SE market data" });
-      return;
-    }
+    const markets = edgeData?.markets;
+    const se = markets?.SE ?? {};
+    const us = markets?.US ?? {};
+    const setups: any[] = Array.isArray(se.setups) ? se.setups : [];
+    const usRaw: any[] = Array.isArray(us.setups) ? us.setups : [];
 
-    const setups: any[] = se.setups ?? [];
-
-    // 2. Derive proposal-session date from generatedAt. The proposals are
-    // intentionally based on the latest completed close and used today.
-    const generatedAt = String(edgeData.generatedAt ?? "");
-    if (!generatedAt || Number.isNaN(new Date(generatedAt).getTime())) {
-      res.status(502).json({ error: "EdgeAI response has invalid generatedAt" });
-      return;
-    }
-    const sessionDate = generatedAt.slice(0, 10);
-
-    // 2b. Fetch real OMXS30 market weather from Yahoo Finance
-    let omxsValue = 0, perf5d = 0, perf1m = 0, perf3m = 0, marketRsi = 0;
-    try {
-      const now = new Date();
-      const ninetyFiveDaysAgo = new Date(now.getTime() - 95 * 86_400_000);
-      const history = await yf.historical("^OMX", {
-        period1: ninetyFiveDaysAgo,
-        period2: now,
-        interval: "1d",
-      }) as Array<{ close: number }>;
-      if (history.length > 0) {
-        omxsValue = history[history.length - 1].close;
-        // Compute Wilder RSI(14) from daily closes rather than returning a placeholder zero.
-        if (history.length >= 15) {
-          const closes = history.map((bar) => bar.close);
-          let gains = 0, losses = 0;
-          for (let i = 1; i <= 14; i++) {
-            const change = closes[i] - closes[i - 1];
-            gains += Math.max(change, 0);
-            losses += Math.max(-change, 0);
-          }
-          let avgGain = gains / 14, avgLoss = losses / 14;
-          for (let i = 15; i < closes.length; i++) {
-            const change = closes[i] - closes[i - 1];
-            avgGain = (avgGain * 13 + Math.max(change, 0)) / 14;
-            avgLoss = (avgLoss * 13 + Math.max(-change, 0)) / 14;
-          }
-          marketRsi = avgLoss === 0 ? (avgGain === 0 ? 50 : 100) : 100 - 100 / (1 + avgGain / avgLoss);
-        }
-        if (history.length >= 6)  perf5d  = ((omxsValue - history[history.length - 6].close)  / history[history.length - 6].close)  * 100;
-        if (history.length >= 22) perf1m  = ((omxsValue - history[history.length - 22].close) / history[history.length - 22].close) * 100;
-        if (history.length >= 64) perf3m  = ((omxsValue - history[history.length - 64].close) / history[history.length - 64].close) * 100;
+    // The stored session date is the EdgeAI signal day, never the browser/server
+    // clock. A manual import may intentionally use the latest prior trading day.
+    const signalDate = edgeAiSessionDate(edgeData);
+    const importReport = makeImportReport(
+      "edgeai",
+      signalDate,
+      fetched.rawData,
+      edgeData.generatedAt ?? null,
+      fetched.quality.dataDates,
+    );
+    importReport.warnings = fetched.quality.warnings;
+    importReport.quarantinedIdentities = fetched.quality.quarantinedIdentities;
+    if (fetched.quality.errors.length > 0) {
+      const message = `EdgeAI-import avvisad: ${fetched.quality.errors.join(" ")}`;
+      try {
+        await recordImportFailure(signalDate, importReport, message);
+      } catch (recordError) {
+        logger.warn({ err: recordError instanceof Error ? recordError.message : "unknown" }, "Could not save EdgeAI validation receipt");
       }
-    } catch {
-      // non-fatal — market weather stays 0 if Yahoo Finance is unavailable
+      res.status(422).json({ error: message, generatedAt: edgeData.generatedAt });
+      return;
+    }
+    if (setups.length === 0 && usRaw.length === 0) {
+      const message = "EdgeAI-rapporten innehåller inga setups. Befintliga kandidater lämnades orörda.";
+      try {
+        await recordImportFailure(signalDate, importReport, message);
+      } catch (recordError) {
+        logger.warn({ err: recordError instanceof Error ? recordError.message : "unknown" }, "Could not save EdgeAI empty-report receipt");
+      }
+      res.status(422).json({ error: message, generatedAt: edgeData.generatedAt });
+      return;
     }
 
-    // 3. Check for existing session (respect force flag)
+    const sessionDate = stockholmSignalDate();
+    const freshness = edgeAiDataFreshness(edgeData);
+
+    // EdgeAI generated today can still use yesterday's completed market bars.
+    // Keep index context on the SE data day, never the partial import-day bar.
+    let mw;
+    try {
+      mw = setups.length > 0
+        ? await fetchOmxsMarketWeather(yf, String(se.dataAsOf ?? ""))
+        : { omxsValue: 0, perf5d: 0, perf1m: 0, perf3m: 0, marketRsi: 0 };
+    } catch (err: any) {
+      logger.warn({ err: err.message }, "Manual EdgeAI import could not verify completed OMXS30 weather");
+      res.status(502).json({ error: "Stängd OMXS30-kurs för EdgeAI:s datadag saknas. Försök igen när kursdata finns." });
+      return;
+    }
+    const { omxsValue, perf5d, perf1m, perf3m, marketRsi } = mw;
+    if (setups.length > 0 && importReport.marketContext?.SE) {
+      importReport.marketContext.SE.weather = { ...mw, rsi: marketRsi, trendLabel: se.regime?.label ?? null };
+    }
+
+    // 3. Map setups → candidates (SE + US combined), rank each market separately.
+    //    mapEdgeAiSetup is the single shared mapping function (see edgeAiMapping.ts) —
+    //    also used by the scheduler auto-import, so both paths stay in sync. Computed
+    //    up front (pure, no I/O) so the 409 conflict check below can preview exactly
+    //    which pending candidates a force re-import would remove.
+    const rankCounter: Record<string, number> = {};
+    const mappedSetups = [
+      ...setups.map((s: any) => mapEdgeAiSetup(s, "SE", rankCounter, fetched.quality.dataDates.SE)),
+      ...usRaw.map((s: any) => mapEdgeAiSetup(s, "US", rankCounter, fetched.quality.dataDates.US)),
+    ];
+    mappedSetups.forEach((candidate) => {
+      Object.assign(candidate, { signalSource: "edgeai" as const, origin: "edgeai" as const });
+    });
+    const safeSetups = isolateEdgeAiPlans(mappedSetups, [...setups, ...usRaw].map(s => `${s.setup} (${s.signalT ?? "signaltid okänd"})`), importReport);
+    const { candidates: uniqueMappedSetups, skipped } = deduplicateCandidates(safeSetups, importReport);
+    if (skipped.length > 0) {
+      logger.warn({ skipped }, "EdgeAI import skipped duplicate candidate identities");
+    }
+
+    // 4. Check for existing session (respect force flag)
     const force = req.body?.force === true;
     const existing = await db
-      .select({ id: screenerSessionsTable.id })
+      .select({ id: screenerSessionsTable.id, source: screenerSessionsTable.source })
       .from(screenerSessionsTable)
       .where(eq(screenerSessionsTable.date, sessionDate));
 
     if (existing.length > 0 && !force) {
       // Return same 409 shape as the regular import endpoint
       const existingId = existing[0].id;
-      const affectedOutcomes = await db
+      const existingRows = await db
         .select({
+          id: candidatesTable.id,
           ticker: candidatesTable.ticker,
           category: candidatesTable.category,
+          direction: candidatesTable.direction,
+          market: candidatesTable.market,
+          signalSource: candidatesTable.signalSource,
           outcome: candidatesTable.outcome,
           exitPrice: candidatesTable.exitPrice,
         })
         .from(candidatesTable)
-        .where(eq(candidatesTable.sessionId, existingId))
-        .then((rows) => rows.filter((r) => r.outcome !== "PENDING"));
+        .where(eq(candidatesTable.sessionId, existingId));
+
+      const affectedOutcomes = existingRows.filter((r) => r.outcome !== "PENDING");
+
+      // Preview the exact effective input used by the force path. In
+      // particular, candidates from a separate market or source are retained.
+      const selectedSnapshotRows = await db
+        .select({ candidateId: top3SelectionSnapshotsTable.candidateId })
+        .from(top3SelectionSnapshotsTable)
+        .where(and(
+          eq(top3SelectionSnapshotsTable.sessionId, existingId),
+          eq(top3SelectionSnapshotsTable.selected, true),
+        ));
+      const linkedTrades = existingRows.length ? await db
+        .select({ candidateId: survivalTradesTable.sourceCandidateId })
+        .from(survivalTradesTable)
+        .where(inArray(survivalTradesTable.sourceCandidateId, existingRows.map((row) => row.id))) : [];
+      const wouldRemove = pendingCandidatesToRemove(
+        existingRows,
+        uniqueMappedSetups,
+        new Set([
+          ...selectedSnapshotRows.map((row) => row.candidateId),
+          ...linkedTrades.map((row) => row.candidateId!),
+        ]),
+      );
 
       res.status(409).json({
         error: `A session for ${sessionDate} already exists`,
         sessionId: existingId,
         date: sessionDate,
         affectedOutcomes,
+        wouldRemove,
       });
       return;
     }
 
-    // 4. Map setups → candidates (SE + US combined), group by category for ranking
-    const usSetups: any[] = edgeData?.markets?.US?.setups ?? [];
-    const allSetups = [...setups, ...usSetups];
-    if (allSetups.length === 0) {
-      res.status(422).json({
-        error: "EdgeAI has no SE or US proposals in the current generated file.",
-        generatedAt: edgeData.generatedAt,
-      });
-      return;
+    if (existing.length > 0 && force) {
+      const existingRows = await db
+        .select()
+        .from(candidatesTable)
+        .where(eq(candidatesTable.sessionId, existing[0].id));
+      const incomingByIdentity = new Map(
+        uniqueMappedSetups.map((candidate) => [candidateIdentity(candidate), candidate.signalDate] as const),
+      );
+      const mismatch = existingRows.find((candidate) =>
+        candidate.signalDate != null &&
+        incomingByIdentity.has(candidateIdentity(candidate)) &&
+        incomingByIdentity.get(candidateIdentity(candidate)) !== candidate.signalDate,
+      );
+      if (mismatch) {
+        res.status(409).json({
+          error: `Signal date mismatch for ${mismatch.ticker}: stored ${mismatch.signalDate}, incoming ${incomingByIdentity.get(candidateIdentity(mismatch))}`,
+        });
+        return;
+      }
     }
-    const rankCounter: Record<string, number> = {};
 
-    const mappedSetups = allSetups.map((s: any) => {
-      const category = mapSetupToCategory(s.dir, s.setup ?? "");
-      rankCounter[category] = (rankCounter[category] ?? 0) + 1;
-      const direction = s.dir === "short" ? "SHORT" : "LONG";
-      const entry = Number(s.entry ?? 0);
-      const stop = Number(s.stop ?? 0);
-      const target = Number(s.target ?? 0);
-      const oneR = Math.abs(entry - stop);
-      // Strip .ST so SE tickers are stored as base form (ALFA, ERIC-B).
-      // US tickers have no .ST so stripping is a no-op (AMD stays AMD).
-      // resolveYahooTicker() re-adds .ST for SE tickers via SE_BASE_TICKERS / hyphen rule.
-      const ticker = String(s.ticker ?? "").replace(/\.ST$/i, "").toUpperCase();
-      // barsAgo: how many bars (trading days) ago the signal was first triggered
-      const barsAgo = Number(s.barsAgo ?? 0);
-      return {
-        category,
-        rank: rankCounter[category],
-        ticker,
-        price: entry,
-        rs3m: Number(s.rs ?? 0),
-        perf1m: normalizeRate(s.edge?.winRate), // decimal 0-1 for frontend + analytics
-        rsi: Number(s.edge?.expectancyR ?? 0) * 100, // store expectancyR × 100 for display
-        pctB: Number(s.edge?.sample ?? 0),           // store N (sample size)
-        atr: oneR,
-        volMultiplier: Number(s.rr ?? 0),  // store actual R/R from EdgeAI
-        distFrom20dH: barsAgo,             // store signal age in trading days
-        // Reuse the legacy soft-warning field for EdgeAI evidence tier:
-        // null = VALIDATED/A, -0.5 = PROMISING/B, -1 = WATCH.
-        gapWarning:
-          String(s.grade ?? "").toUpperCase() === "A"
-            ? null
-            : String(s.grade ?? "").toUpperCase() === "B"
-              ? -0.5
-              : -1,
-        direction,
-        entryPrice: entry,
-        stopPrice: stop,
-        targetPrice: target,
-        rr: Number(s.rr ?? 0),
-        oneR,
-        outcome: "PENDING" as const,
-        origin: "edgeai",
-      };
+    // Use the completed market-data day that produced the signal, not today's
+    // partial live quote or the (possibly later) session/import date.
+    const volumeRequests = uniqueMappedSetups.map((c) => ({
+      ticker: c.ticker,
+      market: c.market,
+      asOfDate: String((c.market === "SE" ? se : us).dataAsOf ?? ""),
+    }));
+    const volumeMap = await fetchCompletedVolumeBatch(yf, volumeRequests);
+    uniqueMappedSetups.forEach((c, index) => {
+      const request = volumeRequests[index];
+      const value = request.asOfDate <= signalDate ? volumeMap.get(completedVolumeKey(request)) : null;
+      if (value) {
+        c.volMultiplier = value.multiplier;
+        c.volumeAsOf = value.asOf;
+      }
     });
+    // Earnings calendar remains signal-time evidence only on the actual
+    // import day; it does not reconstruct historical observations.
+    await Promise.allSettled(
+      uniqueMappedSetups.map(async (c) => {
+        try {
+          const isSignalDay = signalDate === stockholmCalendarDate();
+          if (AUTOMATIC_EARNINGS_CHECK_ENABLED && isSignalDay) {
+            const q = (await withRetry(() => yf.quote(resolveYahooTicker(c.ticker, c.market), {}, { validateResult: false }))) as any;
+            const earningsInDays = daysUntil(q.earningsTimestamp);
+            if (earningsInDays != null) {
+              c.earningsInDays = earningsInDays;
+              c.earningsKnowledge = "SIGNAL_TIME";
+              c.earningsObservedAt = new Date();
+            }
+          }
+        } catch (err: any) {
+          logger.warn({ ticker: c.ticker, err: err.message }, "Volume enrichment failed");
+        }
+      }),
+    );
 
-    // 5. Handle force re-import atomically so a failed insert can never
-    // leave a half-empty session.
-    const sessionId = await db.transaction(async (tx) => {
-      if (existing.length > 0 && force) {
-        const existingId = existing[0].id;
-        const existingCands = await tx
-          .select({
-            ticker: candidatesTable.ticker,
-            category: candidatesTable.category,
-            direction: candidatesTable.direction,
-            outcome: candidatesTable.outcome,
-            exitPrice: candidatesTable.exitPrice,
-            outcomeNotes: candidatesTable.outcomeNotes,
-            origin: candidatesTable.origin,
-          })
+    // 6. Handle force re-import: preserve existing outcomes
+    let sessionId: number;
+
+    if (existing.length > 0 && force) {
+      const existingId = existing[0].id;
+      sessionId = await db.transaction(async (tx) => {
+        await lockScreenerSession(tx, sessionDate);
+        const existingCandidates = await tx
+          .select()
           .from(candidatesTable)
           .where(eq(candidatesTable.sessionId, existingId));
-
-        // Preserve independently by ticker + direction + category.
-        const outcomeMap = new Map(
-          existingCands
-            .filter((cand) => cand.outcome !== "PENDING" && (cand.origin === "edgeai" || cand.origin == null))
-            .map((cand) => [
-              `${cand.ticker}|${cand.direction}|${cand.category}`,
-              cand,
-            ]),
-        );
-
-        await tx
-          .delete(candidatesTable)
-          .where(
-            and(
-              eq(candidatesTable.sessionId, existingId),
-              or(eq(candidatesTable.origin, "edgeai"), isNull(candidatesTable.origin)),
-            ),
-          );
-
         const [updated] = await tx
           .update(screenerSessionsTable)
           .set({
-            trendLabel: se.regime?.label ?? "n/a",
-            rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt} · SE dataAsOf ${se.dataAsOf ?? "n/a"} · US dataAsOf ${edgeData?.markets?.US?.dataAsOf ?? "n/a"}`,
+            rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt}`,
+          })
+          .where(eq(screenerSessionsTable.id, existingId))
+          .returning();
+        const { candidates: synchronizedCandidates, diff, duplicateReport } = await synchronizeCandidates(
+          tx,
+          updated.id,
+          mergeCandidateInputs(
+            uniqueMappedSetups,
+            existingCandidates.map(({ id, createdAt, ...candidate }) => candidate),
+          ),
+          new Date(), importReport,
+        );
+        const aggregateSource = aggregateSessionSource(
+          existing[0].source,
+          synchronizedCandidates.map((candidate) => candidate.signalSource),
+        );
+        await tx
+          .update(screenerSessionsTable)
+          .set({ lastImportDiff: diff, lastImportAt: new Date(), source: aggregateSource })
+          .where(eq(screenerSessionsTable.id, updated.id));
+        if (!duplicateReport) await snapshotNewSessionTop3(
+          tx,
+          { id: updated.id, date: sessionDate, source: aggregateSource },
+          uniqueMappedSetups,
+          undefined, ["edgeai"],
+        );
+        await approveImportedTop3(tx, updated.id, importReport);
+        return updated.id;
+      });
+    } else {
+      // Fresh insert
+      sessionId = await db.transaction(async (tx) => {
+        await lockScreenerSession(tx, sessionDate);
+        const [alreadyStored] = await tx
+          .select({ id: screenerSessionsTable.id })
+          .from(screenerSessionsTable)
+          .where(eq(screenerSessionsTable.date, sessionDate));
+        if (alreadyStored) {
+          throw new Error(`A session for ${sessionDate} already exists; refresh and use force to synchronize it`);
+        }
+        const [inserted] = await tx
+          .insert(screenerSessionsTable)
+          .values({
+            date: sessionDate,
             omxsValue,
             perf5d,
             perf1m,
             perf3m,
             marketRsi,
+            trendLabel: se.regime?.label ?? "n/a",
+            rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt}`,
             source: "edgeai",
             edgeRegime: JSON.stringify(se.regime ?? {}),
             edgeExpectancy: se.edge?.expectancyR ?? null,
-            edgeWinRate: normalizeRate(se.edge?.winRate),
+            edgeWinRate: se.edge?.winRate != null
+              ? (se.edge.winRate > 1 ? se.edge.winRate / 100 : se.edge.winRate)
+              : null,
             edgePF: se.edge?.profitFactor ?? null,
             edgeN: se.edge?.n ?? null,
           })
-          .where(eq(screenerSessionsTable.id, existingId))
           .returning();
-
-        await tx.insert(candidatesTable).values(
-          mappedSetups.map((cand) => {
-            const prev = outcomeMap.get(
-              `${cand.ticker}|${cand.direction}|${cand.category}`,
-            );
-            return {
-              ...cand,
-              sessionId: updated.id,
-              outcome: prev?.outcome ?? "PENDING",
-              exitPrice: prev?.exitPrice ?? null,
-              outcomeNotes: prev?.outcomeNotes ?? null,
-            } as any;
-          }),
+        const { candidates: insertedCandidates } = await synchronizeCandidates(tx, inserted.id, uniqueMappedSetups, new Date(), importReport);
+        await snapshotNewSessionTop3(
+          tx,
+          { id: inserted.id, date: sessionDate, source: "edgeai" },
+          uniqueMappedSetups,
+          undefined, ["edgeai"],
         );
-
-        return updated.id;
-      }
-
-      const [inserted] = await tx
-        .insert(screenerSessionsTable)
-        .values({
-          date: sessionDate,
-          omxsValue,
-          perf5d,
-          perf1m,
-          perf3m,
-          marketRsi,
-          trendLabel: se.regime?.label ?? "n/a",
-          rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt} · SE dataAsOf ${se.dataAsOf ?? "n/a"} · US dataAsOf ${edgeData?.markets?.US?.dataAsOf ?? "n/a"}`,
-          source: "edgeai",
-          edgeRegime: JSON.stringify(se.regime ?? {}),
-          edgeExpectancy: se.edge?.expectancyR ?? null,
-          edgeWinRate: normalizeRate(se.edge?.winRate),
-          edgePF: se.edge?.profitFactor ?? null,
-          edgeN: se.edge?.n ?? null,
-        })
-        .returning();
-
-      await tx.insert(candidatesTable).values(
-        mappedSetups.map((cand) => ({ ...cand, sessionId: inserted.id } as any)),
-      );
-
-      return inserted.id;
-    });
+        // Fresh insert: nothing existed before, so a diff would be all-"added" noise — skip it.
+        await approveImportedTop3(tx, inserted.id, importReport);
+        return inserted.id;
+      });
+    }
 
     res.status(existing.length > 0 && force ? 200 : 201).json({
       id: sessionId,
       date: sessionDate,
-      setupCount: mappedSetups.length,
+      setupCount: uniqueMappedSetups.length,
       generatedAt: edgeData.generatedAt,
+      stale: freshness.isDifferentUtcDate || freshness.ageMs > 30 * 60 * 60 * 1_000,
+      ageDescription: freshness.ageDescription,
       regime: se.regime,
     });
   },
 );
 
 export default router;
+
+function stockholmCalendarDate(): string {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Stockholm",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}

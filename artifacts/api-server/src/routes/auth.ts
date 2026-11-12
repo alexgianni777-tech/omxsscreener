@@ -19,6 +19,7 @@ import {
   SESSION_TTL,
   type SessionData,
 } from '../lib/auth';
+import { isAdministrator } from '../middlewares/authMiddleware';
 
 const OIDC_COOKIE_TTL = 10 * 60 * 1000;
 
@@ -55,7 +56,9 @@ function getSafeReturnTo(value: unknown): string {
   if (
     typeof value !== 'string' ||
     !value.startsWith('/') ||
-    value.startsWith('//')
+    value.startsWith('//') ||
+    value.includes('\\') ||
+    value.includes('\0')
   ) {
     return '/';
   }
@@ -125,15 +128,24 @@ async function upsertUser(claims: Record<string, unknown>) {
 router.get('/auth/user', (req: Request, res: Response) => {
   res.json(
     GetCurrentAuthUserResponse.parse({
-      user: req.isAuthenticated() ? req.user : null,
+      user:
+        req.isAuthenticated() && isAdministrator(req.user)
+          ? req.user
+          : null,
     }),
   );
 });
 
 router.get('/login', async (req: Request, res: Response) => {
-  const config = await getOidcConfig();
-  const callbackUrl = `${getOrigin(req)}/api/callback`;
+  let config: Awaited<ReturnType<typeof getOidcConfig>>;
+  try {
+    config = await getOidcConfig();
+  } catch {
+    res.status(503).send('Authentication service unavailable. Please try again.');
+    return;
+  }
 
+  const callbackUrl = `${getOrigin(req)}/api/callback`;
   const returnTo = getSafeReturnTo(req.query.returnTo);
 
   const state = oidc.randomState();
@@ -162,7 +174,14 @@ router.get('/login', async (req: Request, res: Response) => {
 // Query params are not validated because the OIDC provider may include
 // parameters not expressed in the schema.
 router.get('/callback', async (req: Request, res: Response) => {
-  const config = await getOidcConfig();
+  let config: Awaited<ReturnType<typeof getOidcConfig>>;
+  try {
+    config = await getOidcConfig();
+  } catch {
+    res.redirect('/api/login');
+    return;
+  }
+
   const callbackUrl = `${getOrigin(req)}/api/callback`;
 
   const codeVerifier = req.cookies?.code_verifier;
@@ -204,7 +223,13 @@ router.get('/callback', async (req: Request, res: Response) => {
     return;
   }
 
-  const dbUser = await upsertUser(claims as unknown as Record<string, unknown>);
+  let dbUser: Awaited<ReturnType<typeof upsertUser>>;
+  try {
+    dbUser = await upsertUser(claims as unknown as Record<string, unknown>);
+  } catch {
+    res.redirect('/api/login');
+    return;
+  }
 
   const now = Math.floor(Date.now() / 1000);
   const sessionData: SessionData = {

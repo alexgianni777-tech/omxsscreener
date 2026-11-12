@@ -1,0 +1,137 @@
+Min samlade bedömning är: systemet har blivit klart bättre sedan versionen du visade tidigare. Framför allt har du fått in dedikerade EdgeAI-fält, signalålder, sample size, verifierad volymproveniens, mer konservativ rapporthantering och betydligt bättre skydd av realiserad R. Men jag skulle fortfarande inte använda nuvarande Top 3-statistik som bevis för edge. Det finns några saker som kan göra historiken bättre eller sämre än den strategi du faktiskt hade kunnat handla i realtid.
+
+Det viktigaste jag skulle be Replit ändra
+Gör en enda gemensam urvalsmotor för Top 3. Servern rankar EdgeAI ungefär som expectancyR × N/(N+20) × ageDecay, medan andra källor rankas på momentum och därefter blandas källorna genom round-robin. Det är vettigare än att blanda oförenliga enheter direkt, men det är fortfarande inte ett gemensamt mått på framtida förväntad R. Problemet blir större eftersom Today-sidan och analytics inte verkar använda exakt samma urvalspolicy: analytics väljer upp till tre long och tre short totalt, medan frontend har egen ranking/urvalslogik. Den strategi vi ser och handlar måste vara exakt samma strategi som backtesten mäter.
+Frys Top 3 vid signaltillfället. Re-import kan uppdatera kandidatens entry, rankingvariabler, volym, signalålder osv., samtidigt som resultatfält bevaras. Det är bra för själva realiserade R-denominatorn, men historiska Top 3 kan fortfarande förändras eftersom analytics räknar om urvalet från kandidatens nuvarande värden. Spara därför selectionScoreAtSignal, reviewStatusAtSignal, selectedAtSignal, policyVersion och helst en komplett immutable signalSnapshot. En stjärnmarkering som görs efter att utfallet blivit känt får aldrig få skriva om historisk Top 3-statistik.
+Top 3-analytics måste använda samma BLOCKED/WAIT/TRADEABLE-filter som real trading. reviewCandidate() kan blockera en trade för rapport, fel R:R, ogiltig stop, dålig volym, short-RSI osv. Men analytics väljer kandidater direkt från kandidatpoolen och flaggar exempelvis rapportvarning i efterhand i stället för att först återskapa om kandidaten faktiskt var tradeable. Det kan ge en historisk strategi som du aldrig skulle ha fått lov att handla enligt systemets egna regler.
+Fixa TIME_EXIT – där finns ett konkret buggläge. TIME_EXIT sätts som resolutionMethod, men prisvalideringen behandlar allt som inte är MANUAL_EXIT som om det vore target/stop. För TIME_EXIT blir assumedPrice null, vilket gör att ett normalt exitpris kan underkännas innan den senare TIME_EXIT-kontrollen. Villkoret bör bara köras för TARGET_HIT och STOP_HIT:
+if (
+  (method === "TARGET_HIT" || method === "STOP_HIT") &&
+  input.exitPrice != null &&
+  Math.abs(input.exitPrice - assumedPrice!) > 0.0001
+) {
+  ...
+}
+
+Dessutom måste dashboardens EV/equity-statistik hantera TIME_EXIT på samma sätt som Top3-analytics. I nuläget har de två statistikvägarna olika populationsdefinition.
+
+Sluta använda gamla fält med nya betydelser. Det här är fortfarande den största semantiska skulden. För EdgeAI sparas exempelvis win rate i perf1m, expectancy i rsi, sample size i pctB, oneR i atr och signalålder i distFrom20dH, samtidigt som det nu finns riktiga edgeWinRate, edgeExpectancyR, edgeSampleN och signalAgeBars. Framför allt tycker jag att atr: oneR ska bort så snart som möjligt. Stop-avstånd och ATR är inte samma sak. Om något senare visar eller filtrerar fältet som ATR riskerar systemet att fatta fel beslut. Gör en riktig migration och låt legacyfälten sluta användas för EdgeAI.
+Bygg om portföljlogiken för Turbo S/Mini S. Detta är viktigt för just AG Invest. Om du äger en TURBO S är du fortfarande long själva börsprodukten, även om produkten ger shortexponering mot underliggande. Produktens P&L ska därför beräknas från produktpriset som lastPrice-entryPrice. Underliggande riktning ska användas för exponering/hedge, inte för att invertera produktens eget P&L. Nuvarande datamodell blandar de två koncepten. Jag skulle ha separata fält för productSide, underlyingDirection, indicativeLeverage, underlyingTicker, productType och financingLevel. Detta är särskilt viktigt när Electrolux-shorten ska visas som hedge – annars kan både P&L och net exposure bli missvisande.
+Förbättra Telegram-proveniens. Replit bör ha en enda funktion, exempelvis enrichCandidateAtSignalTime(), som alla källor använder. Samma kandidat ska få verifierad volym, volymdatum, RSI/gap, earnings-proveniens och market data oavsett om den kom från EdgeAI, Telegram eller manuell import. Annars jämför vi källor där vissa har riktiga signal-time-data och andra delvis bygger på importerade textvärden.
+Separera signalresultat från faktisk handelsavkastning. Underliggande R är användbart för att mäta strategin, men AG Invest handlar ofta mini futures, turbos och warranter. Spread, courtage, valuta, finansiering, leverage och faktisk fill gör att +1R i aktien inte är samma sak som resultatet i kontot. Lägg därför till en separat trade_executions-modell med verkligt entry/exit, produkt, avgifter och netto-P&L. Då kan systemet visa både Signal Edge och AG Invest Execution Edge.
+
+En annan statistisk svaghet är att PENDING exkluderas ur running totals. Det är naturligt, men det kan ge censureringsbias om snabba vinnare blir resolved medan långsamma förlorare ligger PENDING. Analytics räknar bara de lösta observationerna i kumulativ R. Jag skulle därför inte visa “EV = X” utan samtidigt visa hur många av den kohorten som hunnit mogna. Bättre är att först inkludera en sessions Top 3 i huvudstatistiken när samtliga val har nått target/stop eller maxHold och fått TIME_EXIT.
+
+Rankingformeln jag skulle sikta mot
+
+Den nuvarande N/(N+20)-shrinkagen är en bra början. Nästa steg bör vara att låta rankingen försöka svara på exakt frågan:
+
+”Vilken kandidat har högst konservativt uppskattad framtida netto-R efter kostnader?”
+
+Jag skulle använda ungefär:
+
+posteriorER =
+    weight * observedMeanR
+  + (1-weight) * priorMeanR
+
+weight = N / (N + k)
+
+uncertaintyAdjustedER =
+    posteriorER - lambda * standardError
+
+score =
+    uncertaintyAdjustedER
+    * freshnessFactor
+    * regimeFactor
+    - expectedCostInR
+    - entryChasePenalty
+
+Där k och lambda inte handjusteras efter vilka resultat som ser bäst ut, utan väljs på träningsperiod och sedan låses inför walk-forward-testet.
+
+Marknadsregim bör också bli mer än bara information. Just nu kontrollerar reviewSession() i princip att market RSI finns och räknar godkända kandidater; det använder inte regimen för att förändra urval eller risk. Till en början skulle jag dock inte hårdkoda “bear = inga longs”. Logga regim och utvärdera OOS om momentum-long faktiskt fungerar sämre under vissa regimer. Låt datan bestämma.
+
+Det som redan är riktigt bra
+
+Jag tycker särskilt om att EdgeAI-mappningen nu är en single source of truth och till och med dokumenterar den tidigare incidenten där dubblerad mappning kunde rulla tillbaka importen. De nya dedikerade EdgeAI-fälten är också helt rätt riktning. Rapportregeln behandlar okänd signal-time-information konservativt som WARN i stället för att låtsas att historisk rapportdata var känd då. Och realiserad R låser entry/stop/direction från resolutionen i stället för att låta senare re-import skriva om denominatorn. Det är exakt den typ av revisionsspår ett seriöst handelssystem behöver.
+
+Så min bedömning skulle vara:
+
+Kodmässigt: klart mer robust än tidigare.
+Som urvalsverktyg: användbart redan nu.
+Som källa till “vi har statistiskt verifierad edge”: ännu inte.
+Största nästa steg: få realtidspolicyn, den frysta historiken och analytics att bli samma strategi.
+
+Prompt att klistra direkt i Replit
+
+Granska och förbättra OMXS30/EdgeAI-screenern med målet att få en point-in-time-korrekt och statistiskt auditerbar tradingmotor. Ändra inte tradingregler godtyckligt och optimera inte parametrar mot befintliga resultat.
+
+Prioritet P0:
+
+Fixa TIME_EXIT-valideringen i candidates.ts. Prisjämförelsen mot assumedPrice får bara köras för TARGET_HIT och STOP_HIT. Lägg regressionstest för faktisk TIME_EXIT med exitPrice och actualExitConfirmed=true.
+Säkerställ att dashboard, Top3 analytics och all annan performance-statistik använder samma definition av resolved trade, inklusive TIME_EXIT. TIME_EXIT ska bidra med realizedR och klassificeras efter tecknet för win/loss-statistik, men fortfarande vara identifierbart som TIME_EXIT.
+Skapa EN server-side selectionPolicy-modul. Today-sidan, Top3 analytics och eventuell historisk simulering ska använda exakt samma kod för:
+review/eligibility
+source ranking
+market/direction quotas
+manual picks
+tie-breaking.
+Ta bort duplicerad rankinglogik i frontend.
+Top3 analytics får aldrig välja BLOCKED eller WAIT-kandidater om den live-strategi som mäts bara tillåter TRADEABLE. Historical analytics ska utgå från point-in-time reviewstatus.
+Frys urvalet vid signaltillfället. Persist:
+selectionScoreAtSignal,
+reviewStatusAtSignal,
+reviewReasonsAtSignal,
+selectedAtSignal,
+selectionPolicyVersion,
+signalSnapshot,
+sourceGeneratedAt.
+Senare re-import får inte förändra vilka kandidater som historiskt var valda. Ett manuellt Top3-val efter att utfallet är känt ska inte kunna påverka officiell strategi-performance.
+
+Prioritet P1:
+
+Slutför EdgeAI-fältmigreringen. Sluta använda:
+perf1m som winRate,
+rsi som expectancy,
+pctB som sampleN,
+atr som oneR,
+distFrom20dH som signalAge.
+Använd enbart dedikerade EdgeAI-fält. Behåll legacyfält enbart för historisk kompatibilitet och märk gamla rader med schemaVersion.
+Skapa gemensam enrichCandidateAtSignalTime() för EdgeAI, Telegram och manual. Alla källor ska få samma verifierade:
+completed-volume multiplier + volumeAsOf,
+signal RSI,
+opening gap,
+earningsInDays + earningsKnowledge,
+market/data timestamp.
+Ett verifierat volumeAsOf får aldrig kombineras med ett overifierat volMultiplier från importerad text.
+Separera derivatets prisriktning från underliggande exponering i portfolio. Lägg till exempelvis:
+productType,
+productSide,
+underlyingDirection,
+underlyingTicker,
+indicativeLeverage,
+financingLevel,
+barrier,
+issuer,
+quoteAsOf.
+En ägd Turbo S ökar i kontovärde när produktpriset stiger även om underlyingDirection=SHORT. Beräkna faktiskt P&L från produktens fill-priser. Beräkna hedge/net exposure separat från underlyingDirection × leverage.
+
+Prioritet P2:
+
+Skapa separat trade_executions-tabell för verklig handel: instrument, entryFill, exitFill, quantity, fees, spread/slippage estimate, FX och realizedNetPnlKr/netR. Håll “signal R” och “execution R” åtskilda.
+Gör statistik endast på mogna kohorter. Visa alltid N resolved, N pending och pending %. Lägg till bootstrap-konfidensintervall för mean R, intervall för win rate, median R, profit factor och max drawdown. Segmentera på market × direction × category × source × regime.
+Implementera walk-forward/OOS-test. Parametrar och rankingkalibrering tränas endast på tidigare data och fryses före varje testperiod. Ingen information från framtida sessioner får användas.
+
+Acceptance tests som måste finnas:
+
+TIME_EXIT med faktiskt exitpris fungerar.
+Dashboard och Top3 ger samma R-population.
+BLOCKED/WAIT kan inte komma in i officiell Top3-performance.
+Today och analytics väljer exakt samma kandidater från samma snapshot.
+Re-import kan inte skriva om ett fryst historiskt urval.
+Post-hoc manual star påverkar inte officiell historik.
+Telegram använder verifierad volMultiplier tillsammans med volumeAsOf.
+Turbo S med stigande produktpris ger positiv faktisk P&L men negativ underliggande exponering.
+EdgeAI ATR-fält innehåller riktig ATR eller är null — aldrig oneR.
+Samma ticker från olika signalkällor kan behålla sin separata provenance.
+
+Kör därefter full typecheck, alla tester och build. Gör endast append-only/säkra databasmigrationer och redovisa exakt vilka historiska rader som behöver backfill. Ändra inte existerande resultatdata utan en explicit migrationsplan.

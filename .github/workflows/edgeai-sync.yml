@@ -1,0 +1,36 @@
+name: EdgeAI — håll senaste import uppdaterad
+
+# Activation requires pushing this file to GitHub main AFTER publishing the API.
+# Reuses the same two existing secrets as screener-import.yml. No Telegram send.
+on:
+  schedule:
+    - cron: "17 7-22 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: edgeai-dashboard-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Kontrollera senaste giltiga EdgeAI-rapport
+        env:
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
+          DASHBOARD_IMPORT_SECRET: ${{ secrets.DASHBOARD_IMPORT_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "$DASHBOARD_URL" && test -n "$DASHBOARD_IMPORT_SECRET" || {
+            echo "DASHBOARD_URL/DASHBOARD_IMPORT_SECRET måste konfigureras."
+            exit 1
+          }
+          [[ "$DASHBOARD_URL" == https://* ]] || exit 1
+          curl --fail --show-error --silent --connect-timeout 20 --max-time 150 \
+            -X POST "${DASHBOARD_URL%/}/api/edgeai-sync" \
+            -H "Authorization: Bearer $DASHBOARD_IMPORT_SECRET" \
+            -H "Content-Type: application/json" --data '{}'

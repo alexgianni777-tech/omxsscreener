@@ -1,34 +1,38 @@
 /**
- * GET /api/screener/analytics/top3
- *
- * Hypothetical "top 3 per session" strategy performance.
- * For every session, picks the 3 candidates with the highest edge score
- * (winRate × expectancyR), then tracks their logged outcomes as R-multiples.
- * PENDING outcomes are excluded from running totals.
+ * Official Top 3 performance from immutable signal-time selection snapshots.
+ * Legacy sessions without snapshots are returned as unavailable and are never
+ * selected, ranked, or backfilled from their current candidate fields.
  */
 import { Router, type IRouter } from "express";
-import { asc, eq } from "drizzle-orm";
-import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
+import { asc } from "drizzle-orm";
+import {
+  db,
+  screenerSessionsTable,
+  candidatesTable,
+  top3SelectionSnapshotsTable,
+} from "@workspace/db";
+import { resolveTradePerformance } from "../lib/tradePerformance.ts";
+import { summarizeTop3Cohorts } from "../lib/top3CohortAnalytics.ts";
+import { describeTop3Snapshot } from "../lib/top3SnapshotStatus.ts";
 
 const router: IRouter = Router();
 
-function normalizeStoredRate(value: number | null | undefined): number {
-  const n = Number(value ?? 0);
-  if (!Number.isFinite(n)) return 0;
-  return Math.abs(n) > 1 ? n / 100 : n;
-}
-
-function evidencePriority(gapWarning: number | null | undefined): number {
-  if (gapWarning == null) return 2;      // VALIDATED / A
-  if (gapWarning > -0.75) return 1;      // PROMISING / B
-  return 0;                              // WATCH
-}
-
 router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
   const sessions = await db
-    .select({ id: screenerSessionsTable.id, date: screenerSessionsTable.date })
+    .select({
+      id: screenerSessionsTable.id,
+      date: screenerSessionsTable.date,
+      source: screenerSessionsTable.source,
+      edgeWinRate: screenerSessionsTable.edgeWinRate,
+      snapshotAt: screenerSessionsTable.top3SnapshotAt,
+      policyVersion: screenerSessionsTable.top3PolicyVersion,
+      top3SnapshotAt: screenerSessionsTable.top3SnapshotAt,
+      top3PolicyVersion: screenerSessionsTable.top3PolicyVersion,
+      top3CutoffAt: screenerSessionsTable.top3CutoffAt,
+      top3CutoffEvaluatedAt: screenerSessionsTable.top3CutoffEvaluatedAt,
+      top3ParticipatingSources: screenerSessionsTable.top3ParticipatingSources,
+    })
     .from(screenerSessionsTable)
-    .where(eq(screenerSessionsTable.source, "edgeai"))
     .orderBy(asc(screenerSessionsTable.date));
 
   if (sessions.length === 0) {
@@ -36,119 +40,140 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
     return;
   }
 
-  const allCandidates = await db.select().from(candidatesTable);
-
-  // Group by session
-  const bySession = new Map<number, typeof allCandidates>();
-  for (const c of allCandidates) {
-    if (!bySession.has(c.sessionId)) bySession.set(c.sessionId, []);
-    bySession.get(c.sessionId)!.push(c);
+  const [allCandidates, allSnapshots] = await Promise.all([
+    db.select().from(candidatesTable),
+    db.select().from(top3SelectionSnapshotsTable)
+      .orderBy(
+        asc(top3SelectionSnapshotsTable.sessionId),
+        asc(top3SelectionSnapshotsTable.market),
+        asc(top3SelectionSnapshotsTable.direction),
+        asc(top3SelectionSnapshotsTable.rank),
+      ),
+  ]);
+  const candidateById = new Map(allCandidates.map((candidate) => [candidate.id, candidate]));
+  const snapshotsBySession = new Map<number, typeof allSnapshots>();
+  for (const snapshot of allSnapshots) {
+    const group = snapshotsBySession.get(snapshot.sessionId) ?? [];
+    group.push(snapshot);
+    snapshotsBySession.set(snapshot.sessionId, group);
   }
 
   let cumulativeR = 0;
-  let totalTrades = 0;
-  let wins = 0;
-  let losses = 0;
 
   const sessionResults = sessions.map((session) => {
-    const candidates = (bySession.get(session.id) ?? []).filter(
-      (candidate) => candidate.origin === "edgeai" || candidate.origin == null,
-    );
-
-    // Rank by E[R] proxy, then keep only one position per ticker.
-    const sorted = [...candidates].sort((a, b) => {
-      const evidenceDiff =
-        evidencePriority(b.gapWarning) - evidencePriority(a.gapWarning);
-      if (evidenceDiff !== 0) return evidenceDiff;
-      return (
-        normalizeStoredRate(b.perf1m) * ((b.rsi ?? 0) / 100) -
-        normalizeStoredRate(a.perf1m) * ((a.rsi ?? 0) / 100)
-      );
-    });
-
-    const top3 = [];
-    const seenTickers = new Set<string>();
-    for (const candidate of sorted) {
-      if (seenTickers.has(candidate.ticker)) continue;
-      seenTickers.add(candidate.ticker);
-      top3.push(candidate);
-      if (top3.length === 3) break;
-    }
-
-    const picks = top3.map((candidate) => {
-      const risk = Math.abs(
-        (candidate.entryPrice ?? 0) - (candidate.stopPrice ?? 0),
-      );
-      let r: number | null = null;
-
-      if (
-        (candidate.outcome === "WIN" || candidate.outcome === "LOSS") &&
-        candidate.exitPrice != null &&
-        risk > 0
-      ) {
-        r =
-          candidate.direction === "SHORT"
-            ? ((candidate.entryPrice ?? 0) - candidate.exitPrice) / risk
-            : (candidate.exitPrice - (candidate.entryPrice ?? 0)) / risk;
+    const snapshotStatus = describeTop3Snapshot(session);
+    const snapshots = session.snapshotAt
+      ? (snapshotsBySession.get(session.id) ?? []).filter((snapshot) => snapshot.selected)
+      : [];
+    const mapPick = (snapshot: (typeof allSnapshots)[number]) => {
+      const candidate = candidateById.get(snapshot.candidateId);
+      const performance = candidate ? resolveTradePerformance(candidate) : null;
+      if (performance) {
+        cumulativeR += performance.r;
       }
-
       return {
-        ticker: candidate.ticker,
-        direction: candidate.direction,
-        edgeScore: Number(
-          (normalizeStoredRate(candidate.perf1m) * ((candidate.rsi ?? 0) / 100)).toFixed(4),
-        ),
-        outcome: candidate.outcome,
-        r,
+        candidateId: snapshot.candidateId,
+        ticker: snapshot.ticker,
+        category: snapshot.category,
+        market: snapshot.market,
+        direction: snapshot.direction,
+        signalSource: snapshot.source ?? null,
+        edgeScore: snapshot.score,
+        rank: snapshot.rank,
+        type: snapshot.type,
+        policyVersion: snapshot.policyVersion,
+        selectedAt: snapshot.selectedAt,
+        review: snapshot.review,
+        decision: snapshot.decision,
+        earningsWarning: snapshot.earningsWarning,
+        outcome: candidate?.outcome ?? "PENDING",
+        r: performance?.r ?? null,
       };
+    };
+
+    let sessionR = 0;
+    const picks = snapshots.map((snapshot) => {
+      const pick = mapPick(snapshot);
+      if (pick.r != null) sessionR += pick.r;
+      return pick;
     });
-
-    const complete =
-      picks.length > 0 &&
-      picks.every(
-        (pick) =>
-          pick.outcome === "SKIP" ||
-          ((pick.outcome === "WIN" || pick.outcome === "LOSS") && pick.r != null),
-      );
-
-    let sessionR: number | null = null;
-    if (complete) {
-      sessionR = picks.reduce((sum, pick) => sum + (pick.r ?? 0), 0);
-      for (const pick of picks) {
-        if (pick.outcome === "WIN" && pick.r != null) {
-          wins++;
-          totalTrades++;
-        } else if (pick.outcome === "LOSS" && pick.r != null) {
-          losses++;
-          totalTrades++;
-        }
-      }
-      cumulativeR += sessionR;
-    }
-
+    const sessionHasResolved = picks.some((pick) => pick.r != null);
     return {
       date: session.date,
       sessionId: session.id,
+      source: session.source ?? null,
+      selectionStatus: snapshotStatus.available ? "AVAILABLE" as const : "UNAVAILABLE" as const,
+      selectionUnavailableReason: snapshotStatus.unavailableReason,
+      cutoffState: snapshotStatus.state,
+      cutoffAt: snapshotStatus.cutoffAt,
+      cutoffEvaluatedAt: snapshotStatus.evaluatedAt,
+      participatingSources: snapshotStatus.participatingSources,
+      requiredSources: snapshotStatus.requiredSources,
+      selectedAt: session.snapshotAt,
+      policyVersion: session.policyVersion,
       picks,
-      sessionR,
+      longPicks: picks.filter((pick) => pick.direction === "LONG"),
+      shortPicks: picks.filter((pick) => pick.direction === "SHORT"),
+      matured: picks.length > 0 && picks.every((pick) =>
+        pick.outcome === "SKIP" || (pick.r != null && Number.isFinite(pick.r)),
+      ),
+      edgeWinRate: session.edgeWinRate ?? null,
+      sessionR: sessionHasResolved ? sessionR : null,
       cumulativeR,
     };
   });
 
-  const winRate = totalTrades > 0 ? wins / totalTrades : null;
-  const avgRPerTrade = totalTrades > 0 ? cumulativeR / totalTrades : null;
+  const cohorts = summarizeTop3Cohorts(sessionResults.map((session) => ({
+    selectionStatus: session.selectionStatus as "AVAILABLE" | "UNAVAILABLE",
+    picks: session.picks,
+  })));
+  const sourceCohorts = {
+    edgeai: summarizeTop3Cohorts(sessionResults.map((session) => ({
+      selectionStatus: session.selectionStatus,
+      picks: session.picks.filter((pick) => pick.signalSource === "edgeai"),
+    }))),
+    legacy: summarizeTop3Cohorts(sessionResults.map((session) => ({
+      selectionStatus: session.selectionStatus,
+      picks: session.picks.filter((pick) => pick.signalSource === "telegram"),
+    }))),
+  };
+  const { totalTrades, wins, losses, winRate, totalR, expectedValue } = cohorts.matureCohort;
+  const resolvedOnly = cohorts.resolvedOnly;
 
   res.json({
     sessions: sessionResults,
     stats: {
       totalSessions: sessions.length,
-      completedSessions: sessionResults.filter((s) => s.sessionR !== null).length,
+      availableSessions: sessions.filter((session) => session.snapshotAt != null).length,
+      unavailableSessions: sessions.filter((session) => session.snapshotAt == null).length,
+      completedSessions: sessionResults.filter((session) => session.sessionR !== null).length,
+      selectedTrades: cohorts.selectedTrades,
+      resolvedTrades: cohorts.resolvedTrades,
+      pendingTrades: cohorts.pendingTrades,
+      excludedTrades: cohorts.excludedTrades,
+      resolutionRate: cohorts.resolutionRate,
+      maturedSessions: cohorts.maturedSessions,
       totalTrades,
       wins,
       losses,
       winRate,
-      totalR: cumulativeR,
-      avgRPerTrade,
+      totalR,
+      avgRPerTrade: expectedValue,
+      expectedValue,
+      resolvedOnlyTrades: resolvedOnly.totalTrades,
+      resolvedOnlyWins: resolvedOnly.wins,
+      resolvedOnlyLosses: resolvedOnly.losses,
+      resolvedOnlyWinRate: resolvedOnly.winRate,
+      resolvedOnlyExpectedValue: resolvedOnly.expectedValue,
+      resolvedOnlyTotalR: resolvedOnly.totalR,
+      resolvedOnlyAvgRPerTrade: resolvedOnly.expectedValue,
+      byDirection: {
+        LONG: cohorts.byDirection.LONG,
+        SHORT: cohorts.byDirection.SHORT,
+      },
+      // Existing aggregate remains the combined official selection. These
+      // summaries never count another source's picks as EdgeAI or legacy.
+      bySource: sourceCohorts,
     },
   });
 });
@@ -156,13 +181,37 @@ router.get("/screener/analytics/top3", async (_req, res): Promise<void> => {
 function emptyStats() {
   return {
     totalSessions: 0,
+    availableSessions: 0,
+    unavailableSessions: 0,
     completedSessions: 0,
+    selectedTrades: 0,
+    resolvedTrades: 0,
+    pendingTrades: 0,
+    excludedTrades: 0,
+    resolutionRate: null,
+    maturedSessions: 0,
     totalTrades: 0,
     wins: 0,
     losses: 0,
     winRate: null,
     totalR: 0,
     avgRPerTrade: null,
+    expectedValue: null,
+    resolvedOnlyTrades: 0,
+    resolvedOnlyWins: 0,
+    resolvedOnlyLosses: 0,
+    resolvedOnlyWinRate: null,
+    resolvedOnlyExpectedValue: null,
+    resolvedOnlyTotalR: 0,
+    resolvedOnlyAvgRPerTrade: null,
+    byDirection: {
+      LONG: { totalTrades: 0, wins: 0, losses: 0, winRate: null, totalR: 0, avgRPerTrade: null },
+      SHORT: { totalTrades: 0, wins: 0, losses: 0, winRate: null, totalR: 0, avgRPerTrade: null },
+    },
+    bySource: {
+      edgeai: summarizeTop3Cohorts([]),
+      legacy: summarizeTop3Cohorts([]),
+    },
   };
 }
 

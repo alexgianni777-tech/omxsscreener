@@ -1,0 +1,52 @@
+varför gav inte dge ai och telegram några short kandidater är det en bug
+
+Arbetade i 1m 3s
+Det kan vara en bug, men utifrån koden jag senast granskat är själva Top-3-motorn byggd för shorts. Den går uttryckligen igenom SE LONG, SE SHORT, US LONG, US SHORT och ska välja upp till tre TRADEABLE kandidater i varje grupp. EdgeAI mappar också dir: "short" till direction: "SHORT" och kategorin WEAKEST.
+
+Det betyder att frånvaron av shorts bör bero på någon av tre saker — och vi kan avgöra vilken på några minuter:
+
+Inga shorts kommer från källorna. Om du klickar ”Visa alla kandidater” och det finns 0 kandidater med SHORT/Sälj från EdgeAI respektive Telegram, då ligger problemet uppströms. EdgeAI-exporten eller Telegramrapporten skickar helt enkelt inga shorts. Då är det inte Top-3-logiken som är fel.
+
+Shorts finns men filtreras bort. Shortreglerna är ganska hårda. En short blockeras bland annat om signal-RSI är <35, om aktien har uppgap ≥2,5 %, och för icke-EdgeAI även om relativ styrka är positiv. Dessutom kan den falla på expectancy, rapportdata, volym/freshness eller annan validering. Om exempelvis dagens shorts är översålda efter den senaste nedgången är det fullt rimligt att samtliga blir BLOCKED.
+
+Det finns TRADEABLE shorts men de visas inte. Då är det definitivt en bug. UI:t har separata arrayer för seShortPicks och usShortPicks, så en vald SHORT ska renderas under Topp 3 Sälj.
+
+Det finns också en liten potentiell konfliktbugg i den version jag senast såg: urvalet behandlar LONG före SHORT, och om samma ticker redan valts LONG kan motsvarande SHORT hoppas över. Det kan ta bort enstaka shorts, men det borde normalt inte förklara att alla shorts försvinner.
+
+Det jag vill att Replit visar direkt
+Be Replit lägga till en diagnostikrad ovanför Top 3:
+
+EdgeAI: 101 importerade · 87 LONG · 14 SHORT · SHORT: 3 TRADEABLE / 8 BLOCKED / 3 WAIT
+Telegram: 12 importerade · 8 LONG · 4 SHORT · SHORT: 2 TRADEABLE / 2 BLOCKED
+Selected: SE 3 LONG / 2 SHORT · US 3 LONG / 1 SHORT
+
+Och bredvid BLOCKED ska de vanligaste orsakerna visas.
+
+Skicka detta till Replit:
+
+Add a Top3 direction diagnostics panel without changing any selection rules.
+
+For today's session show, separately for EdgeAI and Telegram and for SE/US:
+
+- total imported candidates
+- LONG count
+- SHORT count
+- TRADEABLE LONG/SHORT count
+- WAIT LONG/SHORT count
+- BLOCKED LONG/SHORT count
+- INVALID/STALE count
+- selected preliminary/official LONG/SHORT count
+
+For SHORT candidates, aggregate and display the top blocking reasons.
+
+Also add an invariant check:
+If at least one candidate has:
+direction=SHORT
+decision.status=TRADEABLE
+signalDate=sessionDate
+valid market/source
+but preliminary/official Top3 contains zero SHORT picks for that market,
+log an ERROR and show "Short selection inconsistency".
+
+Do not change ranking or filtering logic.
+Min misstanke: först kontrollera om EdgeAI faktiskt importerade några SHORT. Med 101 EdgeAI-signaler men noll synliga shorts skulle jag vilja verifiera det direkt. Om det finns exempelvis 10–20 SHORT i ”Visa alla” men några är TRADEABLE och ändå ingen Topp 3 Sälj visas, då har vi hittat en riktig regression.

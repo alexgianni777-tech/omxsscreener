@@ -1,0 +1,42 @@
+Ja — men inte hela vägen, och begränsningen är inte kod utan data. Det är värt att veta innan du bygger.
+Dataläget, rakt upp och ner
+Svensk optionsdata finns inte gratis. yahoo-finance2 ger dig optionskedjor för amerikanska tickers, men inte för ERIC-B.ST eller OMXS30-optioner. Nasdaq Nordic publicerar derivatdata utan öppet API. Avanza har ett inofficiellt API som svenska hobbyutvecklare använder — det fungerar, men kräver inloggning med TOTP, kan brytas när som helst, och du bygger beroende på något som inte är avsett för det.
+Så: en screener som rankar optioner på faktisk IV kan du inte bygga tillförlitligt. Och utan IV är en "optionsscreener" bara din vanliga riktningsscreener med extra steg.
+Men det finns en väg runt som är bättre än den låter.
+Vänd på problemet
+Istället för att fråga "vilken option är billig?" — som kräver marknadsdata — låt appen räkna ut den högsta IV du får betala för att affären ska vara värd att göra.
+Det kräver noll optionsdata. Du har allt som behövs:
+Riktkurs från din ATR-projektion
+Förfallodatum från katalysatorkalendern
+Realiserad volatilitet från OHLC du redan hämtar
+Ur det löser du numeriskt: vid vilken IV blir breakeven exakt lika med riktkursen? Det är ditt tak. Appen spottar ut:
+ERIC · call · strike 125 · förfall 18 dec · betala max 27 % IV
+Sedan öppnar du Avanza och kollar en enda siffra. Ligger marknaden på 34 % — hoppa över. På 24 % — du har edge. Det är ett verkligt filter, byggt av data du redan äger.
+Modulskiss
+Modul
+Källa
+Svårighet
+Realiserad vol (10/20/30/60d)
+Din egen OHLC
+Lätt
+Katalysatorkalender
+quoteSummary → calendarEvents.earningsDate
+Lätt
+Förfallsväljare
+Ren logik, tredje fredagen
+Lätt
+Riktkurs
+Wilder-ATR × multipel
+Lätt
+Max-IV-inversion
+Black-Scholes + bisektion
+Medel
+Faktisk IV
+Avanza-API eller manuellt
+Svår / bräcklig
+Förfallsregeln är helt deterministisk och den enda regel du behöver: förfall ska ligga minst 3–4 veckor efter katalysatorn, aldrig före. Har bolaget Q3 den 22 oktober är oktoberförfallet (16 okt) fel svar och december rätt. Den regeln ensam skulle rädda de flesta nybörjaraffärer.
+En sak som blockerar hela bygget
+Din ATR använder fortfarande enkel istället för Wilder-utjämning. Riktkursen bygger på ATR. Max-IV-inversionen bygger på riktkursen. Hela kedjan ärver felet — och till skillnad från en stoppnivå, där ett litet fel ger ett något sämre stopp, ger fel riktkurs här ett binärt fel beslut om att köpa eller avstå.
+Samma sak gäller volymberäkningen mot intradagsdata istället för stängd stapel.
+Fixa de två först. De är små ändringar och de sitter uppströms allt annat.
+Vill du att jag skriver max-IV-modulen? Det är ungefär 80 rader — Black-Scholes plus en bisektionssökare — och den droppar rakt in i din befintliga struktur utan nya beroenden. Jag kan lägga den som en fristående fil som tar {ticker, spot, target, days} och returnerar takvärdet.

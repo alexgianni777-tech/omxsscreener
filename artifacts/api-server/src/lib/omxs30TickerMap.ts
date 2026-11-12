@@ -58,8 +58,8 @@ export const OMXS30_TICKER_MAP: Record<string, string> = {
 
 /**
  * Swedish base tickers that arrive stripped of .ST (e.g. from EdgeAI imports).
- * These need .ST re-added for Yahoo Finance. Tickers containing a hyphen
- * (ERIC-B, SSAB-B, etc.) are handled by the hyphen rule below.
+ * These need .ST re-added for Yahoo Finance. Explicit known Swedish share
+ * classes are handled separately; a generic hyphen never implies Sweden.
  */
 const SE_BASE_TICKERS = new Set([
   "ABB", "ALFA", "AZN", "BOL", "EVO",
@@ -70,16 +70,51 @@ const SE_BASE_TICKERS = new Set([
  * Resolve a ticker to a Yahoo Finance symbol.
  *
  * Priority order:
- *  1. Display-name map (manually pasted SE stock names like "Alfa Laval")
- *  2. Already a full Yahoo ticker ending in .ST → return as-is
- *  3. Known SE base ticker (stripped from .ST by EdgeAI import) → add .ST
- *  4. Contains a Nordic hyphen class suffix (ERIC-B, SSAB-B, NDA-SE) → add .ST
- *  5. Everything else (US stocks: AMD, ABBV, SBUX…) → return as-is
+ * Explicit market and share class take precedence. Ambiguous Swedish aliases
+ * require instrument verification rather than choosing an A/B class.
  */
-export function resolveYahooTicker(screenerTicker: string): string {
-  if (OMXS30_TICKER_MAP[screenerTicker]) return OMXS30_TICKER_MAP[screenerTicker];
-  if (screenerTicker.endsWith(".ST")) return screenerTicker;
-  if (SE_BASE_TICKERS.has(screenerTicker)) return `${screenerTicker}.ST`;
-  if (screenerTicker.includes("-")) return `${screenerTicker}.ST`;
-  return screenerTicker; // US or other market — use as-is
+const SWEDISH_CLASS_BASES = new Set([
+  "SCA", "SSAB", ...Object.values(OMXS30_TICKER_MAP)
+    .filter(symbol => /-[AB]\.ST$/.test(symbol)).map(symbol => symbol.replace(/-[AB]\.ST$/, "")),
+]);
+const AMBIGUOUS_ALIASES = new Set([
+  "SCA", ...Object.entries(OMXS30_TICKER_MAP)
+    .filter(([, symbol]) => /-[AB]\.ST$/.test(symbol)).map(([name]) => name.toUpperCase()),
+  ...SWEDISH_CLASS_BASES,
+]);
+
+export class InstrumentVerificationError extends Error {}
+
+/** Never infer a Swedish share class, or Sweden merely from a hyphen. */
+export function resolveYahooTicker(screenerTicker: string, market?: string | null): string {
+  const ticker = screenerTicker.trim();
+  const upper = ticker.toUpperCase();
+  const reject = (): never => {
+    throw new InstrumentVerificationError(`${ticker}: kräver instrumentverifiering — ange marknad och exakt aktieslag.`);
+  };
+  if (market === "US") return upper.endsWith(".ST") ? reject() : upper;
+  // These bare symbols also occur on other exchanges (e.g. ABB/ABB.ST).
+  if (!market && SE_BASE_TICKERS.has(upper)) return reject();
+  const explicitClass = upper.match(/^([A-Z0-9]+)[ -]([AB])(?:\.ST)?$/);
+  if (explicitClass && SWEDISH_CLASS_BASES.has(explicitClass[1])) {
+    return `${explicitClass[1]}-${explicitClass[2]}.ST`;
+  }
+  if (AMBIGUOUS_ALIASES.has(upper) || SWEDISH_CLASS_BASES.has(upper.replace(/\.ST$/, ""))) return reject();
+  if (upper.endsWith(".ST")) return upper;
+  if (OMXS30_TICKER_MAP[ticker]) return OMXS30_TICKER_MAP[ticker];
+  if (SE_BASE_TICKERS.has(upper)) return `${upper}.ST`;
+  if (upper === "NDA-SE" || upper === "ALIV-SDB") return `${upper}.ST`;
+  if (market === "SE") return reject();
+  return ticker; // e.g. BRK-B stays US; an unknown hyphen is not evidence of Sweden.
+}
+
+/** Market-qualified identity in the existing comma-separated ticker parameter.
+ * Preserve this request identity in the quote response, so SE:ABB and US:ABB
+ * cannot overwrite each other's prices or React Query cache entries.
+ */
+export function resolveQuoteTicker(requestTicker: string): string {
+  const qualified = requestTicker.match(/^(SE|US):(.+)$/);
+  if (qualified) return resolveYahooTicker(qualified[2], qualified[1]);
+  if (requestTicker.includes(":")) throw new InstrumentVerificationError("Kräver instrumentverifiering — marknad ska vara SE eller US.");
+  return resolveYahooTicker(requestTicker);
 }

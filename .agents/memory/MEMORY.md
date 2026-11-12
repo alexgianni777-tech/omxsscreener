@@ -1,0 +1,27 @@
+- [Screener Architecture](screener-architecture.md) — data flow, field semantics (volMultiplier≠R:R, market tagging), ATR-relative targets per bucket, RSI, backfill status
+- [EdgeAI Short Signals](edgeai-short-signals.md) — Burry and Big Short rules, direction mapping, and why valid output may still contain zero shorts
+- [Nav isActive Gotcha](nav-isactive-gotcha.md) — startsWith matching conflicts between /sessions and /sessions/today; fix pattern documented
+- [API Authentication Guard](api-auth-guard.md) — private trading APIs require server-side sessions; UI login gates are not access control.
+- [Earnings Calendar Dates](earnings-calendar-dates.md) — Yahoo earnings timestamps carry a time; compare calendar days, never rounded elapsed hours.
+- [Portfolio Instrument Imports](portfolio-instrument-imports.md) — leveraged products use pasted broker prices and refresh by ticker plus instrument.
+- [EdgeAI Mapping Duplication](edgeai-mapping-duplication.md) — RESOLVED: now one shared edgeAiMapping.ts; don't reintroduce a second copy in scheduler.ts/edgeai.ts.
+- [DB Push Safety Guard](db-push-safety-guard.md) — `db run push` now runs a pre-check that blocks column/table drops and type mismatches before drizzle-kit push touches the live DB.
+- [Drizzle migration journal](drizzle-migration-journal.md) — verify journal, applied history, and live schema separately; managed Publish changes schema without advancing Drizzle history.
+- [Import Conflict Preview](import-conflict-wouldremove.md) — 409 re-import conflict responses preview which still-pending candidates would be deleted, not just which outcomes are preserved.
+- [EdgeAI Pipeline Topology](edgeai-pipeline-topology.md) — three separate GitHub repos feed this app; each has its own cron that can silently miss independently of the others.
+- [GitHub Connector Git Data API Limits](github-connector-git-data-api-limits.md) — the Replit GitHub connector's proxyFetch unreliably 404s POST /git/trees above ~1.4KB body size; batch small and expect flakiness.
+- [Trading Outcome Integrity](trading-outcome-integrity.md) — actual fills, immutable R inputs, Rule 7 provenance, Challenge sync, and import/outcome locking rules.
+- [Source-balanced ranking](source-balanced-ranking.md) — rank within each signal source, then interleave; never compare overloaded EdgeAI and Telegram fields directly.
+- [Equity signal risk and owned products](equity-only-risk-model.md) — screen unleveraged shares; held product P&L follows product price, not underlying direction or leverage.
+- [Top 3 reimport policy](top3-cutoff-policy.md) — version refreshed recommendations; accept one previous close with real dates; preserve trades and original cohort; require both sources, no 16:30 wait.
+- [GitHub sync caution](github-sync-caution.md) — upstream fixes may be based on older trading code; port compatible changes instead of overwriting local selection policy.
+- [Live entry guard](live-entry-guard-policy.md) — separate live price checks from immutable screening; reuse quotes without faster polling or paid services; SSR tests may need explicit React.
+- [Manuellt köpflöde](manual-review-workflow.md) — GitHub/EdgeAI hittar kandidater; Avanza och ChatGPT kontrolleras före eget köpbeslut; inga automatiska positioner/order eller krav på journal.
+- [Ambiguous source plans](signal-isolation-policy.md) — isolate conflicting identities, not entire reports; no guessed plan or historical identity migration.
+- [Ground Zero benchmark](ground-zero-policy.md) — manual account values; separate opening reconciliation and cumulative cashflows from development; preserve trading history.
+- [PG transaction sequencing](pg-transaction-queries.md) — serialize queries on a shared transaction client; concurrent client.query is deprecated.
+- [Protected UI verification](protected-ui-verification.md) — wait for auth loading before judging blank captures; browser notebook resets can erase the signed-in context.
+- [Unused candidate retention](candidate-retention-policy.md) — user chose three days without an extra preview; preserve trading evidence and latest research; no production cleanup approval.
+- [Autoscale import recovery](autoscale-import-recovery.md) — await wake checks while CPU is allocated; durable receipts prevent restart duplicates; local workflow ≠ active schedule.
+- [Source quality policy](source-quality-policy.md) — quality is a safety overlay; never infer historical qualification from newer data or edit upstream without separate approval.
+- [Nix runtime compatibility](nix-runtime-compatibility.md) — installed native libraries may require a newer glibc loader than the default scripting runtime.

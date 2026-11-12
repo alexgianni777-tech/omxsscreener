@@ -1,0 +1,1054 @@
+{
+  "id": "8b61f0e4-a483-47b3-9108-1ab022cf21c9",
+  "prevId": "511659c8-94a8-483d-a26a-81321be6324f",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.screener_sessions": {
+      "name": "screener_sessions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "omxs_value": {
+          "name": "omxs_value",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "perf_5d": {
+          "name": "perf_5d",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "perf_1m": {
+          "name": "perf_1m",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "perf_3m": {
+          "name": "perf_3m",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "market_rsi": {
+          "name": "market_rsi",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trend_label": {
+          "name": "trend_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "raw_text": {
+          "name": "raw_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "edge_regime": {
+          "name": "edge_regime",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "edge_expectancy": {
+          "name": "edge_expectancy",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "edge_win_rate": {
+          "name": "edge_win_rate",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "edge_pf": {
+          "name": "edge_pf",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "edge_n": {
+          "name": "edge_n",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_import_diff": {
+          "name": "last_import_diff",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_import_at": {
+          "name": "last_import_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "top3_snapshot_at": {
+          "name": "top3_snapshot_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "top3_policy_version": {
+          "name": "top3_policy_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "top3_cutoff_at": {
+          "name": "top3_cutoff_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "top3_cutoff_evaluated_at": {
+          "name": "top3_cutoff_evaluated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "top3_participating_sources": {
+          "name": "top3_participating_sources",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "screener_sessions_date_unique": {
+          "name": "screener_sessions_date_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "date"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.candidates": {
+      "name": "candidates",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "signal_date": {
+          "name": "signal_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rank": {
+          "name": "rank",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ticker": {
+          "name": "ticker",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "price": {
+          "name": "price",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rs3m": {
+          "name": "rs3m",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "perf_1m": {
+          "name": "perf_1m",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rsi": {
+          "name": "rsi",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pct_b": {
+          "name": "pct_b",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "atr": {
+          "name": "atr",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vol_multiplier": {
+          "name": "vol_multiplier",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "volume_as_of": {
+          "name": "volume_as_of",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "signal_rsi": {
+          "name": "signal_rsi",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "signal_gap_pct": {
+          "name": "signal_gap_pct",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "edge_win_rate": {
+          "name": "edge_win_rate",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "edge_expectancy_r": {
+          "name": "edge_expectancy_r",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "edge_sample_n": {
+          "name": "edge_sample_n",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "signal_age_bars": {
+          "name": "signal_age_bars",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_hold_days": {
+          "name": "max_hold_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dist_from_20d_h": {
+          "name": "dist_from_20d_h",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "gap_warning": {
+          "name": "gap_warning",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "earnings_in_days": {
+          "name": "earnings_in_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "earnings_knowledge": {
+          "name": "earnings_knowledge",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "earnings_observed_at": {
+          "name": "earnings_observed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "market": {
+          "name": "market",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'SE'"
+        },
+        "signal_source": {
+          "name": "signal_source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "direction": {
+          "name": "direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entry_price": {
+          "name": "entry_price",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stop_price": {
+          "name": "stop_price",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_price": {
+          "name": "target_price",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rr": {
+          "name": "rr",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "one_r": {
+          "name": "one_r",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PENDING'"
+        },
+        "exit_price": {
+          "name": "exit_price",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "outcome_notes": {
+          "name": "outcome_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolution_method": {
+          "name": "resolution_method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolution_quality": {
+          "name": "resolution_quality",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "realized_r": {
+          "name": "realized_r",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolution_entry_price": {
+          "name": "resolution_entry_price",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolution_stop_price": {
+          "name": "resolution_stop_price",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolution_direction": {
+          "name": "resolution_direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_top3_pick": {
+          "name": "is_top3_pick",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "candidates_session_id_screener_sessions_id_fk": {
+          "name": "candidates_session_id_screener_sessions_id_fk",
+          "tableFrom": "candidates",
+          "tableTo": "screener_sessions",
+          "columnsFrom": [
+            "session_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.survival_config": {
+      "name": "survival_config",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "start_capital": {
+          "name": "start_capital",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 5000
+        },
+        "goal_capital": {
+          "name": "goal_capital",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1000000
+        },
+        "current_capital": {
+          "name": "current_capital",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "risk_pct": {
+          "name": "risk_pct",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 2
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.survival_trades": {
+      "name": "survival_trades",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ticker": {
+          "name": "ticker",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "strategy": {
+          "name": "strategy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "direction": {
+          "name": "direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "leverage_x": {
+          "name": "leverage_x",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pnl_kr": {
+          "name": "pnl_kr",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "risk_allocation_kr": {
+          "name": "risk_allocation_kr",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "flag": {
+          "name": "flag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "followed_plan": {
+          "name": "followed_plan",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bought_before_report": {
+          "name": "bought_before_report",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "source_candidate_id": {
+          "name": "source_candidate_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "survival_trades_source_candidate_unique": {
+          "name": "survival_trades_source_candidate_unique",
+          "columns": [
+            {
+              "expression": "source_candidate_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "survival_trades_source_candidate_id_candidates_id_fk": {
+          "name": "survival_trades_source_candidate_id_candidates_id_fk",
+          "tableFrom": "survival_trades",
+          "tableTo": "candidates",
+          "columnsFrom": [
+            "source_candidate_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.sessions": {
+      "name": "sessions",
+      "schema": "",
+      "columns": {
+        "sid": {
+          "name": "sid",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "sess": {
+          "name": "sess",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expire": {
+          "name": "expire",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "IDX_session_expire": {
+          "name": "IDX_session_expire",
+          "columns": [
+            {
+              "expression": "expire",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.users": {
+      "name": "users",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_name": {
+          "name": "first_name",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_name": {
+          "name": "last_name",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "profile_image_url": {
+          "name": "profile_image_url",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "users_email_unique": {
+          "name": "users_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.open_positions": {
+      "name": "open_positions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ticker": {
+          "name": "ticker",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "instrument": {
+          "name": "instrument",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "direction": {
+          "name": "direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "product_type": {
+          "name": "product_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "product_side": {
+          "name": "product_side",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "underlying_direction": {
+          "name": "underlying_direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "underlying_ticker": {
+          "name": "underlying_ticker",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "indicative_leverage": {
+          "name": "indicative_leverage",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "financing_level": {
+          "name": "financing_level",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "barrier_level": {
+          "name": "barrier_level",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "barrier_type": {
+          "name": "barrier_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "entry_price": {
+          "name": "entry_price",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_price": {
+          "name": "last_price",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "shares": {
+          "name": "shares",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stop_price": {
+          "name": "stop_price",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "target_price": {
+          "name": "target_price",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "market": {
+          "name": "market",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.top3_selection_snapshots": {
+      "name": "top3_selection_snapshots",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "candidate_id": {
+          "name": "candidate_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ticker": {
+          "name": "ticker",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "selected": {
+          "name": "selected",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rank": {
+          "name": "rank",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "score": {
+          "name": "score",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "review": {
+          "name": "review",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "decision": {
+          "name": "decision",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "earnings_warning": {
+          "name": "earnings_warning",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "policy_version": {
+          "name": "policy_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "selected_at": {
+          "name": "selected_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "market": {
+          "name": "market",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "direction": {
+          "name": "direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "top3_selection_snapshots_session_candidate_uq": {
+          "name": "top3_selection_snapshots_session_candidate_uq",
+          "columns": [
+            {
+              "expression": "session_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "candidate_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "top3_selection_snapshots_session_id_screener_sessions_id_fk": {
+          "name": "top3_selection_snapshots_session_id_screener_sessions_id_fk",
+          "tableFrom": "top3_selection_snapshots",
+          "tableTo": "screener_sessions",
+          "columnsFrom": [
+            "session_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

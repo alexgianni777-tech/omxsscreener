@@ -47,3 +47,7 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+/artifacts/screener/public/generated-artifacts/
+/generated-artifacts/
+/screenshots/
+/exports/omxs30-screener-full-code*.txt

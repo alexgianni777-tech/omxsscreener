@@ -3,6 +3,7 @@ import { useState } from "react";
 import { TrendingUp, TrendingDown, CalendarDays, AlertTriangle, RefreshCw, Info, CandlestickChart as CandlestickIcon, ArrowUpDown } from "lucide-react";
 import { formatNumber, formatPercent } from "../lib/utils";
 import { CandlestickChart } from "../components/CandlestickChart";
+import { EarningsReaction, type EarningsReactionData } from "../components/EarningsReaction";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -13,6 +14,8 @@ interface HistoricalEarning {
   actual: number | null;
   surprisePct: number | null;
   dayPlusOneReturn: number | null;
+  reportTimestamp?: string | null;
+  reactionReason?: string | null;
   beat: boolean | null;
 }
 interface EarningsStock {
@@ -21,9 +24,15 @@ interface EarningsStock {
   display: string;
   market: "SE" | "US";
   earningsDate: string | null;
+  reportDate: string | null;
+  earningsTimestamp: string | null;
   earningsInDays: number | null;
   livePrice: number | null;
   changePct: number | null;
+  marketDataAsOf: string | null;
+  priceDataAsOf: string | null;
+  priceHistoryStatus: "CURRENT" | "STALE" | "UNKNOWN";
+  reportReaction: EarningsReactionData;
   nextEpsEstimate: number | null;
   beatRate: number | null;
   avgSurprisePct: number | null;
@@ -169,8 +178,8 @@ export function Earnings() {
           <p className="text-xs text-muted-foreground">
             {sorted.length} bolag hittade · uppdaterad {new Date(data.generatedAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
           </p>
-          {sorted.map((stock) => (
-            <EarningsCard key={stock.yahooTicker} stock={stock} />
+            {sorted.map((stock) => (
+              <EarningsCard key={stock.yahooTicker} stock={stock} pageFetchedAt={data.generatedAt} />
           ))}
         </div>
       )}
@@ -179,7 +188,7 @@ export function Earnings() {
 }
 
 // ── Card ──────────────────────────────────────────────────────────────────────
-function EarningsCard({ stock }: { stock: EarningsStock }) {
+function EarningsCard({ stock, pageFetchedAt }: { stock: EarningsStock; pageFetchedAt: string }) {
   const [showChart, setShowChart] = useState(false);
   const isToday = stock.earningsInDays === 0;
   const isTomorrow = stock.earningsInDays === 1;
@@ -255,8 +264,8 @@ function EarningsCard({ stock }: { stock: EarningsStock }) {
           }`}>
             {dayLabel}
           </div>
-          {stock.earningsDate && (
-            <div className="text-xs text-muted-foreground mt-1">{stock.earningsDate}</div>
+           {(stock.reportDate || stock.earningsDate) && (
+            <div className="text-xs text-muted-foreground mt-1">{stock.reportDate ?? stock.earningsDate}</div>
           )}
           {stock.compositeScore != null && (
             <div className="text-xs text-muted-foreground mt-1">
@@ -339,6 +348,14 @@ function EarningsCard({ stock }: { stock: EarningsStock }) {
         />
       </div>
 
+      <EarningsReaction
+        ticker={stock.ticker}
+        yahooTicker={stock.yahooTicker}
+        market={stock.market}
+        reaction={stock.reportReaction}
+        pageFetchedAt={pageFetchedAt}
+      />
+
       {/* Historical earnings mini-table */}
       {stock.historicalEarnings.length > 0 && (
         <div className="border-t border-border pt-3">
@@ -362,9 +379,11 @@ function EarningsCard({ stock }: { stock: EarningsStock }) {
                 </div>
                 {h.dayPlusOneReturn != null && (
                   <div className={`text-[10px] font-mono mt-0.5 ${h.dayPlusOneReturn >= 0 ? "text-success" : "text-destructive"}`}>
-                    dag+1: {h.dayPlusOneReturn >= 0 ? "+" : ""}{formatNumber(h.dayPlusOneReturn, 1)}%
+                    Första reaktionsdag: {h.dayPlusOneReturn >= 0 ? "+" : ""}{formatNumber(h.dayPlusOneReturn, 1)}%
                   </div>
                 )}
+                {h.dayPlusOneReturn == null && <p className="mt-1 text-xs text-muted-foreground"
+                  title={h.reactionReason ?? undefined}>Kursreaktion saknas – publiceringstid/data ej verifierad.</p>}
               </div>
             ))}
           </div>

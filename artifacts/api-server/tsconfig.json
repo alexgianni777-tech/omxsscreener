@@ -5,10 +5,14 @@
     "tsBuildInfoFile": ".tsbuildinfo",
     "outDir": "dist",
     "rootDir": "src",
+    "allowImportingTsExtensions": true,
     "types": ["node"]
   },
   "include": ["src"],
   "references": [
+    {
+      "path": "../../lib/market-calendar"
+    },
     {
       "path": "../../lib/db"
     },

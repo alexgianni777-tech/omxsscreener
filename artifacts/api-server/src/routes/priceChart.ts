@@ -66,7 +66,12 @@ function computeRSI(closes: number[], period = 14): (number | null)[] {
 
 router.get("/screener/price-chart/:ticker", async (req, res): Promise<void> => {
   const raw = req.params.ticker;
-  const yahoo = resolveYahooTicker(raw);
+  let yahoo: string;
+  try { yahoo = resolveYahooTicker(raw); }
+  catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Kräver instrumentverifiering." });
+    return;
+  }
 
   // Display window: default 90, capped at 365
   const reqDays = parseInt(String(req.query.days ?? "90"), 10);

@@ -1,0 +1,66 @@
+name: OMXS30 Screener Import
+
+# Triggas manuellt från GitHub Actions-gränssnittet.
+# Klistra in screener-texten (hela Telegram-meddelandet) i inmatningsfältet.
+#
+# Kräver två GitHub Secrets:
+#   DASHBOARD_URL           — t.ex. https://asset-screen-fetch.replit.app
+#   DASHBOARD_IMPORT_SECRET — samma värde som TELEGRAM_IMPORT_SECRET i Replit
+on:
+  workflow_dispatch:
+    inputs:
+      screener_text:
+        description: "Klistra in hela screener-texten från Telegram här"
+        required: true
+        type: string
+
+jobs:
+  import:
+    name: Importera screener-session
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Skicka till dashboard-API
+        id: import
+        env:
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
+          DASHBOARD_IMPORT_SECRET: ${{ secrets.DASHBOARD_IMPORT_SECRET }}
+          SCREENER_TEXT: ${{ inputs.screener_text }}
+        run: |
+          set -euo pipefail
+          test -n "$DASHBOARD_URL" && test -n "$DASHBOARD_IMPORT_SECRET" || {
+            echo "DASHBOARD_URL/DASHBOARD_IMPORT_SECRET måste konfigureras."
+            exit 1
+          }
+          [[ "$DASHBOARD_URL" == https://* ]] || {
+            echo "DASHBOARD_URL måste använda HTTPS."
+            exit 1
+          }
+          RESPONSE=$(curl -sS --connect-timeout 5 --max-time 30 -w "\n%{http_code}" \
+            -X POST "${DASHBOARD_URL%/}/api/telegram-import" \
+            -H "Authorization: Bearer $DASHBOARD_IMPORT_SECRET" \
+            -H "Content-Type: application/json" \
+            --data-binary "$(jq -n --arg text "$SCREENER_TEXT" '{text:$text}')")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+
+          echo "HTTP status: $HTTP_CODE"
+          echo "Response: $BODY"
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Session uppdaterad (befintligt datum)"
+          elif [ "$HTTP_CODE" = "201" ]; then
+            echo "✅ Ny session skapad"
+          else
+            echo "❌ Import misslyckades (HTTP $HTTP_CODE)"
+            exit 1
+          fi
+
+      - name: Sammanfattning
+        if: success()
+        run: |
+          echo "### ✅ Screener importerad" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Importkvittens togs emot av dashboard-API." >> $GITHUB_STEP_SUMMARY

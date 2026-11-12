@@ -1,8 +1,12 @@
 import { useState } from "react";
-import { useListCandidates, useGetQuotes, getGetQuotesQueryKey } from "@workspace/api-client-react";
+import { quoteRequestTicker } from "../lib/researchQuote";
+import { useQueryClient } from "@tanstack/react-query";
+import { usePruneUnusedCandidates, getListCandidatesQueryKey, getListSessionsQueryKey, getGetLastValidTop3QueryKey, useListCandidates, useGetQuotes, getGetQuotesQueryKey, type QuoteResult } from "@workspace/api-client-react";
 import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
 import { Link } from "wouter";
 import { Filter, ChevronRight } from "lucide-react";
+import { LiveEntryGuard } from "../components/LiveEntryGuard";
+import { QuotePresentation } from "../components/QuotePresentation";
 
 export function Candidates() {
   const [category, setCategory] = useState<string>("");
@@ -17,13 +21,16 @@ export function Candidates() {
   const { data: candidates, isLoading, isError } = useListCandidates(params);
 
   // Deduplicated tickers for live price lookup
-  const tickers = [...new Set(candidates?.map((c) => c.ticker) ?? [])];
-  const { data: quotes } = useGetQuotes(
-    { tickers: tickers.join(",") },
-    { query: { queryKey: getGetQuotesQueryKey({ tickers: tickers.join(",") }), enabled: tickers.length > 0, refetchInterval: 60_000 } }
+  const tickers = [...new Set(candidates?.map((c) => quoteRequestTicker(c.ticker, c.market)) ?? [])];
+  const quoteParams = { tickers: tickers.join(",") };
+  const { data: quotes, isError: quoteError } = useGetQuotes(
+    quoteParams,
+    { query: { queryKey: getGetQuotesQueryKey(quoteParams), enabled: tickers.length > 0, refetchInterval: 60_000 } }
   );
   const quoteMap: Record<string, number | null> = {};
   quotes?.forEach((q) => { quoteMap[q.ticker] = q.livePrice ?? null; });
+  const entryQuotes: Record<string, QuoteResult> = {};
+  quotes?.forEach((q) => { entryQuotes[q.ticker] = quoteError ? { ...q, error: "Kurshämtningen misslyckades." } : q; });
   const changePctMap: Record<string, number | null> = {};
   quotes?.forEach((q) => { changePctMap[q.ticker] = q.changePct ?? null; });
 
@@ -32,6 +39,7 @@ export function Candidates() {
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Candidate Database</h2>
+          {import.meta.env.DEV && <PruneUnusedButton />}
           <p className="text-muted-foreground mt-1">Filter and review all historical trade candidates.</p>
         </div>
       </header>
@@ -39,7 +47,7 @@ export function Candidates() {
       {/* Filters */}
       <div className="bg-card border border-border rounded-lg p-4 flex flex-wrap gap-4 items-center shadow-sm">
         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground mr-2">
-          <Filter className="w-4 h-4" /> Filters:
+          <Filter className="w-4 h-4" /> Filter:
         </div>
         
         <select 
@@ -83,16 +91,16 @@ export function Candidates() {
           <table className="w-full text-sm text-left">
             <thead className="bg-muted text-muted-foreground text-xs uppercase font-semibold">
               <tr>
-                <th className="px-4 py-3">Date / Session</th>
+                <th className="px-4 py-3">Datum / session</th>
                 <th className="px-4 py-3">Ticker</th>
-                <th className="px-4 py-3">Dir</th>
-                <th className="px-4 py-3">Category</th>
-                <th className="px-4 py-3 text-right">Screen Px</th>
-                <th className="px-4 py-3 text-right">Live Px</th>
+                <th className="px-4 py-3">Riktning</th>
+                <th className="px-4 py-3">Kategori</th>
+                <th className="px-4 py-3 text-right">Screenerpris · original</th>
+                <th className="px-4 py-3 text-right">Marknadskurs · ej garanterat live</th>
                 <th className="px-4 py-3 text-right">Entry</th>
-                <th className="px-4 py-3 text-right">Target</th>
+                <th className="px-4 py-3 text-right">Mål</th>
                 <th className="px-4 py-3 text-right">Stop</th>
-                <th className="px-4 py-3 text-center">Outcome</th>
+                <th className="px-4 py-3 text-center">Historiskt utfall</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -105,8 +113,9 @@ export function Candidates() {
                 <tr><td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">No candidates match these filters.</td></tr>
               ) : (
                 candidates.map(c => {
-                  const live = quoteMap[c.ticker];
-                  const chg = changePctMap[c.ticker];
+                  const quoteKey = quoteRequestTicker(c.ticker, c.market);
+                  const live = quoteMap[quoteKey];
+                  const chg = changePctMap[quoteKey];
                   return (
                     <tr key={c.id} className="hover:bg-muted/50 transition-colors group">
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -114,7 +123,10 @@ export function Candidates() {
                           {formatDate(c.sessionDate)}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 font-bold">{c.ticker}</td>
+                      <td className="px-4 py-3 min-w-[320px]">
+                        <strong>{c.ticker}</strong>
+                        <LiveEntryGuard plan={c} quote={entryQuotes[quoteKey]} signal={c} />
+                      </td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 rounded text-xs font-bold ${c.direction === 'LONG' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
                           {c.direction}
@@ -126,13 +138,21 @@ export function Candidates() {
                       <td className="px-4 py-3 text-right font-mono text-muted-foreground">{formatNumber(c.price)}</td>
                       <td className="px-4 py-3 text-right">
                         {live != null ? (
-                          <div className="flex flex-col items-end">
+                          <div className="flex flex-col items-end gap-1">
                             <span className="font-mono font-semibold">{formatNumber(live)}</span>
                             {chg != null && (
                               <span className={`text-[10px] font-mono ${chg >= 0 ? "text-success" : "text-destructive"}`}>
                                 {chg >= 0 ? "+" : ""}{chg.toFixed(2)}%
                               </span>
                             )}
+                            <details className="max-w-[240px] text-left">
+                              <summary className="cursor-pointer text-xs text-muted-foreground">
+                                {entryQuotes[quoteKey]?.asOf && Number.isFinite(Date.parse(entryQuotes[quoteKey].asOf!))
+                                  ? "Kurstid och källa" : "Tidpunkt ej verifierad"}
+                              </summary>
+                              <QuotePresentation showPrice={false} quote={entryQuotes[quoteKey]}
+                                source={entryQuotes[quoteKey]?.yahooTicker ? "Yahoo Finance" : null} />
+                            </details>
                           </div>
                         ) : (
                           <span className="text-muted-foreground">—</span>
@@ -166,4 +186,22 @@ export function Candidates() {
       </div>
     </div>
   );
+}
+
+/** DEV-only manual cleanup; backend rejects non-development with 403. */
+function PruneUnusedButton() {
+  const qc = useQueryClient();
+  const prune = usePruneUnusedCandidates({ mutation: { onSuccess: () => {
+    void qc.invalidateQueries({ queryKey: getListCandidatesQueryKey().slice(0, 1) });
+    void qc.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+    void qc.invalidateQueries({ predicate: q => String(q.queryKey[0]).startsWith("/api/screener/sessions/") });
+    void qc.invalidateQueries({ queryKey: getGetLastValidTop3QueryKey() });
+  } } });
+  return <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+    <button type="button" data-testid="button-prune-unused" disabled={prune.isPending} onClick={() => prune.mutate()}
+      className="rounded-md border border-border px-2 py-1 text-muted-foreground hover:text-foreground disabled:opacity-50">
+      {prune.isPending ? "Rensar…" : "Rensa oanvända kandidater (DEV, >3 dagar)"}</button>
+    {prune.isSuccess && <span data-testid="text-prune-result">{prune.data.deletedCount} borttagna · retention {prune.data.retentionDays} dagar</span>}
+    {prune.isError && <span role="alert" className="text-destructive">Rensning misslyckades.</span>}
+  </div>;
 }

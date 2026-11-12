@@ -1,4 +1,5 @@
-import { pgTable, serial, integer, text, real, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, real, boolean, timestamp, date, jsonb } from "drizzle-orm/pg-core";
+import type { CandidateDataQuality } from "./candidateDataQuality";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { screenerSessionsTable } from "./screenerSessions";
@@ -8,6 +9,11 @@ export const candidatesTable = pgTable("candidates", {
   sessionId: integer("session_id")
     .notNull()
     .references(() => screenerSessionsTable.id, { onDelete: "cascade" }),
+  // Immutable calendar day on which this source emitted the signal. Unlike
+  // session.date, this is provenance, not a display/trading-session choice.
+  signalDate: date("signal_date", { mode: "string" }),
+  // NULL is deliberately UNKNOWN for old rows; never backfill historical evidence.
+  dataQuality: jsonb("data_quality").$type<CandidateDataQuality>(),
   category: text("category", { enum: ["MOMENTUM", "SQUEEZE", "STUDS", "WEAKEST"] }).notNull(),
   rank: integer("rank").notNull(),
   ticker: text("ticker").notNull(),
@@ -18,20 +24,62 @@ export const candidatesTable = pgTable("candidates", {
   pctB: real("pct_b").notNull(),
   atr: real("atr").notNull(),
   volMultiplier: real("vol_multiplier").notNull(),
+  // The completed Yahoo trading day underlying this relative-volume measurement.
+  // Legacy and unverified values remain undated.
+  volumeAsOf: date("volume_as_of", { mode: "string" }),
+  // Separate signal inputs from legacy display fields: EdgeAI uses `rsi` for E[R].
+  signalRsi: real("signal_rsi"),
+  signalGapPct: real("signal_gap_pct"),
+  edgeWinRate: real("edge_win_rate"),
+  edgeExpectancyR: real("edge_expectancy_r"),
+  edgeSampleN: integer("edge_sample_n"),
+  signalAgeBars: integer("signal_age_bars"),
+  maxHoldDays: integer("max_hold_days"),
   distFrom20dH: real("dist_from_20d_h").notNull(),
   gapWarning: real("gap_warning"),
+  // Rule 7 is a point-in-time signal attribute. A value is usable only when
+  // Yahoo was observed on the signal day; legacy/null provenance is UNKNOWN.
+  earningsInDays: integer("earnings_in_days"),
+  earningsKnowledge: text("earnings_knowledge", {
+    enum: ["SIGNAL_TIME", "UNKNOWN"],
+  }),
+  earningsObservedAt: timestamp("earnings_observed_at", { withTimezone: true }),
+  // Nullable: legacy rows imported before market tagging existed can still be NULL
+  // in production (this screener's history predates EdgeAI's US support, so any
+  // untagged legacy row is Swedish by construction, but we can't force-backfill
+  // production data from here). API responses coalesce null -> "SE" at the
+  // mapCandidate boundary instead of enforcing NOT NULL at the DB level — see
+  // lib/db/SCHEMA-SAFETY.md history and #52.
+  market: text("market", { enum: ["SE", "US"] }).default("SE"),
+  signalSource: text("signal_source", { enum: ["edgeai", "telegram", "manual", "screener"] }),
+  // GitHub compatibility: nullable so historical candidates retain their data.
+  // signalSource remains the source of truth for selection and synchronization.
+  origin: text("origin", { enum: ["edgeai", "legacy", "manual"] }),
   direction: text("direction", { enum: ["LONG", "SHORT"] }).notNull(),
   entryPrice: real("entry_price").notNull(),
   stopPrice: real("stop_price").notNull(),
   targetPrice: real("target_price").notNull(),
   rr: real("rr").notNull(),
   oneR: real("one_r").notNull(),
-  outcome: text("outcome", { enum: ["WIN", "LOSS", "SKIP", "PENDING"] }).notNull().default("PENDING"),
+  outcome: text("outcome", { enum: ["WIN", "LOSS", "TIME_EXIT", "SKIP", "PENDING"] }).notNull().default("PENDING"),
   exitPrice: real("exit_price"),
   outcomeNotes: text("outcome_notes"),
-  // Candidate source. Nullable so existing rows remain valid after additive migration.
-  // New imports explicitly use: "edgeai" | "legacy" | "manual".
-  origin: text("origin"),
+  // A resolved trade must say whether its price was recorded from an actual
+  // exit or is an explicitly-labelled planned-level assumption. Null preserves
+  // pre-existing outcome history whose resolution provenance was not captured.
+  resolutionMethod: text("resolution_method", {
+    enum: ["MANUAL_EXIT", "TARGET_HIT", "STOP_HIT", "TIME_EXIT"],
+  }),
+  resolutionQuality: text("resolution_quality", {
+    enum: ["RECORDED_EXIT", "ASSUMED_LEVEL", "LEGACY_UNKNOWN"],
+  }),
+  realizedR: real("realized_r"),
+  // Written once when an outcome is resolved. Later signal re-imports may
+  // update the live plan, but must never change the denominator of a logged R.
+  resolutionEntryPrice: real("resolution_entry_price"),
+  resolutionStopPrice: real("resolution_stop_price"),
+  resolutionDirection: text("resolution_direction", { enum: ["LONG", "SHORT"] }),
+  isTop3Pick: boolean("is_top3_pick").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

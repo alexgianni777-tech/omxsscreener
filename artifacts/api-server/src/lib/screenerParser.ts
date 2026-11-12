@@ -1,3 +1,5 @@
+import { textReportQuality } from "./candidateDataQuality";
+import type { CandidateDataQuality } from "@workspace/db";
 /**
  * Parses the raw screener text output into structured data.
  */
@@ -12,6 +14,7 @@ export interface ParsedMarketWeather {
 }
 
 export interface ParsedCandidate {
+  dataQuality?: CandidateDataQuality;
   category: "MOMENTUM" | "SQUEEZE" | "STUDS" | "WEAKEST";
   rank: number;
   ticker: string;
@@ -33,6 +36,8 @@ export interface ParsedCandidate {
 }
 
 export interface ParsedSession {
+  dataAsOf?: string | null;
+  dataWarnings?: string[];
   date: string; // YYYY-MM-DD
   marketWeather: ParsedMarketWeather;
   candidates: ParsedCandidate[];
@@ -43,6 +48,31 @@ export class ScreenerParseError extends Error {
     super(message);
     this.name = "ScreenerParseError";
   }
+}
+
+/**
+ * Telegram and chat clients sometimes replace ASCII separators with box-drawing
+ * characters and collapse adjacent lines when copying a code block. Normalize
+ * those presentation differences before parsing, while keeping the original
+ * raw text untouched in the stored session.
+ */
+function normalizeScreenerText(rawText: string): string {
+  return rawText
+    // Decode transport newline escapes only, never arbitrary JSON/string escapes.
+    .replace(/\\r\\n|\\n|\\r/g, "\n")
+    .replace(/\r\n?/g, "\n")
+    .replace(/\\\n/g, "\n")
+    // Fences are separators, including when pasted inline around a plan.
+    .replace(/`{3,}(?:[ \t]*(?:text|txt|plaintext|markdown|md)\b)?|~{3,}/gi, "\n")
+    .replace(/═{2,}/g, "===")
+    .replace(/(?<!\n)(?=={3,}\s*\d+\s*[·•])/g, "\n")
+    // A date ending "2026-11-10.\nDetta..." is not a numbered stock row.
+    .replace(/(?<![\n\d-])(?=(?:={3,}[ \t]*)?\d+\.[ \t]+[A-ZÅÄÖ])/g, "\n")
+    .replace(/(?<!\n)\s*(?=plan\((?:LONG|SHORT)\):)/g, "\n")
+    .split("\n")
+    .map(line => line.trim())
+    .filter(Boolean)
+    .join("\n");
 }
 
 /**
@@ -103,7 +133,7 @@ function parseCandidate(
   // Parse candidate data line
   // Pattern: "N. TICKER   PRICE | RS3m   X | 1m    X% | RSI   X | %B  X | ATR    X% | vol  Xx | ↔20dH   X%  [⚠ gap X%]"
   const dataMatch = candidateLine.match(
-    /\d+\.\s+(.+?)\s+([\d.]+)\s*\|\s*RS3m\s+([-\d.]+)\s*\|\s*1m\s+([-\d.]+)%\s*\|\s*RSI\s+([\d.]+)\s*\|\s*%B\s+([-\d.]+)\s*\|\s*ATR\s+([\d.]+)%\s*\|\s*vol\s+([\d.]+)x\s*\|\s*↔20dH\s+([-\d.]+)%/
+    /\d+\.\s+(.+?)\s+([\d.]+)\s*\|\s*RS3m\s+([-\d.]+)\s*\|\s*1m\s+([-\d.]+)%\s*\|\s*RSI\s+([\d.]+)\s*\|\s*%B\s+([-\d.]+)\s*\|\s*ATR\s+([\d.]+)%\s*\|\s*vol\s+([\d.]+)x\s*\|\s*\S*20dH\s+([-\d.]+)%/
   );
 
   if (!dataMatch) {
@@ -124,10 +154,11 @@ function parseCandidate(
   const gapMatch = candidateLine.match(/⚠\s*gap\s*([-+][\d.]+)%/);
   const gapWarning = gapMatch ? parseFloat(gapMatch[1]) : null;
 
-  // Parse plan line
-  // Pattern: "plan(LONG|SHORT): entry ~X · stop X ... · mål +1% X (R/R X) · 1R X"
+  // Parse plan line.
+  // Old format: "plan(LONG): entry ~X · stop X (1.2×ATR) · mål +1% X (R/R X) · 1R X"
+  // New format: "plan(LONG): entry ~X · stop X (1.2×ATR) · mål X (2×ATR, R/R X) · max N dagar"
   const planMatch = planLine.match(
-    /plan\((LONG|SHORT)\):\s*entry\s*~?([\d.]+)\s*·\s*stop\s+([\d.]+).*·\s*mål.*?([\d.]+)\s*\(R\/R\s+([\d.]+)\)\s*·\s*1R\s+([\d.]+)/
+    /plan\((LONG|SHORT)\):\s*entry\s*~?([\d.]+)\s*·\s*stop\s+([\d.]+)[^·]*·\s*mål\s*~?(?:[+\-\d.]+%\s*)?([\d.]+).*?R\/R\s+([\d.]+)/
   );
 
   if (!planMatch) {
@@ -138,8 +169,9 @@ function parseCandidate(
   const entryPrice = parseFloat(planMatch[2]);
   const stopPrice = parseFloat(planMatch[3]);
   const targetPrice = parseFloat(planMatch[4]);
-  const rr = parseFloat(planMatch[5]);
-  const oneR = parseFloat(planMatch[6]);
+  const oneR = Math.abs(entryPrice - stopPrice);
+  const reward = direction === "SHORT" ? entryPrice - targetPrice : targetPrice - entryPrice;
+  const rr = oneR > 0 && reward > 0 ? reward / oneR : 0;
 
   return {
     category,
@@ -167,8 +199,9 @@ function parseCandidate(
  * Main parser function. Parses the full raw screener text.
  */
 export function parseScreenerText(rawText: string): ParsedSession {
-  const date = parseDate(rawText);
-  const marketWeather = parseMarketWeather(rawText);
+  const normalizedText = normalizeScreenerText(rawText);
+  const date = parseDate(normalizedText);
+  const marketWeather = parseMarketWeather(normalizedText);
 
   const candidates: ParsedCandidate[] = [];
 
@@ -180,7 +213,7 @@ export function parseScreenerText(rawText: string): ParsedSession {
     "SVAGAST": "WEAKEST",
   };
 
-  const lines = rawText.split("\n");
+  const lines = normalizedText.split("\n");
   let currentCategory: Category | null = null;
 
   for (let i = 0; i < lines.length; i++) {
@@ -197,21 +230,41 @@ export function parseScreenerText(rawText: string): ParsedSession {
 
     if (!currentCategory) continue;
 
-    // Detect candidate lines: start with "N. TICKER ..."
-    const candidateLineMatch = line.match(/^\s*(\d+)\.\s+\S/);
+    // Only treat ranked, ticker-shaped entries as candidates. This avoids
+    // interpreting numbered prose or headings as candidates, while catching
+    // malformed data lines when they still look like a ticker row.
+    const candidateLineMatch = line.match(/^\s*(\d+)\.\s+([A-ZÅÄÖ][A-Za-zÅÄÖåäö0-9.-]*)(?=\s|$)(.*)$/);
     if (candidateLineMatch) {
       const rank = parseInt(candidateLineMatch[1], 10);
+      const ticker = candidateLineMatch[2];
       // Next line should be the plan line
-      const planLine = lines[i + 1] ?? "";
-      if (!planLine.includes("plan(")) continue; // skip if no plan (e.g. "Inga kvalificerade idag")
+      let planLine = lines[i + 1] ?? "";
+      const looksLikeCandidate = planLine.includes("plan(")
+        || candidateLineMatch[3].includes("|")
+        || /^\s+\d+(?:\.\d+)?(?:\s|$)/.test(candidateLineMatch[3]);
+      if (!looksLikeCandidate) continue; // e.g. a numbered heading or prose
+      if (!planLine.includes("plan(")) {
+        throw new ScreenerParseError(
+          `Line ${i + 1} (${ticker}): candidate is missing its plan line`,
+        );
+      }
+
+      // A copied plan may wrap at a field separator. Only consume recognized
+      // continuations; never search past another candidate/header for its plan.
+      let planEnd = i + 1;
+      while (planEnd + 1 < lines.length &&
+        /^(?:[·(]|entry\b|stop\b|mål\b|R\/R\b|max\b|1R\b|\d+(?:\.\d+)?(?:\s*[·(]|\s*$))/.test(lines[planEnd + 1])) {
+        planLine += ` ${lines[++planEnd]}`;
+      }
 
       try {
         const candidate = parseCandidate(line, planLine, currentCategory, rank);
         candidates.push(candidate);
-      } catch {
-        // skip malformed candidate rather than failing the whole import
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "invalid candidate";
+        throw new ScreenerParseError(`Line ${i + 1} (${ticker}): ${detail}`);
       }
-      i++; // skip plan line
+      i = planEnd; // skip only this candidate's plan and its continuations
     }
   }
 
@@ -219,5 +272,12 @@ export function parseScreenerText(rawText: string): ParsedSession {
     throw new ScreenerParseError("No candidates found in screener text. Please check the format.");
   }
 
-  return { date, marketWeather, candidates };
+  let quality: ReturnType<typeof textReportQuality>;
+  try {
+    quality = textReportQuality(normalizedText, date, candidates.map(c => c.ticker));
+  } catch (error) {
+    throw new ScreenerParseError(error instanceof Error ? error.message : "Rapportens datakvalitet kan inte verifieras.");
+  }
+  for (const candidate of candidates) candidate.dataQuality = quality.byTicker.get(candidate.ticker);
+  return { date, marketWeather, candidates, dataAsOf: quality.dataAsOf, dataWarnings: quality.warnings };
 }

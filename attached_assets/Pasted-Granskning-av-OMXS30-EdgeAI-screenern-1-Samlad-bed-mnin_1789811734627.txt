@@ -1,0 +1,231 @@
+Granskning av OMXS30 / EdgeAI-screenern
+1. Samlad bedömning
+
+Koden är påtagligt mer genomtänkt än den var i augusti. Wilder-utjämningen finns nu på riktigt, resolution-snapshots (resolutionEntryPrice/StopPrice/Direction) är ett korrekt grepp mot retroaktiv omskrivning av R, och resolveOutcome vägrar att uppfinna priser. Det är ovanligt bra disciplin.
+
+Men jag hittar fem fel som var för sig gör resultatmätningen missvisande, varav två gör att säkerhetsspärrar aldrig kan lösa ut, och ett som gör Top 3-rankningen i praktiken slumpmässig när en session innehåller flera källor.
+
+Den sammanfattande bedömningen: ingenting i systemet mäter idag verifierad edge. Det mäter en censurerad delmängd av utfall, rankad på en formel som blandar inkompatibla enheter, utan kostnader, utan konfidensintervall och utan minsta-N. Det är fortfarande "rimliga men obevisade handelsantaganden", inte statistik.
+
+2. Kritiska fel som kan visa missvisande resultat
+2.1 Gap-spärren kan aldrig lösa ut (enhetsfel)
+ts
+return Math.round(((latestOpen - previousClose) / previousClose) * 1000) / 1000;
+
+Returnerar en decimal andel, inte procent. Ett gap på 2,9 % ger 0.029.
+
+Konsumenterna behandlar det som procent:
+
+ts
+if (candidate.signalGapPct != null && candidate.signalGapPct >= 2.5)  // 0.029 >= 2.5 → aldrig sant
+gapWarning: Math.abs(signalGapPct) >= 2.5 ? signalGapPct : null       // alltid null
+
+Båda gap-skydden är döda. gapWarning skrivs alltid som null till databasen. Det förklarar varför gap aldrig blockerat en short trots att textscreenern flaggat ⚠ gap +2,9% flera gånger i augusti.
+
+Fix: multiplicera med 100, eller jämför mot 0.025. Välj en konvention och döp fältet efter den.
+
+2.2 Volymfixen döljer felet istället för att lösa det
+ts
+if (average10d > 0 && volume / average10d >= 0.2) return volume / average10d;
+if (average10d > 0 && average3m > 0) return average10d / average3m;
+
+Precis det fall du hade problem med — partiell dagsvolym tidigt på morgonen ger ~0,04 — faller igenom första grenen och ersätts av average10d / average3m. Det är en helt annan storhet: en 10-dagars-mot-3-månaders volymtrend, som normalt ligger nära 1,0.
+
+Så en trasig mätning byts mot ett rimligt utseende värde. Jag sa den 29 augusti att volymfixen såg ut att ha landat när spridningen gick från 0,0x till 0,4–1,5x. Den slutsatsen var sannolikt fel — det kan vara fallback-grenen som aktiverats.
+
+Konsekvens: volMultiplier < 0.2-varningen i reviewCandidate är död kod, eftersom funktionen per konstruktion aldrig kan returnera under 0,2.
+
+Fix: returnera null när dagsvolymen är partiell. Bestäm om du mäter RVOL på senast stängda dag (rekommenderas, eftersom hela screenern kör på stängningskurser) och räkna då aldrig på dagens ofärdiga bar.
+
+2.3 Top 3-rankningen blandar oförenliga enheter
+ts
+(b.perf1m ?? 0) * (b.rsi ?? 0) - (a.perf1m ?? 0) * (a.rsi ?? 0)
+
+För EdgeAI-rader: perf1m = winRate (0–1), rsi = expectancyR × 100.
+För telegram/manual/screener-rader: perf1m = faktisk 1m-utveckling i procent, rsi = faktisk RSI.
+
+Systemkontexten säger att en session kan innehålla flera källor. Räkna då:
+
+Källa	perf1m	rsi	Poäng
+EdgeAI (WR 55 %, E[R] 0,30)	0,55	30	16,5
+Manuell (1m +12 %, RSI 70)	12	70	840
+
+Icke-EdgeAI-kandidater dominerar med två tiopotenser. Top 3 blir i praktiken "alla manuella först". Det är inte en rankning, det är en källsortering.
+
+Och för icke-EdgeAI shorts är den dessutom bakvänd: perf1m är negativ för en fallande aktie, så den svagaste aktien får lägst poäng och rankas sist i short-poolen. Exakt tvärtemot avsikten.
+
+Notera också att sorted beräknas och aldrig används — deterministicSort tog över. Död kod är här en symptom på att formeln aldrig granskats.
+
+2.4 Censureringsbias: förlorare stannar PENDING
+ts
+if (c.outcome === "WIN" && persistedR > 0) { ... }
+else if (c.outcome === "LOSS" && persistedR < 0) { ... }
+
+PENDING exkluderas — korrekt i sig. Problemet är att ingenting tvingar fram en resolution. Det finns ingen tidsbarriär i datamodellen, ingen maxHoldDays, inget som markerar en kandidat som förfallen.
+
+I praktiken registreras en trade som träffar target snabbt. En som driver emot blir kvar som PENDING. Det ger en systematiskt uppåtbiased population.
+
+Dessutom: en rad med outcome = "WIN" men persistedR == null räknas inte alls — varken som trade eller förlust. Den försvinner. Samma för WIN med persistedR <= 0.
+
+Det gör att analytics.ts och dashboard.ts rapporterar två olika win rates från två olika populationer: dashboard räknar alla WIN/LOSS-etiketter, analytics bara prissatta. Ingen av dem är märkt som delmängd i UI:t.
+
+2.5 Negativ expectancy klassas som trasig data
+ts
+rsi: Math.round(Number(s.edge?.expectancyR ?? 0) * 100)
+ts
+if (!Number.isFinite(candidate.rsi) || candidate.rsi < 0) invalid.push("RSI-data saknas eller är ogiltig.");
+
+En EdgeAI-setup med negativ förväntan ger rsi < 0 och märks INVALID med texten att RSI-data saknas.
+
+Det är inte ett datafel — det är EdgeAI som säger att setupen är dålig. Systemet döljer alltså att källan emitterar negativa-förväntan-setups, och gör det som ett rapporterat datakvalitetsproblem.
+
+3. Svagheter i tradinglogiken
+
+Regel 7 är effektivt avstängd för huvudkällan. mapEdgeAiSetup sätter alltid earningsKnowledge: "UNKNOWN". Det ger alltid varningen "Regel 7 ej bedömbar" → WARN → decideCandidate returnerar WAIT för varje EdgeAI-kandidat, alltid. En status som alltid är densamma bär ingen information, och tränar dig att ignorera den.
+
+reviewSession räknar WARN som handelsbar. tradableCount = filter(status !== "BLOCKED"). Eftersom allt EdgeAI är WARN blir "Ingen kvalificerad trade idag" i praktiken omöjligt att nå. Sessionsstatus och kandidatstatus säger emot varandra.
+
+rr valideras inte mot sina egna priser. rr = Number(s.rr ?? 0) tas rått från EdgeAI, och rr < 1.2 blockerar på det talet — inte på |target−entry| / |entry−stop|. Om EdgeAI:s rr avviker från dess egna nivåer godkänner du ett tal som inte beskriver planen.
+
+signalRsi fallerar öppet. calculateWilderRsi kräver period*2+1 = 29 barer och returnerar annars null. Short-översåld-spärren gör då ingenting. En säkerhetskontroll som tyst slutar gälla vid tunn data är värre än ingen.
+
+Dessutom: closes.filter(...) tar bort ogiltiga barer utan att bevara luckor, så två icke-angränsande dagar blir en artificiell delta.
+
+atr innehåller oneR — absolut prisavstånd, inte ATR i procent. Fjärde överlastade fältet efter perf1m, rsi, pctB och distFrom20dH. Varje sådant fält är en framtida bugg när någon skriver en ny konsument.
+
+Inga kostnader någonstans. R beräknas rent på pris. Ingen spread, inget courtage, ingen valutaväxling, ingen finansieringskostnad. Du handlar minifutures och turbos med 1,16–1,18 % spread och 4–7x hävstång. På en 10-dagars hållperiod är det lätt 1,5–2 % i friktion — ungefär 0,4–0,5 R på en typisk setup. Systematisk uppåtbias i varje mätning.
+
+ASSUMED_LEVEL blandas med RECORDED_EXIT. resolutionQuality lagras men används aldrig för att filtrera eller dela upp statistiken. STOP_HIT antar fyllning exakt på stoppen — i verkligheten glider stoppar, särskilt på gap. Antagna förluster underskattas därför systematiskt.
+
+Ingen SE/US-uppdelning, ingen valutahantering. positionSizeKr = entryPrice * shares — för en amerikansk position är entryPrice i USD. totalInvestedKr och totalMarketValueKr summerar alltså USD och SEK som om båda vore kronor.
+
+Exponeringen underskattas 4–7 gånger. positionSizeKr är instrumentets kostnad, inte underliggande exponering. En bok du tror är 17 000 kr brutto är i praktiken 70 000–120 000 kr i underliggande. grossExposureKr och netExposureKr ger falsk trygghet.
+
+maxStopLossKr är farligt missvisande. Positioner utan stop bidrar med 0. En portfölj med noll stoporder — vilket är din faktiska situation — visar alltså ett lågt "max stop loss". Fältet bör returnera null och UI:t skriva "odefinierad" så fort någon position saknar skyddande stop.
+
+Instrumentpriser är godtyckligt gamla. p.instrument ? (p.lastPrice ?? null) : q.livePrice med quoteAsOf: null. Hela din bok är instrument, så all orealiserad P&L är lika gammal som senaste inklistring, utan tidsstämpel.
+
+Ingen shrinkage, inget minsta-N, inga konfidensintervall. pctB bär sample size och används inte i rankningen. En setup med N=3 och E[R] 0,8 slår N=200 med E[R] 0,4. edgeN finns på sessionsnivå och läses aldrig.
+
+STALE-kontrollen är i UTC. Mellan 00:00 och 02:00 svensk sommartid är UTC-datumet fortfarande gårdagen, så gårdagens session flaggas inte som stale. Felar åt fel håll.
+
+4. Det som redan är bra
+calculateWilderRsi är korrekt implementerad, med rekursiv utjämning och dubbel uppvärmning. Det löser det fönsterrullningsartefakt vi såg i augusti.
+Resolution-snapshots. resolutionEntryPrice/StopPrice/Direction skrivs en gång och skyddar R-nämnaren mot senare re-import. Det är rätt lösning på ett verkligt problem.
+resolveOutcome vägrar uppfinna priser. Kravet på actualExitConfirmed för MANUAL_EXIT, och teckenkontrollen mot realizedR, hindrar att en etikett blir ett resultat.
+Challenge Tracker-synkroniseringen. Kravet att P&L har samma tecken som R och att riskAllocationKr × R matchar inskickad P&L är en riktig avstämning, inte en formalitet.
+edgeAiSource.ts färskhetskontroll. GitHub Contents API före raw, framtidsstämpel-kontroll, separat allowStale för manuell import. Genomtänkt.
+Kommentaren i edgeAiMapping.ts om avrundningsincidenten är precis rätt sorts institutionellt minne.
+Advisory lock + transaktion kring utfallsuppdatering.
+5. Fem högst prioriterade förbättringar
+Rätta gap-enheten. Multiplicera med 100 i calculateOpeningGapPct. Två säkerhetsspärrar går från döda till aktiva. Tio minuters jobb.
+Returnera null från volumeMultiplierFromQuote när dagsvolymen är partiell. Ta bort fallback-grenen. Låt reviewCandidate blockera på saknad volym istället för att få ett påhittat ~1,0x.
+Inför en tidsbarriär i datamodellen. maxHoldDays per kategori (10/15/5) plus ett TIME_EXIT-utfall. Utan det är PENDING ett hål där förlorare samlas, och all statistik är censurerad.
+Separera EdgeAI-fälten från de överlastade kolumnerna. Egna kolumner: edgeWinRate, edgeExpectancyR, edgeSampleN, signalAgeBars. Behåll perf1m, rsi, pctB, distFrom20dH för sin ursprungliga betydelse. Alla fyra buggarna i avsnitt 2 och 3 härrör från den här överlastningen.
+Lägg in kostnader i R. En costR-kolumn per kandidat, beräknad som (spread% + courtage% + finansiering% × hållperiod) / (oneR/entry × 100). Rapportera både brutto-R och netto-R, och låt netto-R vara det som visas som resultat.
+6. Förslag på bättre rankingformel
+
+Ranka på shrinkad förväntad R, justerad för kostnad och signalålder — inte på winRate × expectancy.
+
+ts
+/**
+ * Expected net R for one candidate.
+ * Källneutral: alla termer är definierade oavsett om raden kommer
+ * från EdgeAI, Telegram eller manuell import.
+ */
+function expectedNetR(c: Candidate, prior: { meanR: number; k: number }): number | null {
+  const n = c.edgeSampleN ?? 0;
+  const rawE = c.edgeExpectancyR;            // E[R] från källan, eller null
+  if (rawE == null || n <= 0) return null;   // inget att ranka på
+
+  // 1. Empirical-Bayes shrinkage mot kategorins historiska medel.
+  //    k = pseudo-observationer; k≈20 ger kraftig shrinkage vid små N.
+  const shrunkE = (n * rawE + prior.k * prior.meanR) / (n + prior.k);
+
+  // 2. Kostnad uttryckt i R.
+  const rDistancePct = (c.oneR / c.entryPrice) * 100;
+  if (!(rDistancePct > 0)) return null;
+  const costPct = c.spreadPct + c.commissionPct + c.financingPctPerDay * c.maxHoldDays;
+  const costR = costPct / rDistancePct;
+
+  // 3. Signalålder: en setup som triggade för N barer sedan har
+  //    redan konsumerat delar av sin förväntade rörelse.
+  const ageDecay = Math.max(0, 1 - (c.signalAgeBars ?? 0) / c.maxHoldDays);
+
+  return (shrunkE - costR) * ageDecay;
+}
+
+Rankningen blir sedan:
+
+ts
+const ranked = candidates
+  .map(c => ({ c, score: expectedNetR(c, priorFor(c.category, c.market)) }))
+  .filter(x => x.score != null && x.score > 0)   // negativ förväntan rankas inte, den förkastas
+  .sort((a, b) => b.score! - a.score! || a.rank - b.rank || a.c.ticker.localeCompare(b.c.ticker));
+
+Fyra saker som skiljer den från den nuvarande:
+
+Ingen dubbelräkning. Expectancy innehåller redan win rate. Att multiplicera med win rate igen överviktar setups med hög träffkvot och låg payoff — precis de som förlorar först när kostnader läggs på.
+Shrinkage. N=3 med E[R] 0,8 krymper mot kategorimedlet; N=200 med E[R] 0,4 gör det knappt. Det tar bort den enskilt största överanpassningsrisken.
+Kostnad i samma enhet. En setup med tight stop (litet oneR) betalar proportionellt mer spread. Det syns först när kostnaden uttrycks i R.
+Källneutral. Eftersom termerna kommer från namngivna fält kan EdgeAI- och manuella rader rankas i samma lista utan enhetskrock.
+
+Separata prior per category × market × direction. SE-long och US-short har inte samma baslinje.
+
+7. Fält som bör frysas vid signaltillfället
+
+Idag fryses endast resolutionEntryPrice, resolutionStopPrice och resolutionDirection, och först vid resolution. Allt före dess är muterbart via re-import (lastImportDiff bekräftar att re-imports skriver om kandidater). En historisk sessions Top 3 kan alltså förändras retroaktivt.
+
+Frys följande i en egen signal_snapshot-tabell med PRIMARY KEY (candidate_id) och inga UPDATE-rättigheter:
+
+Fält	Varför
+entryPrice, stopPrice, targetPrice, oneR, rr	R-nämnaren och planen måste vara oföränderliga från dag ett, inte från resolution
+direction, category, market, signalSource	Bestämmer vilken prior och vilken delpopulation raden tillhör
+edgeWinRate, edgeExpectancyR, edgeSampleN	Rankningsunderlaget. Ändras de i efterhand kan du inte reproducera varför en pick valdes
+signalRsi, signalGapPct, volMultiplier	Filterunderlaget
+signalAgeBars	Ålder vid signal, inte vid granskning
+earningsInDays, earningsKnowledge, earningsObservedAt	Regel 7 är per definition punkt-i-tid
+isTop3Pick + top3PickedAt	Viktigast. Utan tidsstämpel går det inte att utesluta att en manuell pick sattes efter att utfallet var känt
+spreadPct, commissionPct, financingPctPerDay	Kostnaden som gällde då, inte idag
+regimeLabel, marketRsi, indexAboveSma50	Regimen vid signal
+dataProvenance	Lyckades Yahoo-anropet? Vilken fallback användes? Idag går det inte att veta i efterhand
+
+isTop3Pick utan tidsstämpel är den allvarligaste. Så länge fältet är muterbart och otidsstämplat kan ingen Top 3-statistik betraktas som out-of-sample.
+
+8. Testplan: har modellen edge out-of-sample efter kostnader?
+
+Steg 0 — frys och rätta. Åtgärda 2.1, 2.2 och punkt 4 i förbättringslistan först. Statistik på data med döda gap-filter och påhittad volym mäter ingenting.
+
+Steg 1 — backfill med trippelbarriär. Gå igenom hela candidates-historiken. För varje rad, hämta OHLC från signaldagen framåt och märk utfallet mekaniskt:
+
+Entry: nästa dags öppning (inte signaldagens stängning — annars har du look-ahead)
+Stop träffad om low ≤ stopPrice (long) inom maxHoldDays
+Target träffad om high ≥ targetPrice
+Träffas båda samma dag: räkna som stop. Konservativt, och du vet inte ordningen från dagsdata
+Ingen träff inom barriären: exit på stängning dag N, TIME_EXIT
+
+Detta ger 200+ observationer utan censurering, eftersom varje rad får ett utfall.
+
+Steg 2 — dra av kostnader. Netto-R per trade enligt formeln i avsnitt 6. Använd faktiska spreadar från dina instrument, inte antaganden.
+
+Steg 3 — dela upp populationen. Rapportera separat för varje cell:
+
+category × market × direction → MOMENTUM/SE/LONG, WEAKEST/US/SHORT, och så vidare.
+
+Din bucket 4 hade fel riktning i åtta dagar i rad i augusti. Om den cellen har negativ netto-förväntan ska den strykas, inte förbättras.
+
+Steg 4 — konfidensintervall, inte punktskattningar. För varje cell: bootstrap 10 000 resampel av netto-R och rapportera medelvärde plus 95 %-intervall. Kravet för att handla en cell:
+
+Undre gränsen för medel-netto-R > 0
+N ≥ 30 i den cellen
+Intervallet ska inte överlappa noll
+
+Med N=15 och medel 0,3 R är intervallet typiskt −0,4 till +1,0. Det är inte edge, det är brus.
+
+Steg 5 — walk-forward, inte in-sample. Dela historiken kronologiskt: kalibrera prior och parametrar på de första 60 procenten, mät på de sista 40. Rör aldrig testperioden under kalibreringen. Om du justerar något efter att ha sett testresultatet är testet förbrukat och du behöver ny data.
+
+Steg 6 — multipel-testning-korrigering. Du testar fyra kategorier × två marknader × två riktningar = 16 celler. Vid 5 %-nivå förväntas ungefär en falsk positiv av ren slump. Använd Benjamini–Hochberg eller kräv en strängare tröskel per cell.
+
+Steg 7 — pappershandel innan kapital. Kör de celler som passerar steg 4–6 i 30 handelsdagar med loggad tänkt exekvering, och jämför realiserat netto-R mot backfillens prediktion. Avviker de mer än ett standardfel har du en exekverings- eller kostnadsmodell som inte stämmer.
+
+Beslutsregeln: handla bara celler som passerar alla sju steg. Det är fullt möjligt att ingen gör det. Det är också ett resultat — och ett billigare sådant än att upptäcka det med hävstång.

@@ -1,4 +1,4 @@
-import { pgTable, serial, text, real, integer, date, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, real, integer, date, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -19,12 +19,32 @@ export const screenerSessionsTable = pgTable("screener_sessions", {
   edgeWinRate: real("edge_win_rate"),
   edgePF: real("edge_pf"),
   edgeN: integer("edge_n"),
+  // Snapshot of what the most recent import changed (added/updated/removed
+  // candidates), so traders can see exactly what a re-import touched without
+  // diffing session history manually. Null until the first re-import happens.
+  lastImportDiff: jsonb("last_import_diff"),
+  lastImportAt: timestamp("last_import_at", { withTimezone: true }),
+  sourceReports: jsonb("source_reports").notNull().default([]),
+  // Null means this session predates immutable official Top 3 capture (or has
+  // not yet reached its first signal-time enrichment).
+  top3SnapshotAt: timestamp("top3_snapshot_at", { withTimezone: true }),
+  top3PolicyVersion: text("top3_policy_version"),
+  // The policy's deterministic 16:30 Europe/Stockholm instant for this date;
+  // null for legacy sessions or before evaluation.
+  top3CutoffAt: timestamp("top3_cutoff_at", { withTimezone: true }),
+  // Actual instant at which the cutoff cohort was evaluated/sealed.
+  top3CutoffEvaluatedAt: timestamp("top3_cutoff_evaluated_at", { withTimezone: true }),
+  // Empty means evaluated but unavailable due to missing arrivals.
+  top3ParticipatingSources: jsonb("top3_participating_sources").$type<string[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const insertScreenerSessionSchema = createInsertSchema(screenerSessionsTable).omit({
   id: true,
   createdAt: true,
+  lastImportDiff: true,
+  lastImportAt: true,
+  sourceReports: true,
 });
 export type InsertScreenerSession = z.infer<typeof insertScreenerSessionSchema>;
 export type ScreenerSession = typeof screenerSessionsTable.$inferSelect;

@@ -15,9 +15,60 @@ import { Router, type IRouter } from "express";
 import YahooFinance from "yahoo-finance2";
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import { desc, eq } from "drizzle-orm";
+import { calendarDaysBetween, utcCalendarDate } from "../lib/marketCalendar";
+import {
+  buildPublicationReaction,
+  publicationTimestamp,
+  earningsTimezone,
+  isDailyHistoryStale,
+  marketDayUtcBounds,
+  marketDate,
+  normalizeIntradayBars,
+  type EarningsMarket,
+} from "../lib/earningsReportReaction";
 
 const router: IRouter = Router();
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
+
+// ── Simple in-memory cache (10 min TTL) ──────────────────────────────────────
+let cache: { data: unknown; expiresAt: number } | null = null;
+const CACHE_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * yahoo-finance2 has returned both QuoteSummary modules with `{ raw }`
+ * wrappers and plain primitive values across versions. Keep the route tolerant
+ * of both shapes so valid earnings data does not become null in the UI.
+ */
+function yahooValue(value: unknown): unknown {
+  if (value == null) return null;
+  if (typeof value === "object" && "raw" in value) {
+    return (value as { raw?: unknown }).raw ?? null;
+  }
+  return value;
+}
+
+function yahooNumber(value: unknown): number | null {
+  const raw = yahooValue(value);
+  if (raw == null || raw === "") return null;
+  const number = typeof raw === "number" ? raw : Number(raw);
+  return Number.isFinite(number) ? number : null;
+}
+
+function yahooDate(value: unknown): Date | null {
+  const raw = yahooValue(value);
+  if (raw instanceof Date) {
+    return Number.isFinite(raw.getTime()) ? raw : null;
+  }
+  if (typeof raw === "number") {
+    const date = new Date(raw < 1_000_000_000_000 ? raw * 1_000 : raw);
+    return Number.isFinite(date.getTime()) ? date : null;
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    const date = new Date(raw);
+    return Number.isFinite(date.getTime()) ? date : null;
+  }
+  return null;
+}
 
 // ── OMXS30 universe ──────────────────────────────────────────────────────────
 const OMXS30_TICKERS: { yahoo: string; display: string }[] = [
@@ -53,6 +104,61 @@ const OMXS30_TICKERS: { yahoo: string; display: string }[] = [
   { yahoo: "VOLV-B.ST",    display: "Volvo" },
 ];
 
+// ── Extra SE watchlist (mid/small-cap utanför OMXS30) ────────────────────────
+const SE_WATCHLIST_TICKERS: { yahoo: string; display: string }[] = [
+  { yahoo: "EMBRAC-B.ST", display: "Embracer" },
+  { yahoo: "RVRC.ST",     display: "Revolution Race" },
+  { yahoo: "BORG.ST",     display: "Björn Borg" },
+];
+
+// ── Permanent US large-cap universe ──────────────────────────────────────────
+const US_LARGE_CAP_TICKERS: { yahoo: string; display: string }[] = [
+  // Magnificent 7
+  { yahoo: "AAPL",  display: "Apple" },
+  { yahoo: "MSFT",  display: "Microsoft" },
+  { yahoo: "NVDA",  display: "Nvidia" },
+  { yahoo: "AMZN",  display: "Amazon" },
+  { yahoo: "GOOGL", display: "Alphabet" },
+  { yahoo: "META",  display: "Meta" },
+  { yahoo: "TSLA",  display: "Tesla" },
+  // Financials
+  { yahoo: "JPM",   display: "JPMorgan" },
+  { yahoo: "V",     display: "Visa" },
+  { yahoo: "MA",    display: "Mastercard" },
+  { yahoo: "BAC",   display: "Bank of America" },
+  { yahoo: "GS",    display: "Goldman Sachs" },
+  // Healthcare
+  { yahoo: "LLY",   display: "Eli Lilly" },
+  { yahoo: "UNH",   display: "UnitedHealth" },
+  { yahoo: "JNJ",   display: "Johnson & Johnson" },
+  { yahoo: "ABBV",  display: "AbbVie" },
+  { yahoo: "MRK",   display: "Merck" },
+  // Consumer
+  { yahoo: "WMT",   display: "Walmart" },
+  { yahoo: "HD",    display: "Home Depot" },
+  { yahoo: "COST",  display: "Costco" },
+  { yahoo: "MCD",   display: "McDonald's" },
+  { yahoo: "PG",    display: "Procter & Gamble" },
+  { yahoo: "KO",    display: "Coca-Cola" },
+  { yahoo: "PEP",   display: "PepsiCo" },
+  // Tech / Semis
+  { yahoo: "AVGO",  display: "Broadcom" },
+  { yahoo: "ORCL",  display: "Oracle" },
+  { yahoo: "CRM",   display: "Salesforce" },
+  { yahoo: "ADBE",  display: "Adobe" },
+  { yahoo: "NFLX",  display: "Netflix" },
+  { yahoo: "AMD",   display: "AMD" },
+  { yahoo: "QCOM",  display: "Qualcomm" },
+  { yahoo: "INTC",  display: "Intel" },
+  { yahoo: "MU",    display: "Micron" },
+  // Energy / Industrial
+  { yahoo: "XOM",   display: "ExxonMobil" },
+  { yahoo: "CVX",   display: "Chevron" },
+  { yahoo: "CAT",   display: "Caterpillar" },
+  { yahoo: "RTX",   display: "RTX" },
+  { yahoo: "HON",   display: "Honeywell" },
+];
+
 // ── Concurrency limiter ───────────────────────────────────────────────────────
 async function withConcurrency<T>(
   tasks: (() => Promise<T>)[],
@@ -74,53 +180,93 @@ async function withConcurrency<T>(
 // ── Days from today ───────────────────────────────────────────────────────────
 function daysFromToday(dt: Date | string | null | undefined): number | null {
   if (!dt) return null;
-  const ms = dt instanceof Date ? dt.getTime() : new Date(dt).getTime();
-  if (isNaN(ms)) return null;
-  const todayMs = Date.UTC(
-    new Date().getUTCFullYear(),
-    new Date().getUTCMonth(),
-    new Date().getUTCDate(),
-  );
-  return Math.round((ms - todayMs) / 86_400_000);
+  const eventDate = dt instanceof Date ? dt : new Date(dt);
+  return calendarDaysBetween(eventDate);
 }
 
-// ── Day-of-earnings price reaction ────────────────────────────────────────────
-function computeDayPlusOneReturn(
-  history: { date: Date; close: number }[],
-  earningsDate: Date | string,
-): number | null {
-  const targetMs = new Date(earningsDate).getTime();
-  if (isNaN(targetMs)) return null;
-  const sorted = [...history]
-    .map((h) => ({ ms: new Date(h.date).getTime(), close: h.close }))
-    .sort((a, b) => a.ms - b.ms);
+function validDateOnly(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
 
-  // Find the last trading day on or before earningsDate
-  let beforeIdx = -1;
-  for (let i = 0; i < sorted.length; i++) {
-    if (sorted[i].ms <= targetMs + 86_400_000) beforeIdx = i; // +1 day buffer
-    else break;
+router.get("/screener/earnings-screener/intraday", async (req, res): Promise<void> => {
+  const ticker = typeof req.query.ticker === "string" ? req.query.ticker.trim() : "";
+  const reportDate = req.query.reportDate;
+  const market = req.query.market;
+  if (!/^[A-Za-z0-9.^=-]{1,24}$/.test(ticker) || !validDateOnly(reportDate) ||
+      (market !== "SE" && market !== "US")) {
+    res.status(400).json({ error: "ticker, reportDate (YYYY-MM-DD) and market (SE|US) are required." });
+    return;
   }
-  // Clamp: we want the day *before* the earnings date
-  while (beforeIdx > 0 && sorted[beforeIdx].ms > targetMs) beforeIdx--;
 
-  if (beforeIdx < 0 || beforeIdx >= sorted.length - 1) return null;
-  const before = sorted[beforeIdx].close;
-  const after = sorted[beforeIdx + 1].close;
-  if (!before) return null;
-  return Number((((after - before) / before) * 100).toFixed(2));
-}
+  const timezone = earningsTimezone(market as EarningsMarket);
+  const dayBounds = marketDayUtcBounds(reportDate, market as EarningsMarket);
+  if (!dayBounds) {
+    res.status(400).json({ error: "reportDate is not a valid market date." });
+    return;
+  }
+  const today = marketDate(new Date(), market as EarningsMarket);
+  if (today && reportDate > today) {
+    res.json({
+      ticker, reportDate, market, timezone, status: "MISSING", source: "Yahoo Finance",
+      fetchedAt: new Date().toISOString(), asOf: null, candles: [],
+      reason: "Rapportdagen ligger framåt i tiden; minutdata har inte hämtats.",
+    });
+    return;
+  }
+
+  try {
+    const chart = await yf.chart(ticker, {
+      period1: dayBounds.start,
+      period2: dayBounds.end,
+      interval: "1m",
+      includePrePost: true,
+    });
+    const result = normalizeIntradayBars(
+      chart.quotes.map((quote) => ({
+        date: quote.date,
+        open: quote.open,
+        high: quote.high,
+        low: quote.low,
+        close: quote.close,
+        volume: quote.volume,
+      })),
+      reportDate,
+      market as EarningsMarket,
+    );
+    res.json({
+      ticker,
+      reportDate,
+      market,
+      timezone,
+      source: "Yahoo Finance",
+      fetchedAt: new Date().toISOString(),
+      status: result.status,
+      asOf: result.asOf,
+      candles: result.candles,
+      reason: result.reason,
+    });
+  } catch {
+    res.status(502).json({ error: "Yahoo Finance kunde inte leverera minutdata för den valda rapportdagen." });
+  }
+});
 
 // ── Main route ────────────────────────────────────────────────────────────────
 router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
+  // Serve from cache if still fresh
+  if (cache && Date.now() < cache.expiresAt) {
+    res.json(cache.data);
+    return;
+  }
   // 1. Get US tickers from latest EdgeAI session
   const omxsYahooSet = new Set(OMXS30_TICKERS.map((t) => t.yahoo));
   let usTickers: { yahoo: string; display: string }[] = [];
   try {
+    // Use the most recent session regardless of source (edgeai, telegram, or manual)
     const [latestSession] = await db
       .select({ id: screenerSessionsTable.id })
       .from(screenerSessionsTable)
-      .where(eq(screenerSessionsTable.source as any, "edgeai"))
       .orderBy(desc(screenerSessionsTable.date))
       .limit(1);
 
@@ -140,9 +286,15 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
     // non-fatal — proceed with OMXS30 only
   }
 
+  // Merge permanent US large-caps with session picks (deduplicate by yahoo ticker)
+  const usTickerSet = new Set(US_LARGE_CAP_TICKERS.map((t) => t.yahoo.toUpperCase()));
+  const sessionOnlyTickers = usTickers.filter((t) => !usTickerSet.has(t.yahoo.toUpperCase()));
+  const allUsTickers = [...US_LARGE_CAP_TICKERS, ...sessionOnlyTickers];
+
   const universe: { yahoo: string; display: string; market: "SE" | "US" }[] = [
     ...OMXS30_TICKERS.map((t) => ({ ...t, market: "SE" as const })),
-    ...usTickers.map((t) => ({ ...t, market: "US" as const })),
+    ...SE_WATCHLIST_TICKERS.map((t) => ({ ...t, market: "SE" as const })),
+    ...allUsTickers.map((t) => ({ ...t, market: "US" as const })),
   ];
 
   // 2. Fetch quotes (earnings date) for all — concurrency 8
@@ -154,6 +306,7 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
         earningsTimestamp: (q as any).earningsTimestamp as Date | null | undefined,
         livePrice: (q.regularMarketPrice ?? null) as number | null,
         changePct: (q.regularMarketChangePercent ?? null) as number | null,
+        marketDataAsOf: yahooDate((q as any).regularMarketTime)?.toISOString() ?? null,
       };
     }),
     8,
@@ -192,7 +345,17 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
         period2: now,
         interval: "1d",
       });
-      return { ticker: stock.yahoo, history: h as { date: Date; close: number }[] };
+      return {
+        ticker: stock.yahoo,
+        history: h as Array<{
+          date: Date;
+          open: number | null;
+          high: number | null;
+          low: number | null;
+          close: number | null;
+          volume: number | null;
+        }>,
+      };
     }),
     4,
   );
@@ -209,6 +372,51 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
   const stocks = relevant.map((stock) => {
     const summary = summaryMap.get(stock.yahoo);
     const history = historyMap.get(stock.yahoo) ?? [];
+    const reportTimestamp = yahooDate(stock.earningsTimestamp)?.toISOString() ?? null;
+    const reportDate = reportTimestamp
+      ? marketDate(reportTimestamp, stock.market)
+      : null;
+    const marketToday = marketDate(new Date(), stock.market);
+    const priceDataAsOf = history.reduce<string | null>((latest, bar) => {
+      const date = marketDate(bar.date, stock.market);
+      return date && (!latest || date > latest) ? date : latest;
+    }, null);
+    const priceHistoryStale = isDailyHistoryStale(
+      priceDataAsOf,
+      (stock as any).marketDataAsOf ?? null,
+      stock.market,
+    );
+    const reportReaction = !reportDate
+      ? {
+          status: "MISSING" as const,
+          reportDate: null,
+          reportTimestamp,
+          timezone: earningsTimezone(stock.market),
+          dataAsOf: priceDataAsOf,
+          previousClose: null,
+          reportDay: null,
+          changePct: null,
+          postReport: [1, 3, 5].map((sessions) => ({
+            sessions: sessions as 1 | 3 | 5, date: null, close: null, returnPct: null,
+          })),
+          reason: "Rapportdatum eller rapporttidpunkt saknas i källan.",
+        }
+      : marketToday && reportDate > marketToday
+      ? {
+          status: "UPCOMING" as const,
+          reportDate,
+          reportTimestamp,
+          timezone: earningsTimezone(stock.market),
+          dataAsOf: priceDataAsOf,
+          previousClose: null,
+          reportDay: null,
+          changePct: null,
+          postReport: [1, 3, 5].map((sessions) => ({
+            sessions: sessions as 1 | 3 | 5, date: null, close: null, returnPct: null,
+          })),
+          reason: "Rapporten har inte inträffat ännu.",
+        }
+      : buildPublicationReaction(history, reportTimestamp, stock.market, now);
 
     // earningsHistory
     const rawHistory: any[] = (summary?.earningsHistory as any)?.history ?? [];
@@ -221,21 +429,24 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
       beat: boolean | null;
     };
     const historicalEarnings: EarningsItem[] = rawHistory.map((h: any) => {
-      const estimate = h.epsEstimate?.raw ?? null;
-      const actual = h.epsActual?.raw ?? null;
-      const surprisePct = h.surprisePercent?.raw != null
-        ? Number((h.surprisePercent.raw * 100).toFixed(2))
+      const estimate = yahooNumber(h.epsEstimate);
+      const actual = yahooNumber(h.epsActual);
+      const surpriseRaw = yahooNumber(h.surprisePercent);
+      const surprisePct = surpriseRaw != null
+        ? Number((surpriseRaw * 100).toFixed(2))
         : estimate != null && actual != null && estimate !== 0
         ? Number((((actual - estimate) / Math.abs(estimate)) * 100).toFixed(2))
         : null;
-      const quarterDate = h.quarter?.raw
-        ? new Date(h.quarter.raw * 1000)
-        : null;
-      const dayPlusOneReturn = quarterDate
-        ? computeDayPlusOneReturn(history, quarterDate)
-        : null;
+      const quarterDate = yahooDate(h.quarter);
+      // Yahoo `quarter` is a fiscal period, never evidence of release time.
+      const releaseTime = publicationTimestamp(yahooDate(h.reportTimestamp ?? h.earningsDate));
+      const releaseReaction = buildPublicationReaction(history, releaseTime, stock.market, now);
+      const dayPlusOneReturn = releaseReaction.status === "AVAILABLE"
+        ? releaseReaction.changePct?.close ?? null : null;
       return {
-        date: quarterDate?.toISOString().slice(0, 10) ?? h.period ?? "?",
+        date: utcCalendarDate(quarterDate) ?? h.period ?? "?",
+        reportTimestamp: releaseTime,
+        reactionReason: releaseReaction.reason,
         estimate,
         actual,
         surprisePct,
@@ -268,18 +479,18 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
     // earningsTrend — grab current quarter revision counts
     const trendArr: any[] = (summary?.earningsTrend as any)?.trend ?? [];
     const currentTrend = trendArr.find((t: any) => t.period === "0q") ?? trendArr[0];
-    const revUp = currentTrend?.epsRevisions?.upLast30days?.raw ?? 0;
-    const revDown = currentTrend?.epsRevisions?.downLast30days?.raw ?? 0;
-    const nextEpsEstimate = currentTrend?.earningsEstimate?.avg?.raw ?? null;
+    const revUp = yahooNumber(currentTrend?.epsRevisions?.upLast30days) ?? 0;
+    const revDown = yahooNumber(currentTrend?.epsRevisions?.downLast30days) ?? 0;
+    const nextEpsEstimate = yahooNumber(currentTrend?.earningsEstimate?.avg);
 
     // financialData — analyst consensus + price target
     const fd = (summary as any)?.financialData ?? {};
-    const recommendationKey: string | null = fd.recommendationKey ?? null; // "strong_buy" | "buy" | "hold" | "sell" | "strong_sell"
-    const recommendationMean: number | null = fd.recommendationMean?.raw ?? null; // 1.0–5.0
-    const numberOfAnalystOpinions: number | null = fd.numberOfAnalystOpinions?.raw ?? null;
-    const targetMeanPrice: number | null = fd.targetMeanPrice?.raw ?? null;
-    const targetLowPrice: number | null = fd.targetLowPrice?.raw ?? null;
-    const targetHighPrice: number | null = fd.targetHighPrice?.raw ?? null;
+    const recommendationKey = (yahooValue(fd.recommendationKey) as string | null) ?? null; // "strong_buy" | "buy" | "hold" | "sell" | "strong_sell"
+    const recommendationMean = yahooNumber(fd.recommendationMean); // 1.0–5.0
+    const numberOfAnalystOpinions = yahooNumber(fd.numberOfAnalystOpinions);
+    const targetMeanPrice = yahooNumber(fd.targetMeanPrice);
+    const targetLowPrice = yahooNumber(fd.targetLowPrice);
+    const targetHighPrice = yahooNumber(fd.targetHighPrice);
     const upsidePct: number | null =
       stock.livePrice && targetMeanPrice
         ? Number((((targetMeanPrice - stock.livePrice) / stock.livePrice) * 100).toFixed(1))
@@ -313,12 +524,21 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
       yahooTicker: stock.yahoo,
       display: stock.display,
       market: stock.market,
-      earningsDate: stock.earningsTimestamp instanceof Date
-        ? stock.earningsTimestamp.toISOString().slice(0, 10)
-        : null,
+      earningsDate: reportDate,
+      earningsTimestamp: reportTimestamp,
+      reportDate,
       earningsInDays: stock.earningsInDays,
       livePrice: stock.livePrice,
       changePct: stock.changePct,
+      marketDataAsOf: (stock as any).marketDataAsOf ?? null,
+      priceDataAsOf,
+      priceHistoryStatus: priceHistoryStale === true ? "STALE" : priceHistoryStale === false ? "CURRENT" : "UNKNOWN",
+      reportReaction: {
+        ...reportReaction,
+        priceHistoryStatus: priceHistoryStale === true ? "STALE" : priceHistoryStale === false ? "CURRENT" : "UNKNOWN",
+        marketDataAsOf: (stock as any).marketDataAsOf ?? null,
+        source: "Yahoo Finance",
+      },
       nextEpsEstimate,
       beatRate,
       avgSurprisePct,
@@ -353,7 +573,9 @@ router.get("/screener/earnings-screener", async (_req, res): Promise<void> => {
     return dA - dB;
   });
 
-  res.json({ stocks: sorted, generatedAt: new Date().toISOString() });
+  const payload = { stocks: sorted, generatedAt: new Date().toISOString() };
+  cache = { data: payload, expiresAt: Date.now() + CACHE_TTL_MS };
+  res.json(payload);
 });
 
 export default router;

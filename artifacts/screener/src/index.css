@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
@@ -80,59 +80,60 @@
   --elevate-1: rgba(0, 0, 0, 0.03);
   --elevate-2: rgba(0, 0, 0, 0.08);
 
-  --background: 210 40% 98%;
-  --foreground: 222.2 84% 4.9%;
+  --background: 38 24% 96%;
+  --app-glow: 39 25% 95%;
+  --foreground: 207 30% 15%;
 
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 222.2 84% 4.9%;
+  --border: 34 18% 86%;
+  --input: 34 18% 82%;
+  --ring: 187 43% 31%;
 
-  --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
-  --card-border: 214.3 31.8% 91.4%;
+  --card: 42 28% 99%;
+  --card-foreground: 207 30% 15%;
+  --card-border: 34 18% 86%;
 
-  --popover: 0 0% 100%;
-  --popover-foreground: 222.2 84% 4.9%;
-  --popover-border: 214.3 31.8% 91.4%;
+  --popover: 42 28% 99%;
+  --popover-foreground: 207 30% 15%;
+  --popover-border: 34 18% 84%;
 
-  --primary: 222.2 47.4% 11.2%;
-  --primary-foreground: 210 40% 98%;
+  --primary: 187 43% 28%;
+  --primary-foreground: 40 30% 97%;
 
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
+  --secondary: 38 18% 93%;
+  --secondary-foreground: 215 28% 18%;
 
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
+  --muted: 38 16% 93%;
+  --muted-foreground: 207 13% 40%;
 
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222.2 47.4% 11.2%;
+  --accent: 192 25% 92%;
+  --accent-foreground: 192 48% 20%;
 
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 4 62% 44%;
+  --destructive-foreground: 40 30% 97%;
 
-  --success: 142 72% 29%;
+  --success: 152 48% 30%;
   --success-foreground: 210 40% 98%;
 
-  --sidebar: 0 0% 100%;
-  --sidebar-foreground: 222.2 84% 4.9%;
-  --sidebar-border: 214.3 31.8% 91.4%;
-  --sidebar-primary: 222.2 47.4% 11.2%;
-  --sidebar-primary-foreground: 210 40% 98%;
-  --sidebar-accent: 210 40% 96.1%;
-  --sidebar-accent-foreground: 222.2 47.4% 11.2%;
-  --sidebar-ring: 222.2 84% 4.9%;
+  --sidebar: 39 25% 95%;
+  --sidebar-foreground: 207 30% 15%;
+  --sidebar-border: 34 18% 86%;
+  --sidebar-primary: 187 43% 28%;
+  --sidebar-primary-foreground: 40 30% 97%;
+  --sidebar-accent: 38 18% 93%;
+  --sidebar-accent-foreground: 207 30% 15%;
+  --sidebar-ring: 187 43% 31%;
 
-  --chart-1: 222.2 47.4% 11.2%;
-  --chart-2: 215.4 16.3% 46.9%;
-  --chart-3: 214.3 31.8% 91.4%;
-  --chart-4: 210 40% 96.1%;
-  --chart-5: 0 0% 100%;
+  --chart-1: 192 48% 26%;
+  --chart-2: 36 60% 46%;
+  --chart-3: 152 48% 30%;
+  --chart-4: 4 62% 44%;
+  --chart-5: 215 12% 42%;
 
-  --app-font-sans: 'Plus Jakarta Sans', sans-serif;
+  --app-font-sans: 'IBM Plex Sans', system-ui, sans-serif;
   --app-font-serif: Georgia, serif;
-  --app-font-mono: 'JetBrains Mono', monospace;
+  --app-font-mono: 'IBM Plex Mono', ui-monospace, monospace;
   
-  --radius: 0.25rem;
+  --radius: 0.375rem;
 
   --shadow-2xs: 0px 1px 2px 0px rgba(0,0,0,0.05);
   --shadow-xs: 0px 1px 2px 0px rgba(0,0,0,0.05);
@@ -162,7 +163,41 @@
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
+@layer base {
+  body {
+    background-image: linear-gradient(180deg, hsl(var(--app-glow) / 0.78), transparent 22rem);
+  }
+}
+
+@layer utilities {
+  .app-enter {
+    animation: app-enter 420ms cubic-bezier(.2,.75,.25,1) both;
+  }
+  .surface-lift {
+    transition: border-color 180ms ease, background-color 180ms ease, transform 180ms ease;
+  }
+  .surface-lift:hover {
+    transform: translateY(-1px);
+    border-color: hsl(var(--primary) / .28);
+  }
+}
+
+@keyframes app-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}
+
 .dark {
+  --app-glow: 222.2 84% 4.9%;
   --button-outline: rgba(255, 255, 255, 0.1);
   --badge-outline: rgba(255, 255, 255, 0.05);
 
@@ -236,7 +271,17 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    font-feature-settings: "tnum" 1;
+    -webkit-text-size-adjust: 100%;
   }
+  html, body { min-width: 0; }
+  .font-mono { font-variant-numeric: tabular-nums; }
+  details > summary { list-style: none; }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::before { content: "+"; display: inline-block; width: 1em; font-family: var(--app-font-mono); color: hsl(var(--muted-foreground)); }
+  details[open] > summary::before { content: "\2212"; }
+  summary:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; border-radius: 4px; }
+  table { font-variant-numeric: tabular-nums; }
 }
 
 @layer utilities {

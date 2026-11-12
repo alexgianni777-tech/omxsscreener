@@ -1,0 +1,24 @@
+Rak fråga, rakt svar. Men först måste jag korrigera premissen: den fungerar inte dåligt — den har inte testats. Noll trades på fyra sessioner betyder noll datapunkter. Du kan säga att den inte producerar handlingsbar output. Du kan inte säga att edgen saknas.
+Sen till varför den inte producerar något.
+1. Planlogiken kan inte ge positiv förväntan
+Det här är huvudfelet, och det är aritmetik, inte marknad.
+Mål = fast +1 %. Stop = 1,2×ATR. För en aktie med ATR 3,3 % blir stopavståndet 4,0 % och R/R 0,25. För ATR 1,5 % blir det 1,8 % och R/R 0,55. R/R överstiger 1 endast om ATR < 0,83 % — vilket ingen OMXS30-aktie har.
+Alla 39 kandidater du visat mig har haft R/R mellan 0,24 och 0,60. Det är inte urval, det är en identitet.
+Vid R/R 0,5 behöver du >67 % träffsäkerhet bara för break-even. Med spread och finansieringskostnad i minifutures snarare 72–75 %. Ingen daglig momentumstrategi levererar det. Screenern är alltså konstruerad så att den inte kan generera en trade värd att ta — och min ständiga "R/R för lågt"-kommentar är i själva verket kritik mot en formel, inte mot marknaden.
+Fix: målet ska vara ATR-relativt. Mål = entry + 2,0×ATR ger R/R ≈ 1,67 konsekvent oavsett aktie. Fast procentmål på instrument med olika volatilitet är kategorifel.
+2. Du har deployat något annat än det du validerade
+De fem walk-forward-validerade strategierna validerades utan ett kvalitativt vetolager. I praktiken kör du nu:
+signal = screener AND Claude godkänner
+Den regeln har noll backtest. Och mitt veto har underkänt i princip allt i fyra dagar. Om vetolagret filtrerar bort 90 % av signalerna har du inte längre den validerade strategin — du har en okänd strategi med en okänd operatör i loopen. Att jag hade fel om både Saab-gapet och SEB-momentum säger något om det lagrets kvalitet.
+Det här är det allvarligaste designfelet, för det är osynligt.
+3. Datalagret är inte tillförlitligt
+RSI som stiger när priset faller. Volym 0,0x. Gap-flagga som repeterar gårdagens värde. SSAB dubbellistad. Du fattar beslut på fyra indikatorer varav minst två bevisligen är fel.
+4. Bucket-definitionerna motsäger sig själva
+Rubrik 1 säger "ej överköpt" och returnerar RSI 77–79. Bucket 4 säger "svagast" men rankar på RS3m utan momentumfilter, vilket gav short-signal på Ericsson tre dagar i rad medan aktien steg. Filtren mäter inte det rubrikerna påstår.
+Vad du faktiskt ska göra
+Du har redan lösningen liggande: candidates-log.csv.
+Backfill utfall på varje loggad kandidat historiskt — 3 månader, alla buckets, entry på nästa öppning, exit efter n dagar eller vid stop. Det ger dig 200+ observationer utan att riskera en krona, och det svarar på den enda fråga som betyder något: producerar screenerns urval överavkastning, oberoende av mig?
+Om ja: fixa planlogiken och handla systematiskt utan veto.
+Om nej: ingen R/R-fix i världen hjälper, och du har sparat kapital.
+Ordningsföljd: RSI-buggen → planlogiken → backfill. Volymen sist, den påverkar inte urvalet idag.
+Och gör inget av det här idag. Du springer på lördag.

@@ -7,7 +7,8 @@
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm --filter @workspace/db exec tsx --test $(find \"$PWD/src\" -type f -name '*.test.ts' -print)"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -41,7 +42,7 @@
     "@replit/vite-plugin-cartographer": "catalog:",
     "@replit/vite-plugin-dev-banner": "catalog:",
     "@replit/vite-plugin-runtime-error-modal": "catalog:",
-    "@tailwindcss/typography": "^0.5.15",
+    "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@types/node": "catalog:",
@@ -75,7 +76,8 @@
     "zod": "catalog:"
   },
   "dependencies": {
-    "lightweight-charts": "^5.2.0",
-    "@workspace/replit-auth-web": "workspace:*"
+    "@workspace/market-calendar": "workspace:*",
+    "@workspace/replit-auth-web": "workspace:*",
+    "lightweight-charts": "^5.2.0"
   }
 }

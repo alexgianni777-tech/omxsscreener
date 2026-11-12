@@ -1,0 +1,45 @@
+Tidsbarriären — det är den saknade tredje parametern
+Din plan har entry, stop och mål. Den saknar när. Utan det är en trade odefinierad: en position som står stilla i tre veckor är varken vinst eller förlust, och den kan inte etiketteras i candidates-log.csv. Det är därför backfillen inte går att göra idag.
+Standardlösningen är trippelbarriär: målpris, stoppris och en vertikal tidsbarriär. Den vertikala är obligatorisk, inte valfri.
+Hur du sätter den. I en slumpvandring växer avståndet med roten ur tiden. Ligger en barriär på k×ATR är förväntat antal dagar till träff ungefär k²:
+Barriär
+Förväntad tid
+1,2×ATR (din stop)
+~1,4 dagar
+2,0×ATR (föreslaget mål)
+~4 dagar
+0,67×ATR (+1 % på ATR 1,5 %)
+~0,5 dagar
+Sista raden förklarar något viktigt: ditt nuvarande +1 %-mål träffas ofta redan samma eller nästa dag. Det ser ut som hög träffsäkerhet, men du plockar 0,67 ATR mot en risk på 1,2 ATR. Hög win rate, negativ förväntan.
+Praktisk regel: tidsbarriär = 2–3× förväntad tid för den längsta horisontella barriären. Med mål på 2×ATR blir det 8–12 handelsdagar.
+Per bucket, eftersom de mäter olika saker:
+Bucket
+Mål
+Tidsbarriär
+MOMENTUM
+2,0×ATR
+10 dagar
+SQUEEZE
+2,5×ATR
+15 dagar (utbrottet kan dröja)
+STUDS
+1,5×ATR
+5 dagar — rubriken säger redan "kort horisont"
+SVAGAST
+2,0×ATR
+10 dagar
+Två villkor som slår allt annat ovan:
+Använd den hållperiod dina fem strategier faktiskt validerades på. Om walk-forward körde 5 dagars hold och du nu handlar 10, har du inte den validerade strategin. Kolla parametern innan du sätter något i Replit.
+Finansieringskostnaden i minifutures kapar horisonten. Löper det ~0,03–0,05 % per dag äter 15 dagars hold upp 0,5–0,75 % — ungefär hela ditt gamla +1 %-mål. För hävstångsinstrument är 10 dagar sannolikt taket.
+Sanitetstest på backfillen: träffar färre än 60 % av dina historiska kandidater en horisontell barriär före tidsbarriären är barriärerna för breda eller tiden för kort. Träffar över 90 % tidsbarriären mäter du bara drift.
+Dagens lista, kort
+Electrolux är ett perfekt exempel på formelfelet. ATR 5,0 %, mål +1 %, R/R 0,17. Du riskerar 6 % för att ta 1 %. Det är inte en kandidat, det är ett bevis på att planlogiken måste bytas innan nästa körning.
+Hexagon: RS3m rasade 24,8 → 5,4 på en −1,5 %-dag. Det är fönsterrullning (majbasen föll ur), inte en bugg — samma sak som Ericssons 1m i fredags. Men det visar hur ostabil RS3m-rankingen är: en aktie kan gå från #3 till #12 utan att marknaden gjort något.
+Volvo 340,00, andra dagen. RSI 34, %B 0,18, ATR nu nere på 1,9 %, rapport 23 oktober. Fortfarande den enda setup där jag inte hittar ett motargument. R/R 0,43 är för lågt — men med mål på 1,5×ATR istället för +1 % blir det ~1,25.
+Nordea R/R 0,71 och Getinge 0,63 — högsta för veckan, vilket säger mer om ATR än om kvalitet.
+Ericsson short vid RSI 56 och %B 0,76, femte dagen i rad. AstraZeneca short vid RSI 31. Bucket 4 är fortfarande trasig.
+Riksbanken på torsdag. Nordea och SEB är ränteexponerade — inte att ta position i före beskedet.
+Mitt svar
+Fixa planlogiken i Replit först: mål = entry + k×ATR plus tidsbarriär per bucket. Det är två timmars jobb och det avblockerar backfillen, som är det enda som kan besvara om edgen finns.
+Handla inte förrän det är gjort. Att ta Volvo idag på R/R 0,43 är att handla en formel du redan vet är fel.
+Och — hur gick Ultravasan?

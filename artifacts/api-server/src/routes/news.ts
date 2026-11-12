@@ -35,8 +35,8 @@ router.get("/screener/news", async (req, res): Promise<void> => {
 
   await Promise.all(
     tickers.map(async (ticker) => {
-      const yahooTicker = resolveYahooTicker(ticker);
       try {
+        const yahooTicker = resolveYahooTicker(ticker);
         const result = await yf.search(yahooTicker, { newsCount: 5 });
         for (const item of result.news ?? []) {
           if (seen.has(item.uuid)) continue;
