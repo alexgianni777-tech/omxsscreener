@@ -9,6 +9,23 @@ jobs:
     name: Test, typecheck, and build
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Integration tests must use a disposable local database, never Replit's.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
 
     steps:
       - name: Check out repository
@@ -27,6 +44,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Initialize ephemeral CI schema
+        run: pnpm --filter @workspace/db exec drizzle-kit push --config ./drizzle.config.ts
 
       - name: Run API tests
         run: pnpm --filter @workspace/api-server run test
