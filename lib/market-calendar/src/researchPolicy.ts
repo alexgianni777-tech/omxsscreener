@@ -16,9 +16,9 @@ export function manualReportNotice(e:ResearchEvidence,now=new Date()):string {
   const date=observedReportDate(e.signalDate,e.earningsInDays,e.earningsKnowledge);
   const window=reportWindow(date,marketDate(now,e.market==="US"?"US":"SE"),e.market??"SE");
   const detail=window.status==="REPORT_WITHIN_5_TRADING_DAYS"
-    ? `Rapport inom ${window.tradingDays} börshandelsdagar – manuell prövning`
-    :window.status==="UNKNOWN_REPORT_DATE"?"Rapportdatum ej verifierat":`Observerat rapportdatum ${date}`;
-  return `${MANUAL_REPORT_NOTICE} – ${detail}. AG Invest-styrelsen kontrollerar rapport och rapporttid före varje affär; inte del av teknisk kvalitetspoäng.`;
+    ? `Källan anger rapport inom ${window.tradingDays} börshandelsdagar – manuell prövning`
+    :window.status==="UNKNOWN_REPORT_DATE"?"Rapportdatum/avstånd ej verifierat":`Källans uppskattade rapportdatum ${date} – kontrollera manuellt`;
+  return `${MANUAL_REPORT_NOTICE} – ${detail}. AG Invest-styrelsen kontrollerar rapport och rapporttid före varje affär. Detta påverkar inte teknisk kvalificering eller teknisk kvalitetspoäng.`;
 }
 const object=(v:unknown):Record<string,unknown> => v&&typeof v==="object"&&!Array.isArray(v)?v as Record<string,unknown>:{};
 const positive=(n:unknown):n is number=>typeof n==="number"&&Number.isFinite(n)&&n>0;

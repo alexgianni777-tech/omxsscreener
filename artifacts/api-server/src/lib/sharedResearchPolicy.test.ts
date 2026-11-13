@@ -139,7 +139,7 @@ test("manual report policy keeps strong SE/US long/short technical candidates qu
     assert.equal(review.status,"APPROVED");
     assert.equal(screenCandidate(e,review,e.signalDate,now,context).status,"TRADEABLE");
     assert.equal(decideCandidate(e,review,e.signalDate,now,context).status,"WAIT");
-    assert.match(review.reasons.join(" "),/MANUELL RAPPORTKONTROLL KRÄVS.*ej verifierat/);
+    assert.match(review.reasons.join(" "),/MANUELL RAPPORTKONTROLL KRÄVS.*ej verifierat.*påverkar inte teknisk kvalificering/);
     assert.deepEqual(e,original);
   }
 });
@@ -153,7 +153,7 @@ test("near reports only warn manually; bad price/stop, stale data and missing AT
     assert.notEqual(candidateQualification(e,"telegram",now,context).status,"QUALIFIED");
     assert.notEqual(screenCandidate(e,review,e.signalDate,now,context).status,"TRADEABLE");
   }
-  const review=reviewCandidate({...near,price:NaN},"telegram",now,context);
-  assert.notEqual(screenCandidate({...near,price:NaN},review,near.signalDate,now,context).status,"TRADEABLE");
+  const invalidQuote={...near,price:NaN};
+  assert.notEqual(screenCandidate(invalidQuote,reviewCandidate(near,"telegram",now,context),near.signalDate,now,context).status,"TRADEABLE");
   assert.match(decideCandidate(near,reviewCandidate(near,"telegram",now,context),near.signalDate,now,context).reasons[0],/BOARD REVIEW REQUIRED/);
 });

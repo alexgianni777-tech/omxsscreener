@@ -10,6 +10,8 @@ test("board protocol is collapsible and leaves all five human perspectives empty
   for(const name of ["Atlas","Eleanor","Victor","Harper","Eric"])assert.ok(html.includes(name));
   assert.equal((html.match(/<textarea/g)??[]).length,5);
   assert.ok(html.includes("BOARD REVIEW REQUIRED"));
+  assert.ok(html.includes("MANUELL RAPPORTKONTROLL KRÄVS"));
+  assert.ok(html.includes("inte i teknisk kvalificering"));
   assert.ok(html.includes("Riskunderlag saknas – ej godkänt."));
   assert.ok(html.includes("inte AI-signaturer"));
   assert.ok(html.includes("sm:grid-cols-3"));
