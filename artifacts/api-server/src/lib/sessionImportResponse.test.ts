@@ -90,7 +90,9 @@ test("import responses derive live source receipts from final raw DB candidates"
 
   assert.equal(response.top3LiveSelection?.previewAvailable, true);
   assert.equal(response.top3LiveSelection?.sourceReceipts.telegram.candidateCount, 1);
-  assert.equal(response.top3LiveSelection?.picks[0]?.candidateId, rawCandidate.id);
+  // A receipt is visible, but this legacy-shaped row has no verified ATR or
+  // market-regime evidence and therefore cannot be promoted into a pick.
+  assert.deepEqual(response.top3LiveSelection?.picks, []);
 });
 
 test("invalid candidates throw during response construction, before the route transaction commits", () => {

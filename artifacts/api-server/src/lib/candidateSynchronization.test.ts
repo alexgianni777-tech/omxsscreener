@@ -442,11 +442,12 @@ test("mixed-session rows use their own signal provenance for review rules", () =
   };
   const edgeReview = reviewCandidate({ ...common, signalSource: "edgeai" }, "mixed");
   const manualReview = reviewCandidate({ ...common, signalSource: "manual" }, "mixed");
-  // Provenance exempts EdgeAI from Telegram Momentum thresholds, not from the
-  // current mandatory report/date/ATR/regime evidence contract.
+  // Provenance exempts EdgeAI from Telegram Momentum thresholds. Report checks
+  // are manual; missing ATR, market date, upstream quality and regime still gate it.
   assert.equal(edgeReview.status, "BLOCKED");
   assert.ok(!edgeReview.reasons.some(reason=>reason.includes("Momentum saknar positiv")));
-  assert.match(edgeReview.reasons.join(" "),/UNKNOWN_REPORT_DATE/);
+  assert.match(edgeReview.reasons.join(" "),/MANUELL RAPPORTKONTROLL KRÄVS/);
+  assert.doesNotMatch(edgeReview.reasons.join(" "),/UNKNOWN_REPORT_DATE/);
   assert.equal(manualReview.status, "BLOCKED");
   assert.match(manualReview.reasons.join(" "), /Momentum/);
 });

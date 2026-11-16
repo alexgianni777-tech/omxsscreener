@@ -58,6 +58,7 @@ export type PolicyCandidate = {
   perf1m: number;
   rs3m: number;
   rsi: number;
+  atr?: number | null;
   pctB: number;
   distFrom20dH: number;
   edgeExpectancyR: number | null;

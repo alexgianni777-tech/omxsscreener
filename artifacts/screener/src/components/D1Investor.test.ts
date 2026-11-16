@@ -47,8 +47,8 @@ test("manual notice stays visible but unknown report evidence never grants READY
       pick: p, signal, quote, dataDate: "2026-04-02", dataDateStatus: "CURRENT",
     }));
     assert.ok(!html.includes("READY – entryvillkor verifierade, inte en order"));
-    assert.ok(html.includes("UNKNOWN_REPORT_DATE"));
-    assert.ok(html.includes("Rapportkalender kontrolleras manuellt före orderläggning"));
+    assert.ok(html.includes("MANUELL RAPPORTKONTROLL KRÄVS"));
+    assert.ok(html.includes("Rapportdatum/avstånd ej verifierat"));
     assert.ok(!html.includes("Rapportdatum ej verifierat – kontrollera manuellt"));
     assert.equal(JSON.stringify({ p, signal }), before);
   }

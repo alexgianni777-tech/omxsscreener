@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { d1Freshness, marketDate, previousMarketDay, isTradingDay, signalSessionDate } from "@workspace/market-calendar";
-import { decideCandidate } from "./screeningReview";
+import { decideCandidate, reviewCandidate } from "./screeningReview";
 
 test("D−1 accepts weekday, Monday after Friday, exchange holidays and short sessions", () => {
   for (const [today, expected, market] of [
@@ -53,9 +53,12 @@ test("prior session is not itself a reason to mark a valid report stale; origina
   };
   const before = structuredClone(candidate);
   assert.equal(d1Freshness(candidate.volumeAsOf,"2026-04-07","SE").status,"CURRENT");
-  const decision=decideCandidate(candidate, {status: "APPROVED", reasons: []},
+  const review=reviewCandidate(candidate,"edgeai",new Date("2026-04-07T08:00:00Z"));
+  const decision=decideCandidate(candidate, review,
     "2026-04-02", new Date("2026-04-07T08:00:00Z"));
-  assert.equal(decision.status,"BLOCKED","unknown report evidence still blocks despite a valid D−1 date");
-  assert.ok(decision.reasons.some(reason=>reason.includes("UNKNOWN_REPORT_DATE")));
+  assert.equal(decision.status,"WAIT","valid D−1 does not authorize an order without the manual board review");
+  assert.ok(decision.reasons.some(reason=>reason.includes("BOARD REVIEW REQUIRED")));
+  assert.ok(review.reasons.some(reason=>reason.includes("MANUELL RAPPORTKONTROLL KRÄVS")));
+  assert.ok(!decision.reasons.some(reason=>reason.includes("UNKNOWN_REPORT_DATE")));
   assert.deepEqual(candidate, before);
 });

@@ -7,13 +7,37 @@ import { pastedSignalSource } from "./pastedSignalSource.ts";
 const sessionDate = "2026-09-30";
 const beforeCutoff = new Date("2026-09-30T10:00:00.000Z");
 
+function sourceReports(se = "BULLISH", us = "BULLISH") {
+  return (["SE", "US"] as const).map((market) => {
+    const state = market === "SE" ? se : us;
+    const bearish = state === "BEARISH";
+    const dataDate = "2026-09-29";
+    return {
+      status: "SUCCESS",
+      dataDates: { [market]: dataDate },
+      marketContext: {
+        [market]: {
+          dataAsOf: dataDate,
+          indexSnapshot: {
+            close: bearish ? 90 : 110,
+            sma50: bearish ? 95 : 105,
+            sma200: 100,
+            source: "TEST FIXTURE ONLY",
+            asOf: market === "SE" ? `${dataDate}T16:30:00Z` : `${dataDate}T21:00:00Z`,
+          },
+        },
+      },
+    };
+  });
+}
+
 function candidate(
   id: number,
   overrides: Record<string, unknown> = {},
 ) {
-  return {
+  const row: any = {
     id,
-    ticker: `TICK${id}`,
+    ticker: `TICK${id}.ST`,
     category: "MOMENTUM",
     rank: id,
     market: "SE",
@@ -31,8 +55,9 @@ function candidate(
     edgeSampleN: null,
     signalAgeBars: null,
     maxHoldDays: 10,
-    signalRsi: null,
+    signalRsi: 50,
     signalGapPct: null,
+    atr: 1,
     volMultiplier: 1,
     volumeAsOf: "2026-09-29",
     earningsInDays: 30,
@@ -42,7 +67,30 @@ function candidate(
     targetPrice: 106,
     rr: 1.2,
     ...overrides,
-  } as any;
+  };
+  if (!Object.hasOwn(overrides, "ticker")) row.ticker = row.market === "US" ? `US${id}` : `TICK${id}.ST`;
+  if (row.signalSource === "edgeai" && !row.dataQuality) {
+    row.dataQuality = {
+      entryEligible: true,
+      eliteQualified: true,
+      validatedEdge: true,
+      evidenceStatus: "VALIDATED",
+      eliteStatus: "QUALIFIED",
+      atrEvidence: {
+        value: row.atr,
+        source: "TEST FIXTURE ONLY",
+        ticker: row.ticker,
+        market: row.market,
+        dataAsOf: "2026-09-29",
+        period: 14,
+        instrumentType: "UNDERLYING_EQUITY",
+        unit: "PRICE",
+        timeframe: "1d",
+        method: "WILDER",
+      },
+    };
+  }
+  return row;
 }
 
 function session(overrides: Record<string, unknown> = {}) {
@@ -50,6 +98,7 @@ function session(overrides: Record<string, unknown> = {}) {
     id: 91,
     date: sessionDate,
     source: "mixed",
+    sourceReports: sourceReports(),
     top3SnapshotAt: null,
     top3CutoffEvaluatedAt: null,
     ...overrides,
@@ -103,8 +152,8 @@ test("Telegram confirmation cannot make signals older than the previous close in
 });
 
 test("negative-expectancy SHORT may be selected under the new policy", () => {
-  const result = buildTop3LiveSelection(session(), [candidate(1, {
-    signalSource: "edgeai", direction: "SHORT", category: "WEAKEST",
+  const result = buildTop3LiveSelection(session({ sourceReports: sourceReports("BEARISH") }), [candidate(1, {
+    signalSource: "edgeai", direction: "SHORT", category: "SQUEEZE",
     edgeExpectancyR: -0.32, signalRsi: 50, stopPrice: 105, targetPrice: 94,
   })], beforeCutoff)!;
   assert.equal(result.picks.length, 1);

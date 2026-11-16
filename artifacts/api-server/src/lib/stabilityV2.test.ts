@@ -19,13 +19,14 @@ test("finite/range validation rejects bad market inputs without changing their a
     assert.deepEqual(input,before);
   }
 });
-test("unknown report dates and nearby reports block, not merely warn",()=>{
+test("unknown and nearby report dates remain manual warnings, not technical blockers",()=>{
   assert.equal(AUTOMATIC_EARNINGS_CHECK_ENABLED,false,"strict evidence gate must not activate new provider calls");
   for(const patch of [{earningsKnowledge:"UNKNOWN" as const},{earningsInDays:null},{earningsInDays:0},{earningsInDays:5}]) {
     const input={...base,...patch},review=reviewCandidate(input,"telegram",now);
-    assert.equal(review.status,"BLOCKED");
-    assert.match(review.reasons.join(" "),/UNKNOWN_REPORT_DATE|REPORT_WITHIN_5_TRADING_DAYS/);
-    assert.equal(decideCandidate(input,{status:"APPROVED",reasons:[]},base.signalDate,now).status,"BLOCKED");
+    assert.equal(review.status,"WARN");
+    assert.match(review.reasons.join(" "),/MANUELL RAPPORTKONTROLL KRÄVS/);
+    assert.doesNotMatch(review.reasons.join(" "),/UNKNOWN_REPORT_DATE|REPORT_WITHIN_5_TRADING_DAYS/);
+    assert.equal(decideCandidate(input,{status:"APPROVED",reasons:[]},base.signalDate,now).status,"WAIT");
   }
 });
 test("reports use exchange calendar days and five trading days across US/SE holidays",()=>{

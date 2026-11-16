@@ -6,15 +6,44 @@ import { buildTop3SelectionSnapshot, TOP3_POLICY_VERSION } from "./top3Selection
 const day = "2026-10-02";
 const time = new Date(`${day}T10:00:00Z`);
 function candidate(id: number, source: "telegram" | "edgeai", overrides: Record<string, unknown> = {}) {
-  return {
-    id, ticker: `TICK${id}`, category: "MOMENTUM", rank: id, market: "SE", direction: "LONG",
+  const row: any = {
+    id, ticker: `TICK${id}.ST`, category: "MOMENTUM", rank: id, market: "SE", direction: "LONG",
     signalSource: source, signalDate: day, createdAt: time,
     price: 100, perf1m: 3, rs3m: 2, rsi: 50, pctB: 0.5, distFrom20dH: 1,
     edgeExpectancyR: 0.2, edgeSampleN: 100, signalAgeBars: 0, maxHoldDays: 10,
-    signalRsi: 50, signalGapPct: 0, volMultiplier: 1, volumeAsOf: "2026-10-01",
+    signalRsi: 50, signalGapPct: 0, atr: 1, volMultiplier: 1, volumeAsOf: "2026-10-01",
     earningsInDays: 30, earningsKnowledge: "SIGNAL_TIME",
     entryPrice: 100, stopPrice: 95, targetPrice: 110, rr: 2, ...overrides,
-  } as any;
+  };
+  if (row.signalSource === "edgeai" && !row.dataQuality) {
+    row.dataQuality = {
+      entryEligible: true, eliteQualified: true, validatedEdge: true,
+      evidenceStatus: "VALIDATED", eliteStatus: "QUALIFIED",
+      atrEvidence: {
+        value: row.atr, source: "TEST FIXTURE ONLY", ticker: row.ticker, market: row.market,
+        dataAsOf: "2026-10-01", period: 14, instrumentType: "UNDERLYING_EQUITY",
+        unit: "PRICE", timeframe: "1d", method: "WILDER",
+      },
+    };
+  }
+  return row;
+}
+function reports(state = "BULLISH") {
+  const bearish = state === "BEARISH";
+  const dataDate = "2026-10-01";
+  return [{
+    status: "SUCCESS",
+    dataDates: { SE: dataDate },
+    marketContext: {
+      SE: {
+        dataAsOf: dataDate,
+        indexSnapshot: {
+          close: bearish ? 90 : 110, sma50: bearish ? 95 : 105, sma200: 100,
+          source: "TEST FIXTURE ONLY", asOf: `${dataDate}T16:30:00Z`,
+        },
+      },
+    },
+  }];
 }
 function tx() {
   const rows: any[] = [];
@@ -31,7 +60,7 @@ function tx() {
     }),
   };
 }
-const session = { id: 51, date: day, source: "mixed" };
+const session = { id: 51, date: day, source: "mixed", sourceReports: reports() };
 
 test("fresh revision prices replace recommendations without changing original trade rows", () => {
   const original = candidate(1, "edgeai", { outcome: "WIN", exitPrice: 110, realizedR: 2 });
@@ -40,6 +69,7 @@ test("fresh revision prices replace recommendations without changing original tr
   const before = structuredClone(original);
   const inputs = buildRevisionInputs([original, telegram], [fresh], undefined, day, time);
   assert.equal(inputs.find((row) => row.id === 1)?.entryPrice, 120);
+  assert.equal(inputs.find((row) => row.id === 1)?.atr, 1, "revision policy must retain ATR evidence");
   assert.deepEqual(original, before);
   assert.equal(original.entryPrice, 100);
   assert.equal(original.realizedR, 2);
@@ -123,11 +153,11 @@ test("an explicitly empty source removes only its current proposals and keeps ol
 
 test("revisions retain the negative SHORT exception and LONG negative-expectancy gate", () => {
   const inputs = buildRevisionInputs([
-    candidate(1, "edgeai", { direction: "SHORT", stopPrice: 105, targetPrice: 90, edgeExpectancyR: -0.2 }),
+    candidate(1, "edgeai", { category: "SQUEEZE", direction: "SHORT", stopPrice: 105, targetPrice: 90, edgeExpectancyR: -0.2 }),
     candidate(2, "telegram"),
     candidate(3, "edgeai", { edgeExpectancyR: -0.2 }),
   ], [], undefined, day, time);
-  const rows = buildTop3SelectionSnapshot(inputs, session.id, day, session.source, time);
+  const rows = buildTop3SelectionSnapshot(inputs, session.id, day, session.source, time, reports("BEARISH"));
   assert.equal(rows.find((row) => row.candidateId === 1)?.selected, true);
   assert.equal(rows.find((row) => row.candidateId === 3)?.selected, false);
 });

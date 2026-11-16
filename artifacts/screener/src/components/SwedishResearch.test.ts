@@ -56,7 +56,7 @@ test("decision brief fails closed on missing market date, stale data, non-TRADEA
   assert.ok(html.includes("Screeningkvalificering är inte verifierad"));
   assert.ok(html.includes("Signal eller marknadsdag är STALE"));
   assert.ok(html.includes("Verifierat marknadsdatadatum saknas"));
-  assert.ok(html.includes("Rapportkalender kontrolleras manuellt före orderläggning"));
+  assert.ok(html.includes("MANUELL RAPPORTKONTROLL KRÄVS"));
   assert.ok(!html.includes('data-entry-status="READY"'));
 });
 

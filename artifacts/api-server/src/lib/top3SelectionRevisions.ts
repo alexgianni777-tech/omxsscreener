@@ -7,7 +7,7 @@ import { buildTop3SelectionSnapshot, TOP3_POLICY_VERSION, TOP3_REQUIRED_SOURCES,
 
 const SIGNAL_FIELDS = [
   "id", "ticker", "category", "rank", "market", "direction", "signalSource", "signalDate", "dataQuality",
-  "price", "perf1m", "rs3m", "rsi", "pctB", "distFrom20dH", "edgeExpectancyR",
+  "price", "perf1m", "rs3m", "rsi", "atr", "pctB", "distFrom20dH", "edgeExpectancyR",
   "edgeSampleN", "signalAgeBars", "maxHoldDays", "signalRsi", "signalGapPct",
   "volMultiplier", "volumeAsOf", "earningsInDays", "earningsKnowledge",
   "entryPrice", "stopPrice", "targetPrice", "rr", "createdAt",

@@ -68,7 +68,7 @@ test("matches the exact daily bar and compares its volume with the prior ten pos
   assert.equal(calls[0].options.interval, "1d");
 });
 
-test("16:30 Monday signal uses Friday's verified volume, not an incomplete Monday bar", async () => {
+test("16:30 Monday signal uses Friday's verified volume; missing unrelated entry evidence still gates tradeability", async () => {
   const signalDate = "2026-09-28"; // Monday in Stockholm
   const previous = "2026-09-25";
   const bars = [...priorTradingDays(previous), day(previous, 1100), day(signalDate, 99_999)];
@@ -87,7 +87,9 @@ test("16:30 Monday signal uses Friday's verified volume, not an incomplete Monda
     signalSource: "telegram", signalDate,
   };
   const review = reviewCandidate(candidate, null);
-  assert.equal(decideCandidate(candidate, review, signalDate, new Date("2026-09-28T14:30:00.000Z")).status, "TRADEABLE");
+  const decision = decideCandidate(candidate, review, signalDate, new Date("2026-09-28T14:30:00.000Z"));
+  assert.notEqual(decision.status, "TRADEABLE");
+  assert.doesNotMatch([...review.reasons, ...decision.reasons].join(" "), /Volymens avslutade kursdatum saknas|Volymdata saknas/);
 });
 
 test("latest prior completed volume skips a holiday and fails when evidence is missing", async () => {

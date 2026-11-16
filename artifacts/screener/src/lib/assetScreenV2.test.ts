@@ -10,13 +10,16 @@ const evidence={category:"MOMENTUM",direction:"LONG",signalSource:"telegram",mar
   dataDate:"2026-11-11",atr:1,rsi:50,perf1m:2,rs3m:2,volMultiplier:1,earningsInDays:20,earningsKnowledge:"SIGNAL_TIME",
   entryPrice:100,stopPrice:95,targetPrice:110};
 const bull={state:"BULLISH" as const,source:"TEST FIXTURE ONLY",dataDate:"2026-11-11"};
-test("qualification requires genuine finite data, report evidence and matching regime",()=>{
+test("qualification requires genuine finite data and matching regime; report evidence is reviewed manually",()=>{
   assert.equal(qualifyResearch(evidence,bull,now).status,"QUALIFIED");
   assert.equal(qualifyResearch(evidence,{...bull,state:"BEARISH"},now).status,"WATCH");
   assert.equal(qualifyResearch(evidence,undefined,now).status,"WATCH");
   for(const patch of [{dataDate:null},{dataDate:"2026-11-10"},{perf1m:NaN},{rs3m:Infinity},
-    {volMultiplier:0},{earningsKnowledge:"UNKNOWN"},{earningsInDays:0}])
+    {volMultiplier:0}])
     assert.equal(qualifyResearch({...evidence,...patch},bull,now).status,"BLOCKED");
+  for(const patch of [{earningsKnowledge:"UNKNOWN"},{earningsInDays:null},{earningsInDays:0},{earningsInDays:5}]) {
+    assert.equal(qualifyResearch({...evidence,...patch},bull,now).status,"QUALIFIED");
+  }
   for(const category of ["STUDS","WEAKEST"])
     assert.equal(qualifyResearch({...evidence,category},bull,now).status,"RESEARCH");
   assert.equal(qualifyResearch({...evidence,signalSource:"edgeai"},bull,now).status,"WATCH");
