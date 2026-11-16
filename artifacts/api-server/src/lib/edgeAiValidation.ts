@@ -109,7 +109,11 @@ export type EdgeAiPayloadQuality = {
 };
 
 /** Validate the report envelope and dates without rewriting any financial plan. */
-export function validateEdgeAiPayload(value: unknown, reportDate: string): EdgeAiPayloadQuality {
+export function validateEdgeAiPayload(
+  value: unknown,
+  reportDate: string,
+  marketsToValidate: readonly EdgeAiMarket[] = ["SE", "US"],
+): EdgeAiPayloadQuality {
   const errors: string[] = [];
   const warnings: string[] = [];
   const quarantinedIdentities: string[] = [];
@@ -135,7 +139,7 @@ export function validateEdgeAiPayload(value: unknown, reportDate: string): EdgeA
     return { reportDate, dataDates, errors, warnings, quarantinedIdentities };
   }
 
-  for (const market of ["SE", "US"] as const) {
+  for (const market of marketsToValidate) {
     if (!Object.hasOwn(markets, market)) {
       errors.push(`markets.${market} saknas.`);
       continue;

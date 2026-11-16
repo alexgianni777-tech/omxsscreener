@@ -14,13 +14,21 @@ test("canonical fetch coalesces, caches and revalidates ETag; 304 keeps exact da
     assert.equal((init?.headers as Record<string, string>)["If-None-Match"], '"v1"');
     return new Response(null, { status: 304 });
   }, () => now);
-  const [a, b] = await Promise.all([client.load(1000, parse, valid), client.load(1000, parse, valid)]);
-  assert.deepEqual(a, b);
+  const [a, b] = await Promise.all([
+    client.loadWithStatus(1000, parse, valid),
+    client.loadWithStatus(1000, parse, valid),
+  ]);
+  assert.deepEqual(a.value, b.value);
+  assert.equal(a.cacheStatus, "FETCHED");
+  assert.equal(b.cacheStatus, "FETCHED");
   assert.equal(calls, 1);
-  await client.load(1000, parse, valid);
+  const memoryHit = await client.loadWithStatus(1000, parse, valid);
+  assert.equal(memoryHit.cacheStatus, "MEMORY_CACHE");
   assert.equal(calls, 1);
   now += 300_001;
-  assert.deepEqual(await client.load(1000, parse, valid), { version: 1 });
+  const revalidated = await client.loadWithStatus(1000, parse, valid);
+  assert.deepEqual(revalidated.value, { version: 1 });
+  assert.equal(revalidated.cacheStatus, "ETAG_REVALIDATED");
   assert.equal(calls, 2);
 });
 

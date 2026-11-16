@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Terminal, Upload, AlertTriangle, RefreshCw, X, ShieldAlert, Zap, CheckCircle2 } from "lucide-react";
 import { useImportSession, getListSessionsQueryKey, getGetSessionQueryKey, getGetLastValidTop3QueryKey } from "@workspace/api-client-react";
 import { useAuthContext } from "../lib/auth-context";
+import { edgeCacheLabel, edgeMarketLabel, type EdgeAIImportMeta } from "../lib/edgeAiImportStatus";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -45,11 +46,11 @@ type EdgeAIStatus =
       setupCount: number;
       date: string;
       generatedAt: string;
-      stale?: boolean;
-      ageDescription?: string;
+      meta: EdgeAIImportMeta;
     }
+  | { kind: "conflict"; meta: EdgeAIImportMeta }
   | { kind: "auth"; message: string }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; meta?: EdgeAIImportMeta };
 
 export function Import() {
   const [rawText, setRawText] = useState("");
@@ -168,11 +169,15 @@ export function Import() {
           wouldRemove: data.wouldRemove ?? [],
           rawText: "__edgeai__", // sentinel — not used for edge import
         });
-        setEdgeStatus({ kind: "idle" });
+        setEdgeStatus({ kind: "conflict", meta: data });
         return;
       }
       if (!res.ok) {
-        setEdgeStatus({ kind: "error", message: data.error ?? `HTTP ${res.status}` });
+        setEdgeStatus({
+          kind: "error",
+          message: data.error ?? `HTTP ${res.status}`,
+          meta: data.marketStatus ? data : undefined,
+        });
         return;
       }
       queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
@@ -183,8 +188,7 @@ export function Import() {
         setupCount: data.setupCount,
         date: data.date,
         generatedAt: data.generatedAt,
-        stale: data.stale,
-        ageDescription: data.ageDescription,
+        meta: data,
       });
       setTimeout(() => setLocation(`/sessions/${data.id}`), 1200);
     } catch (e: any) {
@@ -226,13 +230,7 @@ export function Import() {
               <span className="font-mono text-blue-400/80">edgeai/public/data.json</span>
               {edgeStatus.kind === "success" && (
                 <span className="text-emerald-400 ml-1">
-                  · {edgeStatus.setupCount} setups ({edgeStatus.date})
-                  {edgeStatus.stale && (
-                    <span className="text-amber-400">
-                      {" "}
-                      · {edgeStatus.ageDescription ?? "äldre snapshot"}
-                    </span>
-                  )}
+                  · {edgeStatus.setupCount} signaler till session {edgeStatus.date}
                 </span>
               )}
               {edgeStatus.kind === "error" && (
@@ -242,6 +240,22 @@ export function Import() {
                 <span className="text-amber-400 ml-1">· {edgeStatus.message}</span>
               )}
             </p>
+            {(edgeStatus.kind === "success" || edgeStatus.kind === "conflict" ||
+              (edgeStatus.kind === "error" && edgeStatus.meta)) && (
+              <div className="mt-2 space-y-1 text-[11px] leading-4 text-muted-foreground" aria-live="polite">
+                <p>
+                  Källcache: {edgeCacheLabel(edgeStatus.kind === "error" ? edgeStatus.meta?.cacheStatus : edgeStatus.meta.cacheStatus)}
+                  {edgeStatus.kind === "success" && ` · ingår: ${edgeStatus.meta.includedMarkets?.join(", ") ?? "okänt"}`}
+                  {edgeStatus.kind === "conflict" && " · befintlig session kräver bekräftelse; inget nytt sparat"}
+                </p>
+                {(["SE", "US"] as const).map((market) => (
+                  <p key={market}>{edgeMarketLabel(
+                    market,
+                    edgeStatus.kind === "error" ? edgeStatus.meta?.marketStatus?.[market] : edgeStatus.meta.marketStatus?.[market],
+                  )}</p>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         <button

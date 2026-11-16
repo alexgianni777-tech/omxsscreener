@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { isAcceptedSignalDate, stockholmSignalDate } from "./signalDatePolicy";
+import { isTradingDay } from "@workspace/market-calendar";
 import { normalizeImportSymbol } from "./candidateSynchronizationPolicy";
 import { sourceMarketContext } from "./sourceMarketContext";
 import type { SourceMarketContext } from "@workspace/api-zod";
@@ -39,8 +40,11 @@ export function makeImportReport(source: string, signalDate: string, input: unkn
   if (generatedAt != null && !Number.isFinite(Date.parse(generatedAt))) throw new ImportDataError("Rapporttidpunkten är ogiltig.");
   const reportDate = generatedAt && Number.isFinite(Date.parse(generatedAt))
     ? stockholmSignalDate(new Date(generatedAt)) : signalDate;
-  for (const date of Object.values(dataDates)) {
-    if (date != null && (!isAcceptedSignalDate(date, date) || date > reportDate)) throw new ImportDataError("Datadag är ogiltig eller ligger efter rapportdagen. Ingen import har sparats.");
+  for (const market of ["SE", "US"] as const) {
+    const date = dataDates[market];
+    if (date != null && (isTradingDay(date, market) !== true || date > reportDate)) {
+      throw new ImportDataError(`${market}-datadag är ogiltig eller ligger efter rapportdagen. Ingen import har sparats.`);
+    }
   }
   const fingerprint = "v2:" + createHash("sha256").update(JSON.stringify({ processorVersion: "edgeai-setup-signal-date", source, signalDate, reportDate, dataDates, input: canonical(input) })).digest("hex");
   return { source, signalDate, reportDate, generatedAt, dataDates, fingerprint, status: "SUCCESS",

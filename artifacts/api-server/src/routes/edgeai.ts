@@ -23,10 +23,9 @@ import { resolveYahooTicker } from "../lib/omxs30TickerMap";
 import { fetchOmxsMarketWeather } from "../lib/omxsMarketWeather";
 import { completedVolumeKey, fetchCompletedVolumeBatch } from "../lib/completedVolumeBatch";
 import {
-  edgeAiSessionDate,
-  edgeAiDataFreshness,
   EdgeAiDataFreshnessError,
   fetchFreshEdgeAiData,
+  verifiedSetupsForImport,
 } from "../lib/edgeAiSource";
 import { calendarDaysUntil } from "../lib/marketCalendar";
 import { logger } from "../lib/logger";
@@ -43,6 +42,7 @@ import { mapEdgeAiSetup } from "../lib/edgeAiMapping";
 import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
 import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
 import { stockholmSignalDate } from "../lib/signalDatePolicy";
+import { signalSessionDate } from "@workspace/market-calendar";
 import { AUTOMATIC_EARNINGS_CHECK_ENABLED } from "../lib/screeningReview";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
@@ -56,14 +56,16 @@ function daysUntil(date: Date | number | null | undefined): number | null {
 router.post(
   "/screener/sessions/import-from-edgeai",
   async (req, res): Promise<void> => {
+    const importAt = new Date();
+    const failureSessionDate = signalSessionDate(importAt, "SE");
     // 1. Fetch latest EdgeAI data
     let fetched: Awaited<ReturnType<typeof fetchFreshEdgeAiData>>;
     try {
-      // Manual and scheduled imports share the same one-previous-close limit.
+      // Manual and scheduled imports share the same exchange-session freshness gate.
       await respectStoredEdgeAiBackoff();
-      fetched = await fetchFreshEdgeAiData(10_000);
+      fetched = await fetchFreshEdgeAiData(10_000, { now: importAt });
     } catch (err: any) {
-      const failureDate = stockholmSignalDate();
+      const failureDate = failureSessionDate || stockholmSignalDate(importAt);
       const message = err instanceof Error ? err.message : "EdgeAI fetch failed";
       const report = makeImportReport("edgeai", failureDate, { failure: message });
       attachFetchDiagnostic(report, err);
@@ -73,26 +75,30 @@ router.post(
         logger.warn({ err: recordError instanceof Error ? recordError.message : "unknown" }, "Could not save EdgeAI failure receipt");
       }
       if (err instanceof EdgeAiDataFreshnessError) {
-        res.status(422).json({ error: err.message, generatedAt: err.generatedAt });
+        res.status(422).json({
+          error: err.message,
+          generatedAt: err.generatedAt,
+          marketStatus: err.marketStatus,
+        });
         return;
       }
       res.status(502).json({ error: `Could not reach EdgeAI: ${message}` });
       return;
     }
     const edgeData = fetched.data;
+    const sourceMarkets = edgeData?.markets;
+    const se = fetched.includedMarkets.includes("SE") ? sourceMarkets?.SE ?? {} : {};
+    const us = fetched.includedMarkets.includes("US") ? sourceMarkets?.US ?? {} : {};
+    const { SE: setups, US: usRaw } = verifiedSetupsForImport(fetched);
+    const sessionMarket = setups.length > 0 ? "SE" : "US";
+    const sessionDate = signalSessionDate(importAt, sessionMarket);
+    const signalDate = sessionDate;
 
-    const markets = edgeData?.markets;
-    const se = markets?.SE ?? {};
-    const us = markets?.US ?? {};
-    const setups: any[] = Array.isArray(se.setups) ? se.setups : [];
-    const usRaw: any[] = Array.isArray(us.setups) ? us.setups : [];
-
-    // The stored session date is the EdgeAI signal day, never the browser/server
-    // clock. A manual import may intentionally use the latest prior trading day.
-    const signalDate = edgeAiSessionDate(edgeData);
+    // generatedAt is a report timestamp, not the signal session. Use the
+    // included market's next valid session; each candidate retains dataAsOf.
     const importReport = makeImportReport(
       "edgeai",
-      signalDate,
+      sessionDate,
       fetched.rawData,
       edgeData.generatedAt ?? null,
       fetched.quality.dataDates,
@@ -106,7 +112,13 @@ router.post(
       } catch (recordError) {
         logger.warn({ err: recordError instanceof Error ? recordError.message : "unknown" }, "Could not save EdgeAI validation receipt");
       }
-      res.status(422).json({ error: message, generatedAt: edgeData.generatedAt });
+      res.status(422).json({
+        error: message,
+        generatedAt: edgeData.generatedAt,
+        marketStatus: fetched.marketStatus,
+        includedMarkets: fetched.includedMarkets,
+        cacheStatus: fetched.cacheStatus,
+      });
       return;
     }
     if (setups.length === 0 && usRaw.length === 0) {
@@ -116,12 +128,17 @@ router.post(
       } catch (recordError) {
         logger.warn({ err: recordError instanceof Error ? recordError.message : "unknown" }, "Could not save EdgeAI empty-report receipt");
       }
-      res.status(422).json({ error: message, generatedAt: edgeData.generatedAt });
+      res.status(422).json({
+        error: message,
+        generatedAt: edgeData.generatedAt,
+        marketStatus: fetched.marketStatus,
+        includedMarkets: fetched.includedMarkets,
+        cacheStatus: fetched.cacheStatus,
+      });
       return;
     }
 
-    const sessionDate = stockholmSignalDate();
-    const freshness = edgeAiDataFreshness(edgeData);
+    const primaryMarket = setups.length > 0 ? se : us;
 
     // EdgeAI generated today can still use yesterday's completed market bars.
     // Keep index context on the SE data day, never the partial import-day bar.
@@ -132,7 +149,12 @@ router.post(
         : { omxsValue: 0, perf5d: 0, perf1m: 0, perf3m: 0, marketRsi: 0 };
     } catch (err: any) {
       logger.warn({ err: err.message }, "Manual EdgeAI import could not verify completed OMXS30 weather");
-      res.status(502).json({ error: "Stängd OMXS30-kurs för EdgeAI:s datadag saknas. Försök igen när kursdata finns." });
+      res.status(502).json({
+        error: "Stängd OMXS30-kurs för EdgeAI:s datadag saknas. Försök igen när kursdata finns.",
+        marketStatus: fetched.marketStatus,
+        includedMarkets: fetched.includedMarkets,
+        cacheStatus: fetched.cacheStatus,
+      });
       return;
     }
     const { omxsValue, perf5d, perf1m, perf3m, marketRsi } = mw;
@@ -213,6 +235,9 @@ router.post(
         date: sessionDate,
         affectedOutcomes,
         wouldRemove,
+        marketStatus: fetched.marketStatus,
+        includedMarkets: fetched.includedMarkets,
+        cacheStatus: fetched.cacheStatus,
       });
       return;
     }
@@ -339,16 +364,16 @@ router.post(
             perf1m,
             perf3m,
             marketRsi,
-            trendLabel: se.regime?.label ?? "n/a",
+            trendLabel: primaryMarket.regime?.label ?? "n/a",
             rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt}`,
             source: "edgeai",
-            edgeRegime: JSON.stringify(se.regime ?? {}),
-            edgeExpectancy: se.edge?.expectancyR ?? null,
-            edgeWinRate: se.edge?.winRate != null
-              ? (se.edge.winRate > 1 ? se.edge.winRate / 100 : se.edge.winRate)
+            edgeRegime: JSON.stringify(primaryMarket.regime ?? {}),
+            edgeExpectancy: primaryMarket.edge?.expectancyR ?? null,
+            edgeWinRate: primaryMarket.edge?.winRate != null
+              ? (primaryMarket.edge.winRate > 1 ? primaryMarket.edge.winRate / 100 : primaryMarket.edge.winRate)
               : null,
-            edgePF: se.edge?.profitFactor ?? null,
-            edgeN: se.edge?.n ?? null,
+            edgePF: primaryMarket.edge?.profitFactor ?? null,
+            edgeN: primaryMarket.edge?.n ?? null,
           })
           .returning();
         const { candidates: insertedCandidates } = await synchronizeCandidates(tx, inserted.id, uniqueMappedSetups, new Date(), importReport);
@@ -369,9 +394,11 @@ router.post(
       date: sessionDate,
       setupCount: uniqueMappedSetups.length,
       generatedAt: edgeData.generatedAt,
-      stale: freshness.isDifferentUtcDate || freshness.ageMs > 30 * 60 * 60 * 1_000,
-      ageDescription: freshness.ageDescription,
-      regime: se.regime,
+      partial: fetched.includedMarkets.length < 2,
+      marketStatus: fetched.marketStatus,
+      includedMarkets: fetched.includedMarkets,
+      cacheStatus: fetched.cacheStatus,
+      regime: primaryMarket.regime,
     });
   },
 );

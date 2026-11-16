@@ -1,69 +1,195 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { edgeAiSessionDate, fetchFreshEdgeAiData, EdgeAiDataFreshnessError } from "./edgeAiSource";
+import { expectedCompletedMarketDay, signalSessionDate } from "@workspace/market-calendar";
+import { edgeAiSessionDate, fetchFreshEdgeAiData, EdgeAiDataFreshnessError, verifiedSetupsForImport } from "./edgeAiSource";
+import { assessEdgeMarket } from "./edgeAiFreshness";
 import { previousTradingDate } from "./signalDatePolicy";
 import { GitHubContentsClient } from "./githubContents";
 
-// Each source test gets an independent transport; transport caching/backoff is
-// verified separately with a controlled clock, never with the public network.
-function read(timeout: number, options: { now?: Date } = {}) {
-  return fetchFreshEdgeAiData(timeout, { ...options, client: new GitHubContentsClient("https://api.github.com/test") });
+function read(timeout: number, now: Date) {
+  return fetchFreshEdgeAiData(timeout, {
+    now,
+    client: new GitHubContentsClient("https://api.github.com/test"),
+  });
 }
 
-const now = new Date("2026-10-02T10:00:00Z");
-const payload = (generatedAt: string) => {
+const asOfMarket = (date: string, generatedAt: string, dataStatus = "CURRENT") => ({
+  dataAsOf: date,
+  dataStatus,
+  setups: [],
+  indexSnapshot: {
+    source: "Yahoo Finance",
+    close: 100,
+    asOf: date,
+    fetchedAt: generatedAt,
+  },
+});
+
+const payload = (
+  generatedAt: string,
+  dates?: { SE?: string; US?: string },
+  statuses?: { SE?: string; US?: string },
+) => {
   const reportDate = edgeAiSessionDate({ generatedAt });
-  const dataAsOf = previousTradingDate(reportDate);
-  return { generatedAt, markets: {
-    SE: { dataAsOf, setups: [] },
-    US: { dataAsOf, setups: [] },
-  } };
+  const seDate = dates?.SE ?? previousTradingDate(reportDate, "SE");
+  const usDate = dates?.US ?? previousTradingDate(reportDate, "US");
+  return {
+    generatedAt,
+    markets: {
+      SE: asOfMarket(seDate, generatedAt, statuses?.SE ?? "CURRENT"),
+      US: asOfMarket(usDate, generatedAt, statuses?.US ?? "CURRENT"),
+    },
+  };
 };
 
-test("manual and scheduled EdgeAI fetches accept yesterday while preserving generatedAt", async (context) => {
-  const data = payload("2026-10-01T16:42:56.439Z");
+test("Friday D-1 data is current on Monday morning in both exchange timezones", async (context) => {
+  const now = new Date("2026-11-16T08:00:00Z");
+  const data = payload("2026-11-14T03:35:14Z", { SE: "2026-11-13", US: "2026-11-13" });
   context.mock.method(globalThis, "fetch", async () => Response.json(data));
-  const result = await read(1000, { now });
-  assert.equal(result.data.generatedAt, data.generatedAt);
-  assert.equal(edgeAiSessionDate(result.data), "2026-10-01");
-  assert.equal(result.rawData, result.data);
-  assert.deepEqual(result.quality.errors, []);
+
+  const result = await read(1000, now);
+  assert.deepEqual(result.includedMarkets, ["SE", "US"]);
+  assert.equal(result.marketStatus.SE.expected, "2026-11-13");
+  assert.equal(result.marketStatus.US.expected, "2026-11-13");
+  assert.equal(result.marketStatus.SE.fresh, true);
+  assert.equal(result.marketStatus.US.fresh, true);
+  assert.equal(result.quality.dataDates.SE, "2026-11-13");
+  assert.equal(result.quality.dataDates.US, "2026-11-13");
+  assert.equal(result.cacheStatus, "FETCHED");
 });
 
-test("EdgeAI fetches reject reports older than the previous close", async (context) => {
-  context.mock.method(globalThis, "fetch", async () => Response.json(payload("2026-09-30T16:42:56Z")));
-  await assert.rejects(read(1000, { now }), EdgeAiDataFreshnessError);
+test("manual and scheduled imports can only receive setups from verified markets", () => {
+  const result = verifiedSetupsForImport({
+    data: {
+      markets: {
+        SE: { setups: [{ ticker: "SCA-B" }] },
+        US: { setups: [{ ticker: "W" }] },
+      },
+    } as any,
+    includedMarkets: ["SE"],
+  });
+  assert.deepEqual(result.SE, [{ ticker: "SCA-B" }]);
+  assert.deepEqual(result.US, []);
 });
 
-test("EdgeAI weekend carryover accepts Friday on Monday but not Thursday", async (context) => {
-  let generatedAt = "2026-10-02T16:42:56Z";
-  context.mock.method(globalThis, "fetch", async () => Response.json(payload(generatedAt)));
-  const monday = new Date("2026-10-05T08:00:00Z");
-  assert.equal(edgeAiSessionDate((await read(1000, { now: monday })).data), "2026-10-02");
-  generatedAt = "2026-10-01T16:42:56Z";
-  await assert.rejects(read(1000, { now: monday }), EdgeAiDataFreshnessError);
+test("older exchange session is stale; one current market can import without the other", async (context) => {
+  const now = new Date("2026-11-16T08:00:00Z");
+  const data = payload("2026-11-14T03:35:14Z", { SE: "2026-11-13", US: "2026-11-12" });
+  context.mock.method(globalThis, "fetch", async () => Response.json(data));
+
+  const result = await read(1000, now);
+  assert.deepEqual(result.includedMarkets, ["SE"]);
+  assert.equal(result.marketStatus.SE.fresh, true);
+  assert.equal(result.marketStatus.US.status, "STALE");
+  assert.equal(result.marketStatus.US.reason, "DATA_AS_OF_BEFORE_EXPECTED_SESSION");
+  assert.equal(result.quality.dataDates.US, null);
+  assert.match(result.quality.warnings.join(" "), /US: DATA_AS_OF_BEFORE_EXPECTED_SESSION/);
 });
 
-test("EdgeAI rejects missing or future timestamps and uses Stockholm at midnight", async (context) => {
-  let generatedAt: string | undefined;
-  context.mock.method(globalThis, "fetch", async () => Response.json({ generatedAt }));
-  await assert.rejects(read(1000, { now }), EdgeAiDataFreshnessError);
-  generatedAt = "2026-10-02T11:00:00Z";
-  await assert.rejects(read(1000, { now }), EdgeAiDataFreshnessError);
-  assert.equal(edgeAiSessionDate({ generatedAt: "2026-10-01T22:15:00Z" }), "2026-10-02");
+test("stale data in every market fails the shared source gate used before force handling", async (context) => {
+  const now = new Date("2026-11-16T08:00:00Z");
+  const data = payload("2026-11-14T03:35:14Z", { SE: "2026-11-12", US: "2026-11-12" });
+  context.mock.method(globalThis, "fetch", async () => Response.json(data));
+
+  await assert.rejects(
+    read(1000, now),
+    (error) => error instanceof EdgeAiDataFreshnessError &&
+      error.marketStatus?.SE.status === "STALE" &&
+      error.marketStatus?.US.status === "STALE",
+  );
 });
 
-test("Contents API is canonical and HTTP failure never falls back to the CDN", async (context) => {
+test("verified EdgeAI source cache is imported with an explicit cache status", async (context) => {
+  const now = new Date("2026-11-16T08:00:00Z");
+  const data = payload(
+    "2026-11-14T03:35:14Z",
+    { SE: "2026-11-13", US: "2026-11-13" },
+    { SE: "CURRENT_CACHED", US: "CURRENT" },
+  );
+  context.mock.method(globalThis, "fetch", async () => Response.json(data));
+
+  const result = await read(1000, now);
+  assert.deepEqual(result.includedMarkets, ["SE", "US"]);
+  assert.equal(result.marketStatus.SE.status, "CURRENT_CACHED");
+  assert.equal(result.marketStatus.SE.cached, true);
+  assert.equal(result.marketStatus.US.cached, false);
+});
+
+test("Saturday generatedAt maps to the next trading session, not Saturday", () => {
+  const saturday = new Date("2026-11-14T10:00:00Z");
+  assert.equal(edgeAiSessionDate({ generatedAt: saturday.toISOString() }), "2026-11-14");
+  assert.equal(signalSessionDate(saturday, "SE"), "2026-11-16");
+  assert.equal(signalSessionDate(saturday, "US"), "2026-11-16");
+});
+
+test("exchange close buffers are timezone-specific and honor holiday/half-day calendars", () => {
+  // 19:00 Stockholm has passed the SE close buffer; New York is still trading.
+  const stockholmEvening = new Date("2026-11-16T18:00:00Z");
+  assert.equal(expectedCompletedMarketDay(stockholmEvening, "SE"), "2026-11-16");
+  assert.equal(expectedCompletedMarketDay(stockholmEvening, "US"), "2026-11-13");
+
+  // At 17:30 New York the US close buffer has passed.
+  assert.equal(expectedCompletedMarketDay(new Date("2026-11-16T22:30:00Z"), "US"), "2026-11-16");
+
+  // Thanksgiving and Midsummer closure carry the prior valid completed session.
+  assert.equal(expectedCompletedMarketDay(new Date("2026-11-26T16:00:00Z"), "US"), "2026-11-25");
+  assert.equal(expectedCompletedMarketDay(new Date("2026-06-22T06:00:00Z"), "SE"), "2026-06-18");
+
+  // The published calendar intentionally fails closed outside its verified range.
+  assert.equal(expectedCompletedMarketDay(new Date("2028-01-03T12:00:00Z"), "SE"), null);
+});
+
+test("market verification requires source, positive close, and a valid non-future fetch timestamp", () => {
+  const now = new Date("2026-11-16T08:00:00Z");
+  const base = asOfMarket("2026-11-13", "2026-11-14T03:35:14Z");
+  assert.equal(assessEdgeMarket("SE", base, now).fresh, true);
+  assert.equal(assessEdgeMarket("SE", {
+    ...base, indexSnapshot: { ...base.indexSnapshot, source: "" },
+  }, now).reason, "INDEX_SNAPSHOT_SOURCE_MISSING");
+  assert.equal(assessEdgeMarket("SE", {
+    ...base, indexSnapshot: { ...base.indexSnapshot, close: 0 },
+  }, now).reason, "INDEX_SNAPSHOT_CLOSE_INVALID");
+  assert.equal(assessEdgeMarket("SE", {
+    ...base, indexSnapshot: { ...base.indexSnapshot, fetchedAt: "2026-11-17T03:35:14Z" },
+  }, now).reason, "INDEX_SNAPSHOT_FETCH_TIME_INVALID");
+});
+
+test("missing or inconsistent market proof never qualifies as current", async (context) => {
+  const now = new Date("2026-11-16T08:00:00Z");
+  const data = payload("2026-11-14T03:35:14Z", { SE: "2026-11-13", US: "2026-11-13" });
+  data.markets.US.indexSnapshot.asOf = "2026-11-12";
+  data.markets.SE.dataStatus = "STALE";
+  context.mock.method(globalThis, "fetch", async () => Response.json(data));
+
+  await assert.rejects(
+    read(1000, now),
+    (error) => error instanceof EdgeAiDataFreshnessError &&
+      error.marketStatus?.SE.status === "STALE" &&
+      error.marketStatus?.US.reason === "INDEX_SNAPSHOT_DATE_MISMATCH",
+  );
+});
+
+test("generatedAt requires a zoned, non-future timestamp but is not used for data age", async (context) => {
+  const now = new Date("2026-11-16T08:00:00Z");
+  const saturdayData = payload("2026-11-14T03:35:14Z", { SE: "2026-11-13", US: "2026-11-13" });
+  context.mock.method(globalThis, "fetch", async () => Response.json(saturdayData));
+  assert.deepEqual((await read(1000, now)).includedMarkets, ["SE", "US"]);
+
+  const invalid = new GitHubContentsClient("https://api.github.com/test", async () =>
+    Response.json({ ...saturdayData, generatedAt: "2026-11-16T20:00:00Z" }));
+  await assert.rejects(fetchFreshEdgeAiData(1000, { now, client: invalid }), EdgeAiDataFreshnessError);
+
+  const noZone = new GitHubContentsClient("https://api.github.com/test", async () =>
+    Response.json({ ...saturdayData, generatedAt: "2026-11-14T03:35:14" }));
+  await assert.rejects(fetchFreshEdgeAiData(1000, { now, client: noZone }), EdgeAiDataFreshnessError);
+});
+
+test("Contents API remains canonical and HTTP failure never falls back to a CDN", async (context) => {
   let calls = 0;
   context.mock.method(globalThis, "fetch", async () => {
     calls++;
     return new Response("{}", { status: 503 });
   });
-  await assert.rejects(read(1000, { now }), /no CDN fallback was used/);
+  await assert.rejects(read(1000, new Date("2026-11-16T08:00:00Z")), /no CDN fallback was used/);
   assert.equal(calls, 1);
-});
-
-test("generatedAt must carry an explicit time zone", async (context) => {
-  context.mock.method(globalThis, "fetch", async () => Response.json(payload("2026-10-02T12:00:00")));
-  await assert.rejects(read(1000, { now }), EdgeAiDataFreshnessError);
 });

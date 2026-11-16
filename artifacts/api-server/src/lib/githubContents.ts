@@ -1,4 +1,11 @@
 const FIVE_MINUTES = 5 * 60_000;
+export type GitHubCacheStatus = "MEMORY_CACHE" | "ETAG_REVALIDATED" | "FETCHED";
+
+type DownloadResult = {
+  data: unknown;
+  etag: string | null;
+  cacheStatus: Exclude<GitHubCacheStatus, "MEMORY_CACHE">;
+};
 
 export class GitHubFetchError extends Error {
   constructor(message: string, public status: number | null, public retryAt: string) {
@@ -10,7 +17,7 @@ export class GitHubFetchError extends Error {
 /** One canonical URL, coalesced requests, conditional GET and no CDN fallback. */
 export class GitHubContentsClient {
   private cache: { data: unknown; etag: string | null; checkedAt: number } | null = null;
-  private pending: Promise<{ data: unknown; etag: string | null }> | null = null;
+  private pending: Promise<DownloadResult> | null = null;
   private retryAt = 0;
   private failures = 0;
   private lastError: GitHubFetchError | null = null;
@@ -22,20 +29,30 @@ export class GitHubContentsClient {
   ) {}
 
   async load<T>(timeoutMs: number, validate: (data: unknown) => T, cacheable: (value: T) => boolean): Promise<T> {
+    return (await this.loadWithStatus(timeoutMs, validate, cacheable)).value;
+  }
+
+  async loadWithStatus<T>(
+    timeoutMs: number,
+    validate: (data: unknown) => T,
+    cacheable: (value: T) => boolean,
+  ): Promise<{ value: T; cacheStatus: GitHubCacheStatus }> {
     const now = this.clock();
     // Never serve a successful cache as a substitute for a newer failed fetch.
     if (now < this.retryAt && this.lastError) throw this.lastError;
-    if (this.cache && now - this.cache.checkedAt < this.cacheMs) return validate(this.cache.data);
+    if (this.cache && now - this.cache.checkedAt < this.cacheMs) {
+      return { value: validate(this.cache.data), cacheStatus: "MEMORY_CACHE" };
+    }
     if (!this.pending) {
       this.pending = this.download(timeoutMs).finally(() => { this.pending = null; });
     }
     const response = await this.pending;
     const result = validate(response.data);
     if (cacheable(result)) this.cache = { ...response, checkedAt: this.clock() };
-    return result;
+    return { value: result, cacheStatus: response.cacheStatus };
   }
 
-  private async download(timeoutMs: number): Promise<{ data: unknown; etag: string | null }> {
+  private async download(timeoutMs: number): Promise<DownloadResult> {
     let response: Response;
     try {
       response = await this.request(this.url, {
@@ -53,7 +70,7 @@ export class GitHubContentsClient {
     if (response.status === 304 && this.cache) {
       this.failures = 0;
       this.lastError = null;
-      return { data: this.cache.data, etag: this.cache.etag };
+      return { data: this.cache.data, etag: this.cache.etag, cacheStatus: "ETAG_REVALIDATED" };
     }
     if (!response.ok) {
       // Inspect only for classification; do not log arbitrary response bodies.
@@ -70,7 +87,7 @@ export class GitHubContentsClient {
     this.failures = 0;
     this.lastError = null;
     this.retryAt = 0;
-    return { data, etag: response.headers.get("etag") };
+    return { data, etag: response.headers.get("etag"), cacheStatus: "FETCHED" };
   }
 
   private failure(status: number | null, reason: string, headers: Headers | null): GitHubFetchError {

@@ -28,6 +28,23 @@ test("unknown, impossible and future market data dates cannot silently masquerad
   assert.throws(() => makeImportReport("edgeai", "2026-10-07", {}, null, { SE: "2026-10-08", US: null }));
   assert.equal(makeImportReport("telegram", "2026-10-07", {}).dataDates.SE, null);
 });
+test("US data date is validated with the US calendar when Stockholm is closed", () => {
+  const report = makeImportReport(
+    "edgeai",
+    "2026-01-07",
+    { markets: { US: { dataAsOf: "2026-01-06" } } },
+    "2026-01-07T08:00:00Z",
+    { SE: null, US: "2026-01-06" },
+  );
+  assert.equal(report.dataDates.US, "2026-01-06");
+  assert.throws(() => makeImportReport(
+    "edgeai",
+    "2026-01-07",
+    {},
+    "2026-01-07T08:00:00Z",
+    { SE: "2026-01-06", US: null },
+  ));
+});
 test("normalization preserves US punctuation and financial identity; different sources/dates remain distinct", () => {
   assert.equal(normalizeImportSymbol(" hm_b.st "), "HM-B");
   assert.equal(normalizeImportSymbol(" brk.b ", "US"), "BRK.B");

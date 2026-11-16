@@ -18,7 +18,7 @@ import YahooFinance from "yahoo-finance2";
 import { resolveYahooTicker } from "./omxs30TickerMap";
 import { fetchOmxsMarketWeather } from "./omxsMarketWeather";
 import { completedVolumeKey, fetchCompletedVolumeBatch } from "./completedVolumeBatch";
-import { edgeAiSessionDate, fetchFreshEdgeAiData } from "./edgeAiSource";
+import { fetchFreshEdgeAiData, verifiedSetupsForImport } from "./edgeAiSource";
 import { AUTOMATIC_EARNINGS_CHECK_ENABLED } from "./screeningReview";
 import {
   lockScreenerSession,
@@ -32,6 +32,7 @@ import { mapEdgeAiSetup } from "./edgeAiMapping";
 import { withRetry } from "./retry";
 import { alreadyAcceptedReport } from "./scheduledReportPolicy";
 import { createImportCheckCoordinator } from "./importCheckCoordinator";
+import { signalSessionDate, marketDate } from "@workspace/market-calendar";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -91,13 +92,18 @@ async function sessionHasReport(
   return sessions.some(session => alreadyAcceptedReport(session.sourceReports, report, date));
 }
 
-async function runImport(date: string): Promise<boolean> {
-  logger.info({ date }, "[scheduler] Fetching EdgeAI data.json");
+async function runImport(now = new Date()): Promise<boolean> {
+  logger.info({ checkedAt: now.toISOString() }, "[scheduler] Fetching EdgeAI data.json");
 
   await respectStoredEdgeAiBackoff();
-  const fetched = await fetchFreshEdgeAiData(15_000);
+  const fetched = await fetchFreshEdgeAiData(15_000, { now });
   const edgeData = fetched.data;
-  const signalDate = edgeAiSessionDate(edgeData);
+  const { SE: seSetups, US: usSetups } = verifiedSetupsForImport(fetched);
+  const se = fetched.includedMarkets.includes("SE") ? edgeData?.markets?.SE : undefined;
+  const usMarket = fetched.includedMarkets.includes("US") ? edgeData?.markets?.US : undefined;
+  const sessionMarket = seSetups.length > 0 ? "SE" : usSetups.length > 0 ? "US" : fetched.includedMarkets[0] ?? "SE";
+  const date = signalSessionDate(now, sessionMarket);
+  const signalDate = date;
   const importReport = makeImportReport("edgeai", signalDate, fetched.rawData, edgeData.generatedAt ?? null, fetched.quality.dataDates);
   importReport.warnings = fetched.quality.warnings;
   importReport.quarantinedIdentities = fetched.quality.quarantinedIdentities;
@@ -109,10 +115,8 @@ async function runImport(date: string): Promise<boolean> {
     return false;
   }
 
-  const se = edgeData?.markets?.SE;
-  const seSetups: any[] = se?.setups ?? [];
-  const usSetups: any[] = edgeData?.markets?.US?.setups ?? [];
   const allSetups = [...seSetups, ...usSetups];
+  const primaryMarket = seSetups.length > 0 ? se : usMarket;
 
   if (allSetups.length === 0) {
     throw new ImportDataError("EdgeAI-rapporten innehåller inga setups. Befintliga kandidater lämnades orörda.", importReport);
@@ -156,7 +160,7 @@ async function runImport(date: string): Promise<boolean> {
   await Promise.allSettled(
     mapped.map(async (c) => {
       try {
-        const isSignalDay = date === stockholmClock(new Date()).date && signalDate === date;
+        const isSignalDay = date === marketDate(now, c.market) && signalDate === date;
         if (AUTOMATIC_EARNINGS_CHECK_ENABLED && isSignalDay) {
           const q = (await withRetry(() => yf.quote(resolveYahooTicker(c.ticker, c.market), {}, { validateResult: false }))) as any;
           const earningsInDays = daysUntil(q.earningsTimestamp);
@@ -203,13 +207,13 @@ async function runImport(date: string): Promise<boolean> {
         await tx
           .update(screenerSessionsTable)
           .set({
-            edgeRegime: JSON.stringify(se?.regime ?? {}),
-            edgeExpectancy: se?.edge?.expectancyR ?? null,
-            edgeWinRate: se?.edge?.winRate != null
-              ? (se.edge.winRate > 1 ? se.edge.winRate / 100 : se.edge.winRate)
+            edgeRegime: JSON.stringify(primaryMarket?.regime ?? {}),
+            edgeExpectancy: primaryMarket?.edge?.expectancyR ?? null,
+            edgeWinRate: primaryMarket?.edge?.winRate != null
+              ? (primaryMarket.edge.winRate > 1 ? primaryMarket.edge.winRate / 100 : primaryMarket.edge.winRate)
               : null,
-            edgePF: se?.edge?.profitFactor ?? null,
-            edgeN: se?.edge?.n ?? null,
+            edgePF: primaryMarket?.edge?.profitFactor ?? null,
+            edgeN: primaryMarket?.edge?.n ?? null,
             source,
             lastImportDiff: diff,
             lastImportAt: new Date(),
@@ -236,16 +240,16 @@ async function runImport(date: string): Promise<boolean> {
         perf1m: mw.perf1m,
         perf3m: mw.perf3m,
         marketRsi: mw.marketRsi,
-        trendLabel: se?.regime?.label ?? "n/a",
+        trendLabel: primaryMarket?.regime?.label ?? "n/a",
         rawText: `EdgeAI auto-import — generatedAt ${edgeData.generatedAt}`,
         source: "edgeai",
-        edgeRegime: JSON.stringify(se?.regime ?? {}),
-        edgeExpectancy: se?.edge?.expectancyR ?? null,
-        edgeWinRate: se?.edge?.winRate != null
-          ? (se.edge.winRate > 1 ? se.edge.winRate / 100 : se.edge.winRate)
+        edgeRegime: JSON.stringify(primaryMarket?.regime ?? {}),
+        edgeExpectancy: primaryMarket?.edge?.expectancyR ?? null,
+        edgeWinRate: primaryMarket?.edge?.winRate != null
+          ? (primaryMarket.edge.winRate > 1 ? primaryMarket.edge.winRate / 100 : primaryMarket.edge.winRate)
           : null,
-        edgePF: se?.edge?.profitFactor ?? null,
-        edgeN: se?.edge?.n ?? null,
+        edgePF: primaryMarket?.edge?.profitFactor ?? null,
+        edgeN: primaryMarket?.edge?.n ?? null,
         })
         .returning();
 
@@ -263,6 +267,7 @@ async function runImport(date: string): Promise<boolean> {
       );
       return true;
     });
+    if (imported) schedulerStatus.lastImported = date;
     return imported;
   } catch (err: any) {
     if (err instanceof ImportDataError && err.report) {
@@ -308,11 +313,10 @@ async function runCheck(): Promise<EdgeAiCheckResult> {
   const marketIsOpen =
     stockholm.hour > 9 || (stockholm.hour === 9 && stockholm.minute >= 0);
   if (marketIsOpen) {
-    const today = stockholm.date;
+     const today = signalSessionDate(now, "SE");
     {
       try {
-        const imported = await runImport(today);
-        if (imported) schedulerStatus.lastImported = today;
+         const imported = await runImport(now);
         schedulerStatus.lastError = null;
          return { status: imported ? "IMPORTED" : "UNCHANGED" };
       } catch (err: any) {
@@ -320,10 +324,10 @@ async function runCheck(): Promise<EdgeAiCheckResult> {
         const message = err instanceof Error ? err.message : "EdgeAI auto-import failed";
         const report = err instanceof ImportDataError && err.report
           ? err.report
-          : makeImportReport("edgeai", stockholm.date, { failure: message });
+          : makeImportReport("edgeai", today, { failure: message });
         attachFetchDiagnostic(report, err);
         try {
-          await recordImportFailure(stockholm.date, report, message);
+          await recordImportFailure(today, report, message);
         } catch (recordError: any) {
           logger.warn({ err: recordError?.message ?? "unknown" }, "[scheduler] Could not record failed import receipt");
         }

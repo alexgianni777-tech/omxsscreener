@@ -70,6 +70,37 @@ export function signalSessionDate(now: Date, market: EquityMarket): string {
   return nextOrCurrentSession(isTradingDay(date, market) && parts[0] * 60 + parts[1] >= close
     ? shifted(date, 1) : date, market) ?? date;
 }
+
+/**
+ * Latest exchange session whose close has had time to settle into a completed
+ * daily bar. The buffer is local exchange time; unknown calendar years fail
+ * closed through isTradingDay/previousMarketDay.
+ */
+export function expectedCompletedMarketDay(
+  now: Date,
+  market: EquityMarket,
+  closeBufferMinutes = 90,
+): string | null {
+  if (!Number.isFinite(now.getTime()) || !Number.isFinite(closeBufferMinutes) || closeBufferMinutes < 0) return null;
+  const date = marketDate(now, market);
+  const trading = isTradingDay(date, market);
+  if (trading == null) return null;
+  const timeParts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: market === "SE" ? "Europe/Stockholm" : "America/New_York",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const hour = Number(timeParts.find((part) => part.type === "hour")?.value);
+  const minute = Number(timeParts.find((part) => part.type === "minute")?.value);
+  const closeMinute = HALF_DAYS[market].includes(date)
+    ? 13 * 60
+    : market === "SE" ? 17 * 60 + 30 : 16 * 60;
+  const afterSettledClose = trading && Number.isFinite(hour) && Number.isFinite(minute) &&
+    hour * 60 + minute >= closeMinute + closeBufferMinutes;
+  return afterSettledClose ? date : previousMarketDay(date, market);
+}
+
 export function isTradingDay(date: string, market: string): boolean | null {
   if (!(market === "SE" || market === "US") || !validMarketDate(date) ||
     date < "2025-12-01" || date > "2027-12-31") return null;
