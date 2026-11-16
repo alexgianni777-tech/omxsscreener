@@ -8,6 +8,7 @@ import { Router, type IRouter } from "express";
 import { and, eq, isNull, or } from "drizzle-orm";
 import { db, screenerSessionsTable, candidatesTable } from "@workspace/db";
 import YahooFinance from "yahoo-finance2";
+import { assessEdgeMarket, isValidPublicationTime } from "../lib/edgeaiFreshness";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
@@ -54,22 +55,43 @@ router.post(
       return;
     }
 
+    // Validate each exchange independently BEFORE writing any session.
+    // The creation timestamp may be Saturday for Friday's completed data.
+    // A force-reimport must never bypass freshness validation.
+    const generatedAt = edgeData?.generatedAt;
+    if (!isValidPublicationTime(generatedAt)) {
+      res.status(422).json({ error: "EdgeAI publication timestamp invalid or in the future" });
+      return;
+    }
+    const marketStatus = {
+      SE: assessEdgeMarket("SE", edgeData?.markets?.SE),
+      US: assessEdgeMarket("US", edgeData?.markets?.US),
+    };
+    const eligibleKeys = (["SE", "US"] as const).filter(key => marketStatus[key].fresh);
+    if (!eligibleKeys.length) {
+      res.status(422).json({
+        error: "EdgeAI saknar verifierad data från senaste avslutade handelsdag. Import stoppad.",
+        marketStatus,
+      });
+      return;
+    }
     const se = edgeData?.markets?.SE;
-    if (!se) {
-      res.status(502).json({ error: "EdgeAI response missing SE market data" });
+    // Only import proposals from a market with a verified completed session.
+    // Never silently allow stale US setups through a current SE session.
+    const setups: any[] = marketStatus.SE.fresh && Array.isArray(se?.setups) ? se.setups : [];
+    const usSetups: any[] = marketStatus.US.fresh && Array.isArray(edgeData?.markets?.US?.setups)
+      ? edgeData.markets.US.setups : [];
+    const allSetups = [...setups, ...usSetups];
+    if (!allSetups.length) {
+      res.status(422).json({
+        error: "Ingen aktuell och verifierad EdgeAI-signal finns att importera.",
+        marketStatus,
+      });
       return;
     }
-
-    const setups: any[] = se.setups ?? [];
-
-    // 2. Derive proposal-session date from generatedAt. The proposals are
-    // intentionally based on the latest completed close and used today.
-    const generatedAt = String(edgeData.generatedAt ?? "");
-    if (!generatedAt || Number.isNaN(new Date(generatedAt).getTime())) {
-      res.status(502).json({ error: "EdgeAI response has invalid generatedAt" });
-      return;
-    }
-    const sessionDate = generatedAt.slice(0, 10);
+    // Date of the underlying completed market close, never generatedAt.
+    const sessionDate = eligibleKeys.map(key => marketStatus[key].actual as string).sort().at(-1)!;
+    const primaryMarket = marketStatus.SE.fresh ? se : edgeData.markets.US;
 
     // 2b. Fetch real OMXS30 market weather from Yahoo Finance
     let omxsValue = 0, perf5d = 0, perf1m = 0, perf3m = 0, marketRsi = 0;
@@ -139,15 +161,6 @@ router.post(
     }
 
     // 4. Map setups → candidates (SE + US combined), group by category for ranking
-    const usSetups: any[] = edgeData?.markets?.US?.setups ?? [];
-    const allSetups = [...setups, ...usSetups];
-    if (allSetups.length === 0) {
-      res.status(422).json({
-        error: "EdgeAI has no SE or US proposals in the current generated file.",
-        generatedAt: edgeData.generatedAt,
-      });
-      return;
-    }
     const rankCounter: Record<string, number> = {};
 
     const mappedSetups = allSetups.map((s: any) => {
@@ -235,19 +248,19 @@ router.post(
         const [updated] = await tx
           .update(screenerSessionsTable)
           .set({
-            trendLabel: se.regime?.label ?? "n/a",
-            rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt} · SE dataAsOf ${se.dataAsOf ?? "n/a"} · US dataAsOf ${edgeData?.markets?.US?.dataAsOf ?? "n/a"}`,
+            trendLabel: primaryMarket.regime?.label ?? "n/a",
+            rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt} · SE dataAsOf ${marketStatus.SE.actual ?? "n/a"} · US dataAsOf ${marketStatus.US.actual ?? "n/a"}`,
             omxsValue,
             perf5d,
             perf1m,
             perf3m,
             marketRsi,
             source: "edgeai",
-            edgeRegime: JSON.stringify(se.regime ?? {}),
-            edgeExpectancy: se.edge?.expectancyR ?? null,
-            edgeWinRate: normalizeRate(se.edge?.winRate),
-            edgePF: se.edge?.profitFactor ?? null,
-            edgeN: se.edge?.n ?? null,
+            edgeRegime: JSON.stringify(primaryMarket.regime ?? {}),
+            edgeExpectancy: primaryMarket.edge?.expectancyR ?? null,
+            edgeWinRate: normalizeRate(primaryMarket.edge?.winRate),
+            edgePF: primaryMarket.edge?.profitFactor ?? null,
+            edgeN: primaryMarket.edge?.n ?? null,
           })
           .where(eq(screenerSessionsTable.id, existingId))
           .returning();
@@ -279,14 +292,14 @@ router.post(
           perf1m,
           perf3m,
           marketRsi,
-          trendLabel: se.regime?.label ?? "n/a",
-          rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt} · SE dataAsOf ${se.dataAsOf ?? "n/a"} · US dataAsOf ${edgeData?.markets?.US?.dataAsOf ?? "n/a"}`,
+          trendLabel: primaryMarket.regime?.label ?? "n/a",
+          rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt} · SE dataAsOf ${marketStatus.SE.actual ?? "n/a"} · US dataAsOf ${marketStatus.US.actual ?? "n/a"}`,
           source: "edgeai",
-          edgeRegime: JSON.stringify(se.regime ?? {}),
-          edgeExpectancy: se.edge?.expectancyR ?? null,
-          edgeWinRate: normalizeRate(se.edge?.winRate),
-          edgePF: se.edge?.profitFactor ?? null,
-          edgeN: se.edge?.n ?? null,
+          edgeRegime: JSON.stringify(primaryMarket.regime ?? {}),
+          edgeExpectancy: primaryMarket.edge?.expectancyR ?? null,
+          edgeWinRate: normalizeRate(primaryMarket.edge?.winRate),
+          edgePF: primaryMarket.edge?.profitFactor ?? null,
+          edgeN: primaryMarket.edge?.n ?? null,
         })
         .returning();
 
@@ -302,7 +315,9 @@ router.post(
       date: sessionDate,
       setupCount: mappedSetups.length,
       generatedAt: edgeData.generatedAt,
-      regime: se.regime,
+      regime: primaryMarket.regime,
+      marketStatus,
+      includedMarkets: eligibleKeys,
     });
   },
 );
