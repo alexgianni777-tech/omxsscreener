@@ -13,6 +13,9 @@ import { Candidates } from './pages/candidates';
 import { ChallengeTracker } from './pages/challenge-tracker';
 import { Earnings } from './pages/earnings';
 import { Portfolio } from './pages/portfolio';
+import { Radar } from './pages/radar';
+import { TradeDesk } from './pages/trade-desk';
+import { Performance } from './pages/performance';
 import { Loader2, Lock } from 'lucide-react';
 
 const queryClient = new QueryClient({
@@ -86,6 +89,9 @@ function LoginGate() {
         <Route path="/survival" component={ChallengeTracker} />
         <Route path="/portfolio" component={Portfolio} />
         <Route path="/earnings" component={Earnings} />
+        <Route path="/radar" component={Radar} />
+        <Route path="/trade-desk" component={TradeDesk} />
+        <Route path="/performance" component={Performance} />
         <Route component={NotFound} />
       </Switch>
     </Shell>

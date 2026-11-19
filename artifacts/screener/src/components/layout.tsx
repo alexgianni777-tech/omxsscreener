@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { LineChart, Sunrise, LayoutDashboard, History, FileDown, Activity, Swords, CalendarDays, LogOut, Briefcase } from "lucide-react";
+import { LineChart, Sunrise, LayoutDashboard, History, FileDown, Activity, Swords, CalendarDays, LogOut, Briefcase, Radar as RadarIcon, ClipboardList, ChartNoAxesCombined } from "lucide-react";
 import { useAuthContext } from "../lib/auth-context";
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -16,6 +16,9 @@ export function Shell({ children }: { children: ReactNode }) {
     { href: "/portfolio", label: "Portfölj", icon: Briefcase },
     { href: "/survival", label: "Challenge", testLabel: "Challenge Tracker", icon: Swords },
     { href: "/earnings", label: "Rapporter", icon: CalendarDays },
+    { href: "/radar", label: "Marknadsradar", icon: RadarIcon },
+    { href: "/trade-desk", label: "Trade Desk", icon: ClipboardList },
+    { href: "/performance", label: "Performance Lab", icon: ChartNoAxesCombined },
   ];
 
   return (

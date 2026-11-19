@@ -30,13 +30,14 @@ const WHY: Record<string, string> = {
 const SOURCE: Record<string, string> = { edgeai: "GitHub/EdgeAI", telegram: "Telegram", manual: "Manuell" };
 const unknown = "okänd";
 
-export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], stale = false, dataDateStatus, expectedDataDate, advisory, reports = [] }: {
+export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], stale = false, dataDateStatus, expectedDataDate, advisory, reports = [], boardReviewOpen = false }: {
   pick: DailyPick & { decision?: { status?: string | null; reasons?: readonly string[] | null } }; signal?: ResearchSignal;
   dataDate: string | null; quote?: QuoteResult; warnings?: readonly string[]; stale?: boolean;
   dataDateStatus?: "CURRENT" | "STALE" | "UNKNOWN" | "CONFLICT";
   expectedDataDate?: string | null;
   advisory?: string;
   reports?: readonly SessionSourceReport[];
+  boardReviewOpen?: boolean;
 }) {
   const [, expireQuote] = useReducer(n => n + 1, 0);
   useEffect(() => {
@@ -179,7 +180,7 @@ export function ResearchCard({ pick, signal, dataDate, quote, warnings = [], sta
       </dl> : <p className="mt-2 text-muted-foreground">EdgeAI-statistik: {unknown} för denna källa. Ingen validerad edge anges.</p>}
     </details>
     <p className="mt-2 text-[11px] text-muted-foreground">Kurs vid nivå bekräftar inte köp. Eget beslut efter Avanza och ChatGPT.</p>
-    <BoardReview key={[pick.ticker,pick.signalDate,pick.entryPrice,pick.stopPrice,pick.targetPrice].join("|")}
+    <BoardReview openInitially={boardReviewOpen} key={[pick.ticker,pick.signalDate,pick.entryPrice,pick.stopPrice,pick.targetPrice].join("|")}
       context={`${pick.market} ${pick.ticker} ${pick.direction} · signal ${pick.signalDate??"okänd"} · datadag ${dataDate??"okänd"} · källa ${pick.source} · underliggande entry ${pick.entryPrice}, aktiestop ${pick.stopPrice}, mål ${pick.targetPrice} · datasignal ${qualification.status}`} />
   </li>;
 }

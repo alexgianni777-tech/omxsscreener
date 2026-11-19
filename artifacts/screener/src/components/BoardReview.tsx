@@ -2,7 +2,7 @@ import React,{useState} from "react";
 import {BOARD_PERSPECTIVES,BOARD_REVIEW_REQUIRED,boardArchive} from "@workspace/market-calendar/research-policy";
 
 /** Manual export only: no localStorage, credentials, API writes or AI signatures. */
-export function BoardReview({context}:{context:string}) {
+export function BoardReview({context,openInitially=false}:{context:string;openInitially?:boolean}) {
   const [notes,setNotes]=useState<string[]>(["","","","",""]);
   const [chat,setChat]=useState("");
   const [risk,setRisk]=useState({capital:"",stake:"",loss:"",source:""});
@@ -22,7 +22,7 @@ export function BoardReview({context}:{context:string}) {
     } catch(e){setError(e instanceof Error?e.message:"Protokollet kunde inte exporteras.");}
   }
   const input="mt-1 w-full rounded border border-border bg-background p-2 text-sm";
-  return <details className="mt-3 border-t border-border pt-2 text-xs" data-testid="board-review">
+  return <details open={openInitially} className="mt-3 border-t border-border pt-2 text-xs" data-testid="board-review">
     <summary className="cursor-pointer font-medium">{BOARD_REVIEW_REQUIRED} · manuellt protokoll</summary>
     <p className="mt-2">Endast underliggande aktier. Kvalificerad datasignal är inte en godkänd order.
       Fem perspektiv ska dokumenteras uttryckligen i din chatt. Detta är mänsklig dokumentation, inte AI-signaturer.</p>
