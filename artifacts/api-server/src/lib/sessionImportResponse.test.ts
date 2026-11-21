@@ -47,11 +47,28 @@ test("force import and reimport return the final saved snapshot and import times
   assert.deepEqual(response.importDiff, diff);
 });
 
+const VERIFIED_SE_REPORT = {
+  source: "telegram", fingerprint: "unit-test-source-report", status: "SUCCESS",
+  signalDate: "2026-09-30", reportDate: "2026-09-30",
+  generatedAt: "2026-09-30T08:00:00.000Z", importedAt: "2026-09-30T09:00:00.000Z",
+  dataDates: { SE: "2026-09-29", US: "2026-09-29" },
+  marketContext: {
+    SE: {
+      dataAsOf: "2026-09-29",
+      indexSnapshot: {
+        symbol: "^OMX", asOf: "2026-09-29", priceType: "COMPLETED_DAILY_CLOSE",
+        fetchedAt: "2026-09-30T08:00:00.000Z",
+        close: 320, sma50: 300, sma200: 280, source: "unit-test-index",
+      },
+    },
+  },
+};
+
 test("import responses derive live source receipts from final raw DB candidates", () => {
   const now = new Date("2026-09-30T10:00:00.000Z");
   const rawCandidate = {
     id: 18,
-    ticker: "LIVE",
+    ticker: "ABB",
     category: "MOMENTUM",
     rank: 1,
     market: "SE",
@@ -72,6 +89,7 @@ test("import responses derive live source receipts from final raw DB candidates"
     signalRsi: null,
     signalGapPct: null,
     volMultiplier: 1,
+    atr: 2,
     volumeAsOf: "2026-09-29",
     earningsInDays: 30,
     earningsKnowledge: "SIGNAL_TIME",
@@ -81,7 +99,7 @@ test("import responses derive live source receipts from final raw DB candidates"
     rr: 1.2,
   } as any;
   const response = parseSessionImportResponse(
-    { ...base, date: "2026-09-30" },
+    { ...base, date: "2026-09-30", sourceReports: [VERIFIED_SE_REPORT] },
     [],
     undefined,
     [rawCandidate],

@@ -7,18 +7,56 @@ import { pastedSignalSource } from "./pastedSignalSource.ts";
 const sessionDate = "2026-09-30";
 const beforeCutoff = new Date("2026-09-30T10:00:00.000Z");
 
+const DATA_DATE = "2026-09-29";
+const VERIFIED_REPORTS = [{
+  status: "SUCCESS",
+  dataDates: { SE: DATA_DATE, US: DATA_DATE },
+  marketContext: {
+    SE: {
+      dataAsOf: DATA_DATE,
+      indexSnapshot: {
+        symbol: "^OMX", asOf: DATA_DATE, priceType: "COMPLETED_DAILY_CLOSE",
+        fetchedAt: "2026-09-30T08:00:00.000Z",
+        close: 320, sma50: 300, sma200: 280, source: "unit-test-index",
+      },
+    },
+    US: {
+      dataAsOf: DATA_DATE,
+      indexSnapshot: {
+        symbol: "^GSPC", asOf: DATA_DATE, priceType: "COMPLETED_DAILY_CLOSE",
+        fetchedAt: "2026-09-30T08:00:00.000Z",
+        close: 5500, sma50: 5400, sma200: 5200, source: "unit-test-index",
+      },
+    },
+  },
+}];
+
+function testAtrEvidence(ticker: string, market: "SE" | "US") {
+  return {
+    value: 2, source: "unit-test-ohlcv", market, ticker, dataAsOf: DATA_DATE,
+    period: 14, instrumentType: "UNDERLYING_EQUITY", unit: "PRICE",
+    timeframe: "1d", method: "WILDER",
+  };
+}
+
+
 function candidate(
   id: number,
   overrides: Record<string, unknown> = {},
 ) {
+  const market: "SE" | "US" = overrides.market === "US" ? "US" : "SE";
+  const ticker = typeof overrides.ticker === "string" ? overrides.ticker
+    : market === "US" ? (id === 2 ? "AAPL" : "MSFT")
+      : (["ABB", "EVO", "TELIA", "SAND", "ALFA", "SINCH"][(id - 1) % 6]);
+  const source = typeof overrides.signalSource === "string" ? overrides.signalSource : "telegram";
   return {
     id,
-    ticker: `TICK${id}`,
+    ticker,
     category: "MOMENTUM",
     rank: id,
-    market: "SE",
+    market,
     direction: "LONG",
-    signalSource: "telegram",
+    signalSource: source,
     signalDate: sessionDate,
     createdAt: new Date("2026-09-30T09:30:00.000Z"),
     price: 100,
@@ -31,10 +69,14 @@ function candidate(
     edgeSampleN: null,
     signalAgeBars: null,
     maxHoldDays: 10,
-    signalRsi: null,
+    signalRsi: source === "edgeai" ? 50 : null,
     signalGapPct: null,
+    atr: 2,
+    dataQuality: { dataAsOf: DATA_DATE, entryEligible: true, eliteQualified: true,
+      validatedEdge: true, evidenceStatus: "VALIDATED", eliteStatus: "QUALIFIED",
+      atrEvidence: testAtrEvidence(ticker, market) },
     volMultiplier: 1,
-    volumeAsOf: "2026-09-29",
+    volumeAsOf: DATA_DATE,
     earningsInDays: 30,
     earningsKnowledge: "SIGNAL_TIME",
     entryPrice: 100,
@@ -52,6 +94,7 @@ function session(overrides: Record<string, unknown> = {}) {
     source: "mixed",
     top3SnapshotAt: null,
     top3CutoffEvaluatedAt: null,
+    sourceReports: VERIFIED_REPORTS,
     ...overrides,
   };
 }
@@ -102,13 +145,13 @@ test("Telegram confirmation cannot make signals older than the previous close in
   assert.equal(result.previewAvailable, false);
 });
 
-test("negative-expectancy SHORT may be selected under the new policy", () => {
+test("WEAKEST negative-expectancy SHORT stays research-only despite the informational exception", () => {
   const result = buildTop3LiveSelection(session(), [candidate(1, {
     signalSource: "edgeai", direction: "SHORT", category: "WEAKEST",
     edgeExpectancyR: -0.32, signalRsi: 50, stopPrice: 105, targetPrice: 94,
   })], beforeCutoff)!;
-  assert.equal(result.picks.length, 1);
-  assert.equal(result.picks[0].direction, "SHORT");
+  assert.equal(result.picks.length, 0, "research-only WEAKEST must not be auto-selected");
+  assert.equal(result.sourceReceipts.edgeai.received, true);
 });
 
 test("both required-source receipts are reported independently and both may contribute picks", () => {

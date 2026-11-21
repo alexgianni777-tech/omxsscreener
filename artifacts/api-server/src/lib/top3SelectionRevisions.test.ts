@@ -5,13 +5,47 @@ import { buildTop3SelectionSnapshot, TOP3_POLICY_VERSION } from "./top3Selection
 
 const day = "2026-10-02";
 const time = new Date(`${day}T10:00:00Z`);
+
+const VERIFIED_REPORT = {
+  status: "SUCCESS",
+  dataDates: { SE: "2026-10-01" },
+  marketContext: {
+    SE: {
+      dataAsOf: "2026-10-01",
+      indexSnapshot: {
+        symbol: "^OMX", asOf: "2026-10-01", priceType: "COMPLETED_DAILY_CLOSE",
+        fetchedAt: "2026-10-02T08:00:00.000Z",
+        close: 320, sma50: 300, sma200: 280, source: "unit-test-index",
+      },
+    },
+  },
+};
+const BEARISH_REPORT = {
+  ...VERIFIED_REPORT,
+  marketContext: {
+    SE: {
+      ...VERIFIED_REPORT.marketContext.SE,
+      indexSnapshot: {
+        ...VERIFIED_REPORT.marketContext.SE.indexSnapshot,
+        close: 200, sma50: 240, sma200: 260,
+      },
+    },
+  },
+};
+
 function candidate(id: number, source: "telegram" | "edgeai", overrides: Record<string, unknown> = {}) {
+  const ticker = ["ABB", "EVO", "TELIA", "SAND", "ALFA"][(id - 1) % 5];
   return {
-    id, ticker: `TICK${id}`, category: "MOMENTUM", rank: id, market: "SE", direction: "LONG",
+    id, ticker, category: "MOMENTUM", rank: id, market: "SE", direction: "LONG",
     signalSource: source, signalDate: day, createdAt: time,
     price: 100, perf1m: 3, rs3m: 2, rsi: 50, pctB: 0.5, distFrom20dH: 1,
     edgeExpectancyR: 0.2, edgeSampleN: 100, signalAgeBars: 0, maxHoldDays: 10,
-    signalRsi: 50, signalGapPct: 0, volMultiplier: 1, volumeAsOf: "2026-10-01",
+    signalRsi: 50, signalGapPct: 0, volMultiplier: 1, atr: 2, volumeAsOf: "2026-10-01",
+    dataQuality: { dataAsOf: "2026-10-01", entryEligible: true, eliteQualified: true,
+      validatedEdge: true, evidenceStatus: "VALIDATED", eliteStatus: "QUALIFIED",
+      atrEvidence: { value: 2, source: "unit-test-ohlcv", market: "SE", ticker,
+        dataAsOf: "2026-10-01", period: 14, instrumentType: "UNDERLYING_EQUITY",
+        unit: "PRICE", timeframe: "1d", method: "WILDER" } },
     earningsInDays: 30, earningsKnowledge: "SIGNAL_TIME",
     entryPrice: 100, stopPrice: 95, targetPrice: 110, rr: 2, ...overrides,
   } as any;
@@ -31,7 +65,7 @@ function tx() {
     }),
   };
 }
-const session = { id: 51, date: day, source: "mixed" };
+const session = { id: 51, date: day, source: "mixed", sourceReports: [VERIFIED_REPORT] };
 
 test("fresh revision prices replace recommendations without changing original trade rows", () => {
   const original = candidate(1, "edgeai", { outcome: "WIN", exitPrice: 110, realizedR: 2 });
@@ -40,6 +74,7 @@ test("fresh revision prices replace recommendations without changing original tr
   const before = structuredClone(original);
   const inputs = buildRevisionInputs([original, telegram], [fresh], undefined, day, time);
   assert.equal(inputs.find((row) => row.id === 1)?.entryPrice, 120);
+  assert.equal(inputs.find((row) => row.id === 1)?.atr, 2, "verified underlying ATR must survive revision snapshot serialization");
   assert.deepEqual(original, before);
   assert.equal(original.entryPrice, 100);
   assert.equal(original.realizedR, 2);
@@ -55,6 +90,7 @@ test("updating one source retains the other source's newest inputs, not its olde
   ], JSON.parse(JSON.stringify(previous)), day, time);
   assert.equal(next.find((row) => row.id === 1)?.entryPrice, 120);
   assert.equal(next.find((row) => row.id === 2)?.entryPrice, 110);
+  assert.equal(next.find((row) => row.id === 1)?.atr, 2, "ATR must survive a second-source reimport");
 });
 
 test("missing candidates leave the current imported source but remain in prior version history", () => {
@@ -127,7 +163,7 @@ test("revisions retain the negative SHORT exception and LONG negative-expectancy
     candidate(2, "telegram"),
     candidate(3, "edgeai", { edgeExpectancyR: -0.2 }),
   ], [], undefined, day, time);
-  const rows = buildTop3SelectionSnapshot(inputs, session.id, day, session.source, time);
+  const rows = buildTop3SelectionSnapshot(inputs, session.id, day, session.source, time, [BEARISH_REPORT]);
   assert.equal(rows.find((row) => row.candidateId === 1)?.selected, true);
   assert.equal(rows.find((row) => row.candidateId === 3)?.selected, false);
 });
