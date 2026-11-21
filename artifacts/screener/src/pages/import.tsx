@@ -146,11 +146,11 @@ export function Import() {
           <div className="min-w-0">
             <p className="text-sm font-medium">Importera från EdgeAI</p>
             <p className="text-xs text-muted-foreground truncate">
-              Hämtar dagens SE-setups direkt från{" "}
+              Hämtar verifierade SE/USA-signaler från senaste avslutade handelsdag via{" "}
               <span className="font-mono text-blue-400/80">edgeai/public/data.json</span>
               {edgeStatus.kind === "success" && (
                 <span className="text-emerald-400 ml-1">
-                  · {edgeStatus.setupCount} setups ({edgeStatus.date})
+                  · {edgeStatus.setupCount} signaler från handelsdag {edgeStatus.date}
                 </span>
               )}
               {edgeStatus.kind === "error" && (

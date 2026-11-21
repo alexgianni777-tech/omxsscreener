@@ -22,6 +22,8 @@ jobs:
           corepack prepare pnpm@9.15.9 --activate
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
+      - name: Test exchange-session freshness and stale-data gates
+        run: node --experimental-strip-types --test artifacts/api-server/src/lib/edgeaiFreshness.test.mjs
       - name: Typecheck
         run: pnpm run typecheck
       - name: Production build
