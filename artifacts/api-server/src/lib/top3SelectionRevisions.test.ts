@@ -11,7 +11,7 @@ function candidate(id: number, source: "telegram" | "edgeai", overrides: Record<
     signalSource: source, signalDate: day, createdAt: time,
     price: 100, perf1m: 3, rs3m: 2, rsi: 50, pctB: 0.5, distFrom20dH: 1,
     edgeExpectancyR: 0.2, edgeSampleN: 100, signalAgeBars: 0, maxHoldDays: 10,
-    signalRsi: 50, signalGapPct: 0, volMultiplier: 1, volumeAsOf: "2026-10-01",
+    signalRsi: 50, signalGapPct: 0, volMultiplier: 1, atr: 2, volumeAsOf: "2026-10-01",
     earningsInDays: 30, earningsKnowledge: "SIGNAL_TIME",
     entryPrice: 100, stopPrice: 95, targetPrice: 110, rr: 2, ...overrides,
   } as any;
@@ -40,6 +40,7 @@ test("fresh revision prices replace recommendations without changing original tr
   const before = structuredClone(original);
   const inputs = buildRevisionInputs([original, telegram], [fresh], undefined, day, time);
   assert.equal(inputs.find((row) => row.id === 1)?.entryPrice, 120);
+  assert.equal(inputs.find((row) => row.id === 1)?.atr, 2, "verified underlying ATR must survive revision snapshot serialization");
   assert.deepEqual(original, before);
   assert.equal(original.entryPrice, 100);
   assert.equal(original.realizedR, 2);
@@ -55,6 +56,7 @@ test("updating one source retains the other source's newest inputs, not its olde
   ], JSON.parse(JSON.stringify(previous)), day, time);
   assert.equal(next.find((row) => row.id === 1)?.entryPrice, 120);
   assert.equal(next.find((row) => row.id === 2)?.entryPrice, 110);
+  assert.equal(next.find((row) => row.id === 1)?.atr, 2, "ATR must survive a second-source reimport");
 });
 
 test("missing candidates leave the current imported source but remain in prior version history", () => {
