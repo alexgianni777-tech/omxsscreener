@@ -104,8 +104,10 @@ test("16:30 Monday signal uses Friday's verified volume, not an incomplete Monda
   }];
   const context = { reports };
   const review = reviewCandidate(candidate, null, now, context);
+  assert.equal(review.status, "APPROVED", "prior completed volume and other screening evidence are verified");
   const decision = decideCandidate(candidate, review, signalDate, now, context);
-  assert.equal(decision.status, "TRADEABLE", JSON.stringify({ review, decision }));
+  assert.equal(decision.status, "WAIT", "screening must never override the mandatory board review");
+  assert.match(decision.reasons.join(" "), /BOARD REVIEW REQUIRED/);
 });
 
 test("latest prior completed volume skips a holiday and fails when evidence is missing", async () => {
