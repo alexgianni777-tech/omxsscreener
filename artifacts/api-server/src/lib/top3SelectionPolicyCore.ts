@@ -67,6 +67,8 @@ export type PolicyCandidate = {
   signalRsi: number | null;
   signalGapPct: number | null;
   volMultiplier: number;
+  /** Verified underlying-equity ATR, retained by historical revisions. */
+  atr?: number | null;
   volumeAsOf: string | null;
   earningsInDays: number | null;
   earningsKnowledge: "SIGNAL_TIME" | "UNKNOWN" | null;
