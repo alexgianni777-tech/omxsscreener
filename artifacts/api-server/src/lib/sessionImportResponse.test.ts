@@ -48,8 +48,10 @@ test("force import and reimport return the final saved snapshot and import times
 });
 
 const VERIFIED_SE_REPORT = {
-  status: "SUCCESS",
-  dataDates: { SE: "2026-09-29" },
+  source: "telegram", fingerprint: "unit-test-source-report", status: "SUCCESS",
+  signalDate: "2026-09-30", reportDate: "2026-09-30",
+  generatedAt: "2026-09-30T08:00:00.000Z", importedAt: "2026-09-30T09:00:00.000Z",
+  dataDates: { SE: "2026-09-29", US: "2026-09-29" },
   marketContext: {
     SE: {
       dataAsOf: "2026-09-29",
