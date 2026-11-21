@@ -104,7 +104,8 @@ test("16:30 Monday signal uses Friday's verified volume, not an incomplete Monda
   }];
   const context = { reports };
   const review = reviewCandidate(candidate, null, now, context);
-  assert.equal(decideCandidate(candidate, review, signalDate, now, context).status, "TRADEABLE");
+  const decision = decideCandidate(candidate, review, signalDate, now, context);
+  assert.equal(decision.status, "TRADEABLE", JSON.stringify({ review, decision }));
 });
 
 test("latest prior completed volume skips a holiday and fails when evidence is missing", async () => {
