@@ -79,6 +79,7 @@ test("16:30 Monday signal uses Friday's verified volume, not an incomplete Monda
   assert.equal(calls[0].options.period2.toISOString(), "2026-09-28T00:00:00.000Z");
   // The recorded prior-day date is evidence; the current-day partial bar is never used.
   const candidate = {
+    market: "SE", ticker: "ABB", atr: 2,
     category: "MOMENTUM", direction: "LONG", rs3m: 5, perf1m: 4, rsi: 52,
     signalRsi: null, signalGapPct: null,
     volMultiplier: volume.multiplier, volumeAsOf: volume.asOf,
@@ -86,8 +87,24 @@ test("16:30 Monday signal uses Friday's verified volume, not an incomplete Monda
     entryPrice: 100, stopPrice: 95, targetPrice: 110, rr: 2, price: 100,
     signalSource: "telegram", signalDate,
   };
-  const review = reviewCandidate(candidate, null);
-  assert.equal(decideCandidate(candidate, review, signalDate, new Date("2026-09-28T14:30:00.000Z")).status, "TRADEABLE");
+  // Proof of a prior completed bar is necessary, but a TRADEABLE decision
+  // also requires independent underlying ATR and an evidenced index regime.
+  const now = new Date("2026-09-28T14:30:00.000Z");
+  const reports = [{
+    status: "SUCCESS",
+    dataDates: { SE: previous },
+    marketContext: { SE: {
+      dataAsOf: previous,
+      indexSnapshot: {
+        symbol: "^OMX", asOf: previous, priceType: "COMPLETED_DAILY_CLOSE",
+        fetchedAt: "2026-09-28T07:00:00.000Z",
+        close: 320, sma50: 300, sma200: 280, source: "unit-test-index",
+      },
+    } },
+  }];
+  const context = { reports };
+  const review = reviewCandidate(candidate, null, now, context);
+  assert.equal(decideCandidate(candidate, review, signalDate, now, context).status, "TRADEABLE");
 });
 
 test("latest prior completed volume skips a holiday and fails when evidence is missing", async () => {
