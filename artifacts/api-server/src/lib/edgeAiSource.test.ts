@@ -139,6 +139,19 @@ test("exchange close buffers are timezone-specific and honor holiday/half-day ca
   assert.equal(expectedCompletedMarketDay(new Date("2028-01-03T12:00:00Z"), "SE"), null);
 });
 
+test("a valid same-day completed close is not warned stale because publication is dated that day", async (context) => {
+  const now = new Date("2026-11-16T19:30:00Z"); // after Stockholm settlement buffer, before NY close
+  const generatedAt = "2026-11-16T19:00:00Z";
+  const data = payload(generatedAt, { SE: "2026-11-16", US: "2026-11-13" });
+  context.mock.method(globalThis, "fetch", async () => Response.json(data));
+
+  const result = await read(1000, now);
+  assert.deepEqual(result.includedMarkets, ["SE", "US"]);
+  assert.equal(result.quality.dataDates.SE, "2026-11-16");
+  assert.equal(result.quality.dataDates.US, "2026-11-13");
+  assert.ok(!result.quality.warnings.some((warning) => /dataAsOf .* avviker från förväntad handelsdag/.test(warning)));
+});
+
 test("market verification requires source, positive close, and a valid non-future fetch timestamp", () => {
   const now = new Date("2026-11-16T08:00:00Z");
   const base = asOfMarket("2026-11-13", "2026-11-14T03:35:14Z");

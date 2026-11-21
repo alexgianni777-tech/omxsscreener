@@ -104,7 +104,9 @@ function validateFetchedData(raw: unknown, now: Date): EdgeAiFetchResult {
 
     // Validate each currently-fresh market independently. Bad or stale data in
     // the other exchange must not be mixed into this import or block good data.
-    const marketQuality = validateEdgeAiPayload(data, reportDate, [market]);
+    const marketQuality = validateEdgeAiPayload(data, reportDate, [market], {
+      [market]: assessment.expected ?? undefined,
+    });
     if (marketQuality.errors.length > 0) {
       const reason = marketQuality.errors.join(" ");
       marketStatus[market] = {

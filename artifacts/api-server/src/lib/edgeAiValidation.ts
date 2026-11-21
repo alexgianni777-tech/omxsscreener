@@ -113,6 +113,7 @@ export function validateEdgeAiPayload(
   value: unknown,
   reportDate: string,
   marketsToValidate: readonly EdgeAiMarket[] = ["SE", "US"],
+  expectedDataDates?: Partial<Record<EdgeAiMarket, string>>,
 ): EdgeAiPayloadQuality {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -163,8 +164,9 @@ export function validateEdgeAiPayload(
       else {
         dataDates[market] = dataAsOf;
       }
-      if (dataAsOf <= reportDate && dataAsOf !== previousTradingDate(reportDate, market)) {
-        warnings.push(`${market}: dataAsOf ${dataAsOf} avviker från föregående handelsdag ${previousTradingDate(reportDate, market) || "okänd"}; kontrollera börskalender och D−1-underlag.`);
+      const expectedDataDate = expectedDataDates?.[market] ?? previousTradingDate(reportDate, market);
+      if (dataAsOf <= reportDate && dataAsOf !== expectedDataDate) {
+        warnings.push(`${market}: dataAsOf ${dataAsOf} avviker från förväntad handelsdag ${expectedDataDate || "okänd"}; kontrollera börskalender och marknadsunderlag.`);
       }
     } else {
       errors.push(`markets.${market}.dataAsOf saknas.`);
