@@ -2,8 +2,9 @@ import { candidateSelectionScore, selectSourceBalancedCandidates } from "./candi
 import { screenCandidate, reviewCandidate } from "./screeningReview.ts";
 import type { SourceReport } from "@workspace/market-calendar/research-policy";
 import { isAcceptedSignalDate } from "./signalDatePolicy";
+import { eligibleAgInvestCandidate, OMXS30_SCOPE_START } from "./omxs30Scope";
 
-export const TOP3_POLICY_VERSION = "official-top3-v7";
+export const TOP3_POLICY_VERSION = "official-top3-v8-omxs30";
 export const TOP3_SELECTION_TYPE = "AUTO";
 export const TOP3_CUTOFF_HOUR = 16;
 export const TOP3_CUTOFF_MINUTE = 30;
@@ -127,7 +128,9 @@ export function buildTop3SelectionSnapshot(
     decision.status === "TRADEABLE" &&
     isAcceptedSignalDate(candidate.signalDate, sessionDate, candidate.market ?? "SE") &&
     Boolean(candidate.signalSource) &&
-    (candidate.market === "SE" || candidate.market === "US"),
+    (sessionDate < OMXS30_SCOPE_START
+      ? (candidate.market === "SE" || candidate.market === "US")
+      : eligibleAgInvestCandidate(candidate.market, candidate.ticker, sessionDate)),
   );
   const directionsByTicker = new Map<string, Set<"LONG" | "SHORT">>();
   for (const { candidate } of eligible) {

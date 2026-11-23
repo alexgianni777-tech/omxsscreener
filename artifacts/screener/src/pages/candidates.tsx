@@ -12,6 +12,7 @@ export function Candidates() {
   const [category, setCategory] = useState<string>("");
   const [outcome, setOutcome] = useState<string>("");
   const [direction, setDirection] = useState<string>("");
+  const [showArchived, setShowArchived] = useState(false);
 
   const params: any = {};
   if (category) params.category = category;
@@ -19,9 +20,14 @@ export function Candidates() {
   if (direction) params.direction = direction;
 
   const { data: candidates, isLoading, isError } = useListCandidates(params);
+  // Legacy and foreign candidate rows are retained, but not presented as the
+  // current AG Invest universe unless the user explicitly opens the archive.
+  const visibleCandidates = showArchived
+    ? (candidates ?? [])
+    : (candidates ?? []).filter(c => c.market === "SE" && c.sessionDate >= "2026-11-23");
 
-  // Deduplicated tickers for live price lookup
-  const tickers = [...new Set(candidates?.map((c) => quoteRequestTicker(c.ticker, c.market)) ?? [])];
+  // Never request ongoing quote refreshes for historical US rows by default.
+  const tickers = [...new Set(visibleCandidates.map((c) => quoteRequestTicker(c.ticker, c.market)))];
   const quoteParams = { tickers: tickers.join(",") };
   const { data: quotes, isError: quoteError } = useGetQuotes(
     quoteParams,
@@ -40,7 +46,7 @@ export function Candidates() {
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Candidate Database</h2>
           {import.meta.env.DEV && <PruneUnusedButton />}
-          <p className="text-muted-foreground mt-1">Filter and review all historical trade candidates.</p>
+          <p className="text-muted-foreground mt-1">AG Invest · enbart OMXS30 från 23 november 2026. Historiska USA-affärer finns kvar i arkivet.</p>
         </div>
       </header>
 
@@ -73,6 +79,11 @@ export function Candidates() {
           <option value="LOSS">LOSS</option>
           <option value="SKIP">SKIP</option>
         </select>
+
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} />
+          Visa historisk och tidigare USA-bevakning
+        </label>
 
         <select 
           value={direction} 
@@ -109,10 +120,10 @@ export function Candidates() {
                 <tr><td colSpan={11} className="px-4 py-8 text-center text-muted-foreground animate-pulse">Loading candidates...</td></tr>
               ) : isError || !candidates ? (
                 <tr><td colSpan={11} className="px-4 py-8 text-center text-destructive">Failed to load data.</td></tr>
-              ) : candidates.length === 0 ? (
+              ) : visibleCandidates.length === 0 ? (
                 <tr><td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">No candidates match these filters.</td></tr>
               ) : (
-                candidates.map(c => {
+                visibleCandidates.map(c => {
                   const quoteKey = quoteRequestTicker(c.ticker, c.market);
                   const live = quoteMap[quoteKey];
                   const chg = changePctMap[quoteKey];

@@ -976,7 +976,7 @@ function Top3Section() {
       )}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Top3MarketCard label="Legacy / Telegram — officiella picks" sessions={legacySessions} isLoading={isLoading} accentColor="hsl(var(--primary))" />
-        <Top3MarketCard label="EdgeAI (SE + US) — officiella picks" sessions={edgeAiSessions} isLoading={isLoading} accentColor="hsl(var(--success, 142 71% 45%))" />
+        <Top3MarketCard label="EdgeAI – OMXS30 från 23 nov (historiskt även USA)" sessions={edgeAiSessions} isLoading={isLoading} accentColor="hsl(var(--success, 142 71% 45%))" />
       </div>
     </div>
   );

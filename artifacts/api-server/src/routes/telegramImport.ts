@@ -39,6 +39,7 @@ import {
 import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
 import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
 import { isAcceptedSignalDate, stockholmSignalDate } from "../lib/signalDatePolicy";
+import { eligibleAgInvestCandidate } from "../lib/omxs30Scope";
 import { AUTOMATIC_EARNINGS_CHECK_ENABLED } from "../lib/screeningReview";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
@@ -193,6 +194,17 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
   const importReport = makeImportReport("telegram", reportDate, session, null, { SE: session.dataAsOf ?? null, US: null });
   importReport.warnings = session.dataWarnings ?? [];
   const today = stockholmSignalDate();
+  // Do not create new out-of-index candidates even when a legacy Telegram text
+  // has a valid historical screener format. This does not delete past rows.
+  const outOfScope = candidates.filter(c => !eligibleAgInvestCandidate("SE", c.ticker, today));
+  if (outOfScope.length > 0) {
+    const message = "AG_INVEST_SCOPE_OMXS30_ONLY: " +
+      outOfScope.map(c => String(c.ticker)).join(", ") + " not in Nasdaq OMXS30 on " + today;
+    try { await recordImportFailure(today, importReport, message); }
+    catch (error) { logger.warn({ err: String(error) }, "Could not store OMXS30 scope rejection"); }
+    res.status(422).json({ error: message });
+    return;
+  }
   const date = isAcceptedSignalDate(reportDate, today) ? today : reportDate;
   const [existingSessionForDate] = await db
     .select({ id: screenerSessionsTable.id })
