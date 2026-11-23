@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { screenerSessionsTable, top3SelectionRevisionsTable } from "@workspace/db";
 import { snapshotNewSessionTop3 } from "./top3SelectionPolicy.ts";
-import { top3CutoffForDate } from "./top3SelectionPolicyCore.ts";
+import { top3CutoffForDate, TOP3_POLICY_VERSION } from "./top3SelectionPolicyCore.ts";
 
 function stockholmDate() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -129,7 +129,7 @@ test("both sources seal immediately before the old 16:30 cutoff", async () => {
   );
   assert.equal(tx.session.top3SnapshotAt?.getTime(), cutoff.getTime() - 1);
   assert.equal(tx.session.top3CutoffAt?.getTime(), cutoff.getTime() - 1);
-  assert.equal(tx.session.top3PolicyVersion, "official-top3-v7");
+  assert.equal(tx.session.top3PolicyVersion, TOP3_POLICY_VERSION);
   assert.equal(tx.inserted.length, 2);
 });
 
