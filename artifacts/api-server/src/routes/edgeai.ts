@@ -255,7 +255,7 @@ router.post(
     const volumeRequests = uniqueMappedSetups.map((c) => ({
       ticker: c.ticker,
       market: c.market,
-      asOfDate: String((c.market === "SE" ? se : us).dataAsOf ?? ""),
+      asOfDate: String(se.dataAsOf ?? ""), // Only SE/OMXS30 candidates are mapped.
     }));
     const volumeMap = await fetchCompletedVolumeBatch(yf, volumeRequests);
     uniqueMappedSetups.forEach((c, index) => {
