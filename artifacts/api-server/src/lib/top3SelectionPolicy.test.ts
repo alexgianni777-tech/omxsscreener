@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildTop3SelectionSnapshot } from "./top3SelectionPolicyCore.ts";
+import { buildTop3SelectionSnapshot, TOP3_POLICY_VERSION } from "./top3SelectionPolicyCore.ts";
 
 function candidate(
   id: number,
@@ -92,7 +92,7 @@ test("official Top 3 includes only tradeable rows and caps each market/direction
   assert.equal(selected.filter((row) => row.market === "US" && row.direction === "LONG").length, 1);
   assert.equal(rows.find((row) => row.candidateId === 10)?.decision.status, "INVALID");
   assert.equal(rows.find((row) => row.candidateId === 10)?.selected, false);
-  assert.ok(rows.every((row) => row.policyVersion === "official-top3-v7"));
+  assert.ok(rows.every((row) => row.policyVersion === TOP3_POLICY_VERSION));
 });
 
 test("opposing directions for the same canonical underlying are neither auto-selected and carry CONFLICT", () => {
