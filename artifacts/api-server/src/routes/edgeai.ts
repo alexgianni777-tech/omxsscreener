@@ -43,6 +43,7 @@ import { mapEdgeAiSetup } from "../lib/edgeAiMapping";
 import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
 import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
 import { stockholmSignalDate } from "../lib/signalDatePolicy";
+import { eligibleAgInvestCandidate } from "../lib/omxs30Scope";
 import { AUTOMATIC_EARNINGS_CHECK_ENABLED } from "../lib/screeningReview";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
@@ -83,9 +84,17 @@ router.post(
 
     const markets = edgeData?.markets;
     const se = markets?.SE ?? {};
-    const us = markets?.US ?? {};
-    const setups: any[] = Array.isArray(se.setups) ? se.setups : [];
-    const usRaw: any[] = Array.isArray(us.setups) ? us.setups : [];
+    const decisionDate = stockholmSignalDate();
+    // Fail closed before any DB writes if upstream still publishes an older US/SE scope.
+    if (edgeData?.strategyScope !== "OMXS30_ONLY") {
+      res.status(422).json({ error: "AG Invest requires EdgeAI OMXS30_ONLY publication" });
+      return;
+    }
+    const allSwedish: any[] = Array.isArray(se.setups) ? se.setups : [];
+    const setups: any[] = allSwedish.filter(s =>
+      eligibleAgInvestCandidate("SE", s?.ticker, decisionDate));
+    // Never insert new US candidates, even if a future upstream mistake sends them.
+    const usRaw: any[] = [];
 
     // The stored session date is the EdgeAI signal day, never the browser/server
     // clock. A manual import may intentionally use the latest prior trading day.
@@ -97,7 +106,11 @@ router.post(
       edgeData.generatedAt ?? null,
       fetched.quality.dataDates,
     );
-    importReport.warnings = fetched.quality.warnings;
+    importReport.warnings = [
+      ...fetched.quality.warnings,
+      ...allSwedish.filter(s=>!eligibleAgInvestCandidate("SE",s?.ticker,decisionDate))
+        .map(s=>`OMXS30_ONLY: ignored ${String(s?.ticker ?? "?")} (out of index)`),
+    ];
     importReport.quarantinedIdentities = fetched.quality.quarantinedIdentities;
     if (fetched.quality.errors.length > 0) {
       const message = `EdgeAI-import avvisad: ${fetched.quality.errors.join(" ")}`;
@@ -120,7 +133,7 @@ router.post(
       return;
     }
 
-    const sessionDate = stockholmSignalDate();
+    const sessionDate = decisionDate;
     const freshness = edgeAiDataFreshness(edgeData);
 
     // EdgeAI generated today can still use yesterday's completed market bars.
@@ -140,7 +153,7 @@ router.post(
       importReport.marketContext.SE.weather = { ...mw, rsi: marketRsi, trendLabel: se.regime?.label ?? null };
     }
 
-    // 3. Map setups → candidates (SE + US combined), rank each market separately.
+    // 3. Map ONLY official OMXS30 SE setups; archived US is never a new trade source.
     //    mapEdgeAiSetup is the single shared mapping function (see edgeAiMapping.ts) —
     //    also used by the scheduler auto-import, so both paths stay in sync. Computed
     //    up front (pure, no I/O) so the 409 conflict check below can preview exactly
@@ -148,7 +161,6 @@ router.post(
     const rankCounter: Record<string, number> = {};
     const mappedSetups = [
       ...setups.map((s: any) => mapEdgeAiSetup(s, "SE", rankCounter, fetched.quality.dataDates.SE)),
-      ...usRaw.map((s: any) => mapEdgeAiSetup(s, "US", rankCounter, fetched.quality.dataDates.US)),
     ];
     mappedSetups.forEach((candidate) => {
       Object.assign(candidate, { signalSource: "edgeai" as const, origin: "edgeai" as const });
