@@ -16,7 +16,8 @@ import {
 } from "recharts";
 import { useTop3Analytics, type Top3Session } from "../lib/useTop3Analytics";
 import { top3SessionsForSource } from "../lib/top3SourceViews";
-import { useMarketIntel, type MarketIntelData } from "../lib/useMarketIntel";
+import { activeOmxs30Candidate } from "../lib/omxs30ActiveView";
+import { useMarketIntel } from "../lib/useMarketIntel";
 import { useState, useMemo } from "react";
 import { DashboardLiveTop3 } from "../components/DashboardLiveTop3";
 import { TradeJournal } from "../components/TradeJournal";
@@ -618,152 +619,41 @@ function WeekSummarySection({ equityCurve }: { equityCurve: EquityPoint[] }) {
 
 // ─── Market Intel ─────────────────────────────────────────────────────────────
 
-function fgColor(score: number): string {
-  if (score <= 25) return "#ef4444"; // extreme fear
-  if (score <= 45) return "#f97316"; // fear
-  if (score <= 55) return "#eab308"; // neutral
-  if (score <= 75) return "#84cc16"; // greed
-  return "#22c55e";                  // extreme greed
-}
-
-function fgLabel(rating: string): string {
-  const map: Record<string, string> = {
-    "Extreme Fear": "Extrem Rädsla",
-    "Fear": "Rädsla",
-    "Neutral": "Neutralt",
-    "Greed": "Girighet",
-    "Extreme Greed": "Extrem Girighet",
-  };
-  return map[rating] ?? rating;
-}
-
+// Active market view is intentionally restricted to the OMXS30. Foreign
+// market benchmarks / CNN sentiment remain out of the active trading UI.
 export function MarketIntelSection() {
   const { data, isLoading } = useMarketIntel();
-
-  const peRows: { label: string; key: keyof MarketIntelData["pe"]; avg: number }[] = [
-    { label: "S&P 500 (SPY)", key: "sp500", avg: 17 },
-    { label: "Nasdaq 100 (QQQ)", key: "nasdaq", avg: 25 },
-    { label: "OMXS30", key: "omxs30", avg: 15 },
-  ];
+  const trailing = data?.pe?.omxs30?.trailing;
+  const forward = data?.pe?.omxs30?.forward;
+  const formatPe = (value: number | null | undefined) =>
+    value != null && Number.isFinite(value) ? value.toFixed(1) : "Uppgift saknas";
 
   return (
-    <section className="rounded-lg border border-border bg-card p-3 sm:p-4" data-testid="market-weather">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold">Marknadsläge · separat omvärldsdata</h3>
-        <p className="text-xs font-mono" data-testid="text-market-weather-summary">
-          {isLoading ? <span className="text-muted-foreground">Läser marknadsläge…</span>
-            : !data?.fearGreed ? <span className="text-muted-foreground">Fear &amp; Greed saknas</span>
-            : <>F&amp;G <strong style={{ color: fgColor(data.fearGreed.score) }}>{data.fearGreed.score}</strong> {fgLabel(data.fearGreed.rating)}</>}
-          {data && peRows.map(({ label, key }) => data.pe[key].trailing != null
-            ? <span key={key} className="ml-2 text-muted-foreground">{label.split(" (")[0]} P/E {Math.round((data.pe[key].trailing as number) * 10) / 10}</span> : null)}
+    <section className="rounded-xl border border-border bg-card p-4 sm:p-5 space-y-3" data-testid="market-weather">
+      <div>
+        <h3 className="text-base font-semibold">OMXS30 · marknadsöversikt</h3>
+        <p className="text-xs text-muted-foreground mt-1">
+          Aktuella handelssignaler omfattar enbart officiella OMXS30-bolag.
+          Värderingsmått nedan är extern referensdata och inte en köp- eller säljsignal.
         </p>
       </div>
-      <details className="mt-2">
-        <summary className="cursor-pointer text-xs text-muted-foreground">Visa Fear &amp; Greed och P/E-detaljer</summary>
-      <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Fear & Greed */}
-        <div className="bg-card border border-border rounded-lg p-5 shadow-sm">
-          <div className="text-sm font-medium text-muted-foreground mb-3">CNN Fear &amp; Greed Index</div>
-          {isLoading ? (
-            <div className="h-20 bg-muted animate-pulse rounded" />
-          ) : !data?.fearGreed ? (
-            <p className="text-sm text-muted-foreground">Kunde inte hämta data.</p>
-          ) : (
-            <>
-              <div className="flex items-center gap-4 mb-3">
-                <div
-                  className="text-4xl font-black font-mono"
-                  style={{ color: fgColor(data.fearGreed.score) }}
-                >
-                  {data.fearGreed.score}
-                </div>
-                <div>
-                  <div className="font-semibold" style={{ color: fgColor(data.fearGreed.score) }}>
-                    {fgLabel(data.fearGreed.rating)}
-                  </div>
-                  <div className="text-xs text-muted-foreground">av 100</div>
-                </div>
-              </div>
-              {/* Progress bar */}
-              <div className="w-full h-2.5 bg-muted rounded-full overflow-hidden mb-3">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{
-                    width: `${data.fearGreed.score}%`,
-                    backgroundColor: fgColor(data.fearGreed.score),
-                  }}
-                />
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                <div>
-                  <div className="text-muted-foreground">Igår</div>
-                  <div className="font-mono font-semibold">{data.fearGreed.previousClose}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground">1 vecka</div>
-                  <div className="font-mono font-semibold">{data.fearGreed.previousWeek}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground">1 månad</div>
-                  <div className="font-mono font-semibold">{data.fearGreed.previousMonth}</div>
-                </div>
-              </div>
-            </>
-          )}
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Läser OMXS30-referensdata…</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-3" data-testid="omxs30-valuation">
+          <div className="rounded-lg bg-muted/50 p-3">
+            <p className="text-xs text-muted-foreground">OMXS30 P/E · historiskt</p>
+            <p className="text-lg font-semibold font-mono">{formatPe(trailing)}</p>
+          </div>
+          <div className="rounded-lg bg-muted/50 p-3">
+            <p className="text-xs text-muted-foreground">OMXS30 P/E · framåtblickande</p>
+            <p className="text-lg font-semibold font-mono">{formatPe(forward)}</p>
+          </div>
         </div>
-
-        {/* P/E Ratios */}
-        <div className="bg-card border border-border rounded-lg p-5 shadow-sm">
-          <div className="text-sm font-medium text-muted-foreground mb-3">P/E-tal (aktuellt vs historiskt snitt)</div>
-          {isLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => <div key={i} className="h-10 bg-muted animate-pulse rounded" />)}
-            </div>
-          ) : !data ? (
-            <p className="text-sm text-muted-foreground">Kunde inte hämta data.</p>
-          ) : (
-            <div className="space-y-3">
-              {peRows.map(({ label, key, avg }) => {
-                const pe = data.pe[key];
-                const trailing = pe.trailing != null ? Math.round(pe.trailing * 10) / 10 : null;
-                const forward = pe.forward != null ? Math.round(pe.forward * 10) / 10 : null;
-                const vsAvg = trailing != null ? trailing - avg : null;
-                const color = vsAvg == null ? "" : vsAvg > 5 ? "text-destructive" : vsAvg < -2 ? "text-success" : "text-muted-foreground";
-                return (
-                  <div key={key} className="flex items-center justify-between">
-                    <span className="text-sm">{label}</span>
-                    <div className="flex items-center gap-3 text-right">
-                      <div>
-                        <div className={`font-mono font-bold text-sm ${color}`}>
-                          {trailing ?? "–"}
-                        </div>
-                        <div className="text-xs text-muted-foreground">trailing</div>
-                      </div>
-                      <div>
-                        <div className="font-mono text-sm text-muted-foreground">
-                          {forward ?? "–"}
-                        </div>
-                        <div className="text-xs text-muted-foreground">forward</div>
-                      </div>
-                      <div>
-                        <div className="font-mono text-xs text-muted-foreground">
-                          snitt ~{avg}
-                        </div>
-                        {vsAvg != null && (
-                          <div className={`text-xs font-semibold ${color}`}>
-                            {vsAvg > 0 ? "+" : ""}{vsAvg.toFixed(1)}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-      </details>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Kursdag, aktualitet och signalregim kontrolleras separat i dagens OMXS30-session.
+      </p>
     </section>
   );
 }
@@ -956,8 +846,15 @@ function SessionTooltip({ active, payload }: TooltipProps<number, string>) {
 function Top3Section() {
   const { data, isLoading } = useTop3Analytics();
 
-  const legacySessions = top3SessionsForSource(data?.sessions ?? [], "telegram");
-  const edgeAiSessions = top3SessionsForSource(data?.sessions ?? [], "edgeai");
+  // Protect the active performance display from archived US and non-index picks.
+  // Historical rows remain in the database and the dedicated archive.
+  const activeSessions = (data?.sessions ?? []).flatMap(session => {
+    const picks = session.picks.filter(pick =>
+      activeOmxs30Candidate({ market: pick.market, ticker: pick.ticker, sessionDate: session.date }));
+    return picks.length ? [{ ...session, picks }] : [];
+  });
+  const legacySessions = top3SessionsForSource(activeSessions, "telegram");
+  const edgeAiSessions = top3SessionsForSource(activeSessions, "edgeai");
 
   return (
     <div className="space-y-6">
@@ -966,17 +863,17 @@ function Top3Section() {
         <h3 className="text-lg font-semibold">Top 3 — officiellt signal-time-urval</h3>
       </div>
       <p className="text-xs text-muted-foreground -mt-4">
-        Frysta urval från första signal-time-importen, endast TRADEABLE och högst tre per market/riktning. Äldre sessioner utan sparad snapshot markeras som otillgängliga och ingår inte i resultatet.
+        Endast OMXS30-urval från 23 november 2026 visas här. Frysta signal-time-urval, endast TRADEABLE och högst tre per marknad/riktning. Äldre sessioner kan granskas i historikarkivet.
         {" "}Detta är historiska signalutfall, inte bekräftad netto-edge från verkliga affärer. Verkliga och simulerade fills följs separat i journalen.
       </p>
-      {(data?.sessions.filter((s) => s.selectionStatus === "UNAVAILABLE").length ?? 0) > 0 && (
+      {(activeSessions.filter((s) => s.selectionStatus === "UNAVAILABLE").length) > 0 && (
         <p className="text-xs text-muted-foreground">
-          Historik utan officiellt urval: {data?.sessions.filter((s) => s.selectionStatus === "UNAVAILABLE").length} sessioner. De räknas inte till någon källas resultat.
+          Historik utan officiellt urval: {activeSessions.filter((s) => s.selectionStatus === "UNAVAILABLE").length} sessioner. De räknas inte till någon källas resultat.
         </p>
       )}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Top3MarketCard label="Legacy / Telegram — officiella picks" sessions={legacySessions} isLoading={isLoading} accentColor="hsl(var(--primary))" />
-        <Top3MarketCard label="EdgeAI – OMXS30 från 23 nov (historiskt även USA)" sessions={edgeAiSessions} isLoading={isLoading} accentColor="hsl(var(--success, 142 71% 45%))" />
+        <Top3MarketCard label="EdgeAI – OMXS30" sessions={edgeAiSessions} isLoading={isLoading} accentColor="hsl(var(--success, 142 71% 45%))" />
       </div>
     </div>
   );
