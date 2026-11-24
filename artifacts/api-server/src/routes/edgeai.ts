@@ -43,6 +43,7 @@ import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
 import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
 import { stockholmSignalDate } from "../lib/signalDatePolicy";
 import { signalSessionDate } from "@workspace/market-calendar";
+import { describeAgInvestScopeViolations, findAgInvestScopeViolations } from "../lib/omxs30Scope";
 import { AUTOMATIC_EARNINGS_CHECK_ENABLED } from "../lib/screeningReview";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
@@ -88,14 +89,35 @@ router.post(
     const edgeData = fetched.data;
     const sourceMarkets = edgeData?.markets;
     const se = fetched.includedMarkets.includes("SE") ? sourceMarkets?.SE ?? {} : {};
-    const us = fetched.includedMarkets.includes("US") ? sourceMarkets?.US ?? {} : {};
-    const { SE: setups, US: usRaw } = verifiedSetupsForImport(fetched);
-    const sessionMarket = setups.length > 0 ? "SE" : "US";
-    const sessionDate = signalSessionDate(importAt, sessionMarket);
+    const { SE: setups, US: usSetups } = verifiedSetupsForImport(fetched);
+    const sessionDate = signalSessionDate(importAt, "SE");
     const signalDate = sessionDate;
 
     // generatedAt is a report timestamp, not the signal session. Use the
     // included market's next valid session; each candidate retains dataAsOf.
+    if (edgeData?.strategyScope !== "OMXS30_ONLY") {
+      res.status(422).json({
+        error: "AG_INVEST_SCOPE_OMXS30_ONLY: EdgeAI publication scope is missing or not OMXS30_ONLY",
+        decisionDate: sessionDate,
+      });
+      return;
+    }
+    if (!fetched.includedMarkets.includes("SE")) {
+      res.status(422).json({
+        error: "AG_INVEST_SCOPE_OMXS30_ONLY: no verified current Swedish market payload",
+        decisionDate: sessionDate,
+      });
+      return;
+    }
+    const scopeViolations = findAgInvestScopeViolations({ SE: setups, US: usSetups }, sessionDate);
+    if (scopeViolations.length > 0) {
+      res.status(422).json({
+        error: describeAgInvestScopeViolations(scopeViolations, sessionDate),
+        rejectedCandidates: scopeViolations,
+      });
+      return;
+    }
+
     const importReport = makeImportReport(
       "edgeai",
       sessionDate,
@@ -121,7 +143,7 @@ router.post(
       });
       return;
     }
-    if (setups.length === 0 && usRaw.length === 0) {
+    if (setups.length === 0) {
       const message = "EdgeAI-rapporten innehåller inga setups. Befintliga kandidater lämnades orörda.";
       try {
         await recordImportFailure(signalDate, importReport, message);
@@ -138,7 +160,7 @@ router.post(
       return;
     }
 
-    const primaryMarket = setups.length > 0 ? se : us;
+    const primaryMarket = se;
 
     // EdgeAI generated today can still use yesterday's completed market bars.
     // Keep index context on the SE data day, never the partial import-day bar.
@@ -170,12 +192,11 @@ router.post(
     const rankCounter: Record<string, number> = {};
     const mappedSetups = [
       ...setups.map((s: any) => mapEdgeAiSetup(s, "SE", rankCounter, fetched.quality.dataDates.SE)),
-      ...usRaw.map((s: any) => mapEdgeAiSetup(s, "US", rankCounter, fetched.quality.dataDates.US)),
     ];
     mappedSetups.forEach((candidate) => {
       Object.assign(candidate, { signalSource: "edgeai" as const, origin: "edgeai" as const });
     });
-    const safeSetups = isolateEdgeAiPlans(mappedSetups, [...setups, ...usRaw].map(s => `${s.setup} (${s.signalT ?? "signaltid okänd"})`), importReport);
+    const safeSetups = isolateEdgeAiPlans(mappedSetups, setups.map(s => `${s.setup} (${s.signalT ?? "signaltid okänd"})`), importReport);
     const { candidates: uniqueMappedSetups, skipped } = deduplicateCandidates(safeSetups, importReport);
     if (skipped.length > 0) {
       logger.warn({ skipped }, "EdgeAI import skipped duplicate candidate identities");
@@ -268,7 +289,7 @@ router.post(
     const volumeRequests = uniqueMappedSetups.map((c) => ({
       ticker: c.ticker,
       market: c.market,
-      asOfDate: String((c.market === "SE" ? se : us).dataAsOf ?? ""),
+      asOfDate: String(se.dataAsOf ?? ""),
     }));
     const volumeMap = await fetchCompletedVolumeBatch(yf, volumeRequests);
     uniqueMappedSetups.forEach((c, index) => {
@@ -394,7 +415,7 @@ router.post(
       date: sessionDate,
       setupCount: uniqueMappedSetups.length,
       generatedAt: edgeData.generatedAt,
-      partial: fetched.includedMarkets.length < 2,
+      partial: false,
       marketStatus: fetched.marketStatus,
       includedMarkets: fetched.includedMarkets,
       cacheStatus: fetched.cacheStatus,

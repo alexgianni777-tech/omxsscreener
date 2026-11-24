@@ -18,9 +18,10 @@ const NOVEMBER_MEMBERS = [
   "TEL2-B.ST", "TELIA.ST", "VOLV-B.ST",
 ] as const;
 
-const DECEMBER_MEMBERS = NOVEMBER_MEMBERS
-  .filter((ticker) => ticker !== "LIFCO-B.ST")
-  .concat("SOBI.ST");
+const DECEMBER_MEMBERS: readonly string[] = [
+  ...NOVEMBER_MEMBERS.filter((ticker) => ticker !== "LIFCO-B.ST"),
+  "SOBI.ST",
+];
 
 const SYMBOL_ALIASES: Readonly<Record<string, string>> = {
   "INVESTOR B": "INVE-B.ST",
@@ -59,4 +60,34 @@ export function eligibleAgInvestCandidate(
 ): boolean {
   if (market !== "SE" || decisionDate < OMXS30_SCOPE_START) return false;
   return omxs30Members(decisionDate).has(normalizedOmxs30Ticker(ticker) ?? "");
+}
+
+export type AgInvestScopeViolation = {
+  market: "SE" | "US";
+  ticker: string;
+};
+
+/** Return every non-OMXS30 proposal so importers can reject before DB writes. */
+export function findAgInvestScopeViolations(
+  markets: Partial<Record<"SE" | "US", readonly unknown[]>>,
+  decisionDate: string,
+): AgInvestScopeViolation[] {
+  return (["SE", "US"] as const).flatMap((market) =>
+    (markets[market] ?? []).flatMap((setup) => {
+      const tickerValue = typeof setup === "string" ? setup : (setup as { ticker?: unknown } | null)?.ticker;
+      if (eligibleAgInvestCandidate(market, tickerValue, decisionDate)) return [];
+      return [{
+        market,
+        ticker: typeof tickerValue === "string" && tickerValue.trim() ? tickerValue.trim() : "UNKNOWN",
+      }];
+    }),
+  );
+}
+
+export function describeAgInvestScopeViolations(
+  violations: readonly AgInvestScopeViolation[],
+  decisionDate: string,
+): string {
+  const symbols = violations.map(({ market, ticker }) => `${market}:${ticker}`).join(", ");
+  return `AG_INVEST_SCOPE_OMXS30_ONLY: blocked ${symbols || "unknown candidate"} for decision day ${decisionDate}`;
 }

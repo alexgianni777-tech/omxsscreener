@@ -33,6 +33,7 @@ import { withRetry } from "./retry";
 import { alreadyAcceptedReport } from "./scheduledReportPolicy";
 import { createImportCheckCoordinator } from "./importCheckCoordinator";
 import { signalSessionDate, marketDate } from "@workspace/market-calendar";
+import { describeAgInvestScopeViolations, findAgInvestScopeViolations } from "./omxs30Scope";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -100,13 +101,29 @@ async function runImport(now = new Date()): Promise<boolean> {
   const edgeData = fetched.data;
   const { SE: seSetups, US: usSetups } = verifiedSetupsForImport(fetched);
   const se = fetched.includedMarkets.includes("SE") ? edgeData?.markets?.SE : undefined;
-  const usMarket = fetched.includedMarkets.includes("US") ? edgeData?.markets?.US : undefined;
-  const sessionMarket = seSetups.length > 0 ? "SE" : usSetups.length > 0 ? "US" : fetched.includedMarkets[0] ?? "SE";
-  const date = signalSessionDate(now, sessionMarket);
+  const date = signalSessionDate(now, "SE");
   const signalDate = date;
   const importReport = makeImportReport("edgeai", signalDate, fetched.rawData, edgeData.generatedAt ?? null, fetched.quality.dataDates);
   importReport.warnings = fetched.quality.warnings;
   importReport.quarantinedIdentities = fetched.quality.quarantinedIdentities;
+  if (edgeData?.strategyScope !== "OMXS30_ONLY") {
+    throw new ImportDataError(
+      "AG_INVEST_SCOPE_OMXS30_ONLY: EdgeAI publication scope is missing or not OMXS30_ONLY",
+      importReport,
+    );
+  }
+  if (!fetched.includedMarkets.includes("SE") || !se) {
+    throw new ImportDataError(
+      "AG_INVEST_SCOPE_OMXS30_ONLY: no verified current Swedish market payload",
+      importReport,
+    );
+  }
+  const scopeViolations = findAgInvestScopeViolations({ SE: seSetups, US: usSetups }, date);
+  if (scopeViolations.length > 0) {
+    const message = describeAgInvestScopeViolations(scopeViolations, date);
+    importReport.warnings.push(message);
+    throw new ImportDataError(message, importReport);
+  }
   if (fetched.quality.errors.length > 0) {
     throw new ImportDataError(`EdgeAI-import avvisad: ${fetched.quality.errors.join(" ")}`, importReport);
   }
@@ -115,36 +132,29 @@ async function runImport(now = new Date()): Promise<boolean> {
     return false;
   }
 
-  const allSetups = [...seSetups, ...usSetups];
-  const primaryMarket = seSetups.length > 0 ? se : usMarket;
-
-  if (allSetups.length === 0) {
+  const primaryMarket = se;
+  if (seSetups.length === 0) {
     throw new ImportDataError("EdgeAI-rapporten innehåller inga setups. Befintliga kandidater lämnades orörda.", importReport);
   }
 
   // The SE data date may be yesterday even when EdgeAI was generated today.
   // Do not replace that completed index bar with today's partial quote.
-  const mw = seSetups.length > 0
-    ? await fetchOmxsMarketWeather(yf, String(se?.dataAsOf ?? ""))
-    : { omxsValue: 0, perf5d: 0, perf1m: 0, perf3m: 0, marketRsi: 0 };
+  const mw = await fetchOmxsMarketWeather(yf, String(se.dataAsOf ?? ""));
   if (seSetups.length > 0 && importReport.marketContext?.SE) {
     importReport.marketContext.SE.weather = { ...mw, rsi: mw.marketRsi, trendLabel: se?.regime?.label ?? null };
   }
 
   const rankCounterSE: Record<string, number> = {};
-  const rankCounterUS: Record<string, number> = {};
   const seMapped = seSetups.map((s) => mapEdgeAiSetup(s, "SE", rankCounterSE, fetched.quality.dataDates.SE));
-  const usMapped = usSetups.map((s) => mapEdgeAiSetup(s, "US", rankCounterUS, fetched.quality.dataDates.US));
-  const allMapped = [...seMapped, ...usMapped];
-  allMapped.forEach((candidate) => {
+  seMapped.forEach((candidate) => {
     Object.assign(candidate, { signalSource: "edgeai" as const, origin: "edgeai" as const });
   });
-  const mapped = isolateEdgeAiPlans(allMapped, [...seSetups, ...usSetups].map(s => `${s.setup} (${s.signalT ?? "signaltid okänd"})`), importReport);
+  const mapped = isolateEdgeAiPlans(seMapped, seSetups.map(s => `${s.setup} (${s.signalT ?? "signaltid okänd"})`), importReport);
 
   const volumeRequests = mapped.map((c) => ({
     ticker: c.ticker,
     market: c.market,
-    asOfDate: String((c.market === "SE" ? se : edgeData.markets.US)?.dataAsOf ?? ""),
+    asOfDate: String(se.dataAsOf ?? ""),
   }));
   const volumeMap = await fetchCompletedVolumeBatch(yf, volumeRequests);
   mapped.forEach((c, index) => {
@@ -226,7 +236,7 @@ async function runImport(now = new Date()): Promise<boolean> {
           undefined, ["edgeai"], false,
         );
         logger.info(
-          { date, sessionId: alreadyStored.id, seSetups: seSetups.length, usSetups: usSetups.length },
+          { date, sessionId: alreadyStored.id, seSetups: seSetups.length, usSetupsRejected: 0 },
           "[scheduler] EdgeAI merged into existing session",
         );
         return !duplicateReport;
@@ -262,7 +272,7 @@ async function runImport(now = new Date()): Promise<boolean> {
       );
       // Fresh insert: nothing existed before, so a diff would be all-"added" noise — skip it.
       logger.info(
-        { date, sessionId: inserted.id, seSetups: seSetups.length, usSetups: usSetups.length, omxsValue: mw.omxsValue },
+        { date, sessionId: inserted.id, seSetups: seSetups.length, omxsValue: mw.omxsValue },
         "[scheduler] Auto-import complete",
       );
       return true;
