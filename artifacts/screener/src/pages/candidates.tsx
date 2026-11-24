@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { quoteRequestTicker } from "../lib/researchQuote";
+import { filterActiveOmxs30Candidates, filterArchivedCandidates } from "../lib/omxs30ActiveView";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePruneUnusedCandidates, getListCandidatesQueryKey, getListSessionsQueryKey, getGetLastValidTop3QueryKey, useListCandidates, useGetQuotes, getGetQuotesQueryKey, type QuoteResult } from "@workspace/api-client-react";
 import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
@@ -12,6 +13,7 @@ export function Candidates() {
   const [category, setCategory] = useState<string>("");
   const [outcome, setOutcome] = useState<string>("");
   const [direction, setDirection] = useState<string>("");
+  const [showArchived, setShowArchived] = useState(false);
 
   const params: any = {};
   if (category) params.category = category;
@@ -19,9 +21,15 @@ export function Candidates() {
   if (direction) params.direction = direction;
 
   const { data: candidates, isLoading, isError } = useListCandidates(params);
+  const activeCandidates = filterActiveOmxs30Candidates(candidates ?? []);
+  const archivedCandidates = filterArchivedCandidates(candidates ?? []);
+  const visibleCandidates = showArchived ? archivedCandidates : activeCandidates;
 
-  // Deduplicated tickers for live price lookup
-  const tickers = [...new Set(candidates?.map((c) => quoteRequestTicker(c.ticker, c.market)) ?? [])];
+  // Active OMXS30 names only use the existing quote path. Archive mode never
+  // requests quotes or shows a live-entry approval for historical/foreign rows.
+  const tickers = showArchived
+    ? []
+    : [...new Set(activeCandidates.map((c) => quoteRequestTicker(c.ticker, c.market)))];
   const quoteParams = { tickers: tickers.join(",") };
   const { data: quotes, isError: quoteError } = useGetQuotes(
     quoteParams,
@@ -38,9 +46,11 @@ export function Candidates() {
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Candidate Database</h2>
+          <h2 className="text-3xl font-bold tracking-tight">OMXS30 · kandidater</h2>
           {import.meta.env.DEV && <PruneUnusedButton />}
-          <p className="text-muted-foreground mt-1">Filter and review all historical trade candidates.</p>
+          <p className="text-muted-foreground mt-1">
+            Aktiva kandidater filtreras mot OMXS30-medlemskapet på respektive sessionsdatum.
+          </p>
         </div>
       </header>
 
@@ -55,7 +65,7 @@ export function Candidates() {
           onChange={e => setCategory(e.target.value)}
           className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <option value="">All Categories</option>
+          <option value="">Alla kategorier</option>
           <option value="MOMENTUM">MOMENTUM</option>
           <option value="SQUEEZE">SQUEEZE</option>
           <option value="STUDS">STUDS</option>
@@ -67,7 +77,7 @@ export function Candidates() {
           onChange={e => setOutcome(e.target.value)}
           className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <option value="">All Outcomes</option>
+          <option value="">Alla utfall</option>
           <option value="PENDING">PENDING</option>
           <option value="WIN">WIN</option>
           <option value="LOSS">LOSS</option>
@@ -79,11 +89,33 @@ export function Candidates() {
           onChange={e => setDirection(e.target.value)}
           className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <option value="">All Directions</option>
+          <option value="">Alla riktningar</option>
           <option value="LONG">LONG</option>
           <option value="SHORT">SHORT</option>
         </select>
+
+        <button
+          type="button"
+          aria-pressed={showArchived}
+          data-testid="toggle-candidate-archive"
+          onClick={() => setShowArchived((value) => !value)}
+          className={`h-9 rounded-md border px-3 text-sm font-medium transition-colors ${
+            showArchived ? "border-amber-500/40 bg-amber-500/10 text-amber-700" : "border-border bg-background hover:bg-muted"
+          }`}
+        >
+          {showArchived
+            ? `Visa aktiva OMXS30-kandidater (${activeCandidates.length})`
+            : `Visa historiskt arkiv (${archivedCandidates.length})`}
+        </button>
       </div>
+
+      {showArchived && (
+        <div role="status" data-testid="candidate-archive-warning"
+          className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-800">
+          <strong>Historikarkiv · inte aktiva affärsförslag.</strong>
+          <span className="ml-1">Äldre sessioner och poster utanför OMXS30 visas endast för granskning. Inga livekurser eller entrygodkännanden visas här; posterna finns kvar oförändrade i databasen.</span>
+        </div>
+      )}
 
       {/* Data Table */}
       <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
@@ -109,10 +141,14 @@ export function Candidates() {
                 <tr><td colSpan={11} className="px-4 py-8 text-center text-muted-foreground animate-pulse">Loading candidates...</td></tr>
               ) : isError || !candidates ? (
                 <tr><td colSpan={11} className="px-4 py-8 text-center text-destructive">Failed to load data.</td></tr>
-              ) : candidates.length === 0 ? (
-                <tr><td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">No candidates match these filters.</td></tr>
+              ) : visibleCandidates.length === 0 ? (
+                <tr><td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">
+                  {showArchived
+                    ? "Inga arkiverade poster matchar filtren."
+                    : "Inga aktiva OMXS30-kandidater matchar filtren."}
+                </td></tr>
               ) : (
-                candidates.map(c => {
+                visibleCandidates.map(c => {
                   const quoteKey = quoteRequestTicker(c.ticker, c.market);
                   const live = quoteMap[quoteKey];
                   const chg = changePctMap[quoteKey];
@@ -125,7 +161,13 @@ export function Candidates() {
                       </td>
                       <td className="px-4 py-3 min-w-[320px]">
                         <strong>{c.ticker}</strong>
-                        <LiveEntryGuard plan={c} quote={entryQuotes[quoteKey]} signal={c} />
+                        {showArchived ? (
+                          <p className="mt-1 text-xs text-amber-700">
+                            ARKIV · {c.market ?? "okänd marknad"} · historisk post · ingen aktiv entrybekräftelse
+                          </p>
+                        ) : (
+                          <LiveEntryGuard plan={c} quote={entryQuotes[quoteKey]} signal={c} />
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 rounded text-xs font-bold ${c.direction === 'LONG' ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>
@@ -137,7 +179,9 @@ export function Candidates() {
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-muted-foreground">{formatNumber(c.price)}</td>
                       <td className="px-4 py-3 text-right">
-                        {live != null ? (
+                        {showArchived ? (
+                          <span className="text-xs text-muted-foreground">Arkiv · ej hämtad</span>
+                        ) : live != null ? (
                           <div className="flex flex-col items-end gap-1">
                             <span className="font-mono font-semibold">{formatNumber(live)}</span>
                             {chg != null && (
