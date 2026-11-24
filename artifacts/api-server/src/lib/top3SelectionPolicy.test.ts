@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildTop3SelectionSnapshot } from "./top3SelectionPolicyCore.ts";
+import { buildTop3SelectionSnapshot, TOP3_POLICY_VERSION } from "./top3SelectionPolicyCore.ts";
 
 function candidate(
   id: number,
@@ -47,12 +47,12 @@ function candidate(
 function currentStockholmDate() {
   return "2026-11-12"; // Fixture and evaluation clock are both pinned.
 }
-function regimeReports(se="BULLISH",us=se) {
+function regimeReports(se="BULLISH",us=se,dataDate="2026-11-11") {
   return (["SE","US"] as const).map(market=>{
     const bear=(market==="SE"?se:us)==="BEARISH";
-    return {status:"SUCCESS",dataDates:{[market]:"2026-11-11"},marketContext:{[market]:{
-      dataAsOf:"2026-11-11",indexSnapshot:{close:bear?90:110,sma50:bear?95:105,sma200:100,
-        source:"DEMO TEST ONLY",asOf:market==="SE"?"2026-11-11T16:30:00Z":"2026-11-11T21:00:00Z"}}}};
+    return {status:"SUCCESS",dataDates:{[market]:dataDate},marketContext:{[market]:{
+      dataAsOf:dataDate,indexSnapshot:{close:bear?90:110,sma50:bear?95:105,sma200:100,
+        source:"DEMO TEST ONLY",asOf:market==="SE"?`${dataDate}T16:30:00Z`:`${dataDate}T21:00:00Z`}}}};
   });
 }
 
@@ -89,10 +89,39 @@ test("official Top 3 includes only tradeable rows and caps each market/direction
   assert.equal(selected.length, 7);
   assert.equal(selected.filter((row) => row.market === "SE" && row.direction === "LONG").length, 3);
   assert.equal(selected.filter((row) => row.market === "SE" && row.direction === "SHORT").length, 3);
-  assert.equal(selected.filter((row) => row.market === "US" && row.direction === "LONG").length, 1);
+  assert.equal(selected.filter((row) => row.market === "US" && row.direction === "LONG").length, 1,
+    "pre-scope selection output remains historical evidence and is later labeled archive-only");
   assert.equal(rows.find((row) => row.candidateId === 10)?.decision.status, "INVALID");
   assert.equal(rows.find((row) => row.candidateId === 10)?.selected, false);
-  assert.ok(rows.every((row) => row.policyVersion === "official-top3-v7"));
+  assert.ok(rows.every((row) => row.policyVersion === TOP3_POLICY_VERSION));
+});
+
+test("active OMXS30 Top 3 selects Investor B and blocks US and Swedish non-members", () => {
+  const decisionDate = "2026-11-24";
+  const now = new Date("2026-11-24T10:00:00.000Z");
+  const rows = buildTop3SelectionSnapshot([
+    candidate(11, "INVE-B", "LONG", "SE", {
+      signalDate: decisionDate,
+      volumeAsOf: "2026-11-23",
+    }),
+    candidate(12, "AAPL", "LONG", "US", {
+      signalDate: decisionDate,
+      volumeAsOf: "2026-11-23",
+    }),
+    candidate(13, "MYCR", "LONG", "SE", {
+      signalDate: decisionDate,
+      volumeAsOf: "2026-11-23",
+    }),
+  ] as any, 104, decisionDate, "mixed", now, regimeReports("BULLISH", "BULLISH", "2026-11-23"));
+
+  assert.equal(rows.find((row) => row.ticker === "INVE-B.ST")?.selected, true);
+  for (const ticker of ["AAPL", "MYCR.ST"]) {
+    const row = rows.find((candidateRow) => candidateRow.ticker === ticker);
+    assert.equal(row?.selected, false, `${ticker} must not be selected`);
+    assert.equal(row?.review.status, "BLOCKED");
+    assert.equal(row?.decision.status, "BLOCKED");
+    assert.ok(row?.decision.reasons.some((reason) => reason.includes("AG_INVEST_SCOPE_OMXS30_ONLY")));
+  }
 });
 
 test("opposing directions for the same canonical underlying are neither auto-selected and carry CONFLICT", () => {

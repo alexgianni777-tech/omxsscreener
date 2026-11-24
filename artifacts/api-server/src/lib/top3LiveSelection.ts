@@ -4,6 +4,7 @@ import {
   type PolicyCandidate,
 } from "./top3SelectionPolicyCore";
 import { isAcceptedSignalDate } from "./signalDatePolicy";
+import { eligibleAgInvestCandidate, OMXS30_SCOPE_START } from "./omxs30Scope";
 
 export type Top3LiveCandidate = PolicyCandidate & {
   createdAt: Date | null;
@@ -42,6 +43,9 @@ export function buildTop3LiveSelection(
   const observed = candidates.filter((candidate) =>
     (candidate.signalSource === "telegram" || candidate.signalSource === "edgeai") &&
     isAcceptedSignalDate(candidate.signalDate, session.date, candidate.market ?? "SE") &&
+    (session.date < OMXS30_SCOPE_START
+      ? candidate.market === "SE" || candidate.market === "US"
+      : eligibleAgInvestCandidate(candidate.market, candidate.ticker, session.date)) &&
     candidate.createdAt instanceof Date &&
     candidate.createdAt.getTime() <= now.getTime(),
   );
@@ -82,7 +86,9 @@ export function buildTop3LiveSelection(
       .filter((selection) =>
         selection.selected &&
         selection.rank != null &&
-        (selection.market === "SE" || selection.market === "US") &&
+        (session.date < OMXS30_SCOPE_START
+          ? selection.market === "SE" || selection.market === "US"
+          : selection.market === "SE") &&
         (selection.source === "telegram" || selection.source === "edgeai"),
       )
       .map((selection) => ({

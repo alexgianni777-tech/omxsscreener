@@ -2,8 +2,9 @@ import { candidateSelectionScore, selectSourceBalancedCandidates } from "./candi
 import { screenCandidate, reviewCandidate } from "./screeningReview.ts";
 import type { SourceReport } from "@workspace/market-calendar/research-policy";
 import { isAcceptedSignalDate } from "./signalDatePolicy";
+import { eligibleAgInvestCandidate, OMXS30_SCOPE_START } from "./omxs30Scope";
 
-export const TOP3_POLICY_VERSION = "official-top3-v7";
+export const TOP3_POLICY_VERSION = "official-top3-v8-omxs30";
 export const TOP3_SELECTION_TYPE = "AUTO";
 export const TOP3_CUTOFF_HOUR = 16;
 export const TOP3_CUTOFF_MINUTE = 30;
@@ -110,23 +111,37 @@ export function buildTop3SelectionSnapshot(
   reports:readonly SourceReport[]=[],
 ): SnapshotInput[] {
   const evaluated = candidates.map((candidate) => {
-    const review = reviewCandidate(candidate, sessionSource,selectedAt,{reports});
+    const baseReview = reviewCandidate(candidate, sessionSource, selectedAt, { reports });
+    const beforeOmxs30Scope = sessionDate < OMXS30_SCOPE_START;
+    const inActiveUniverse = beforeOmxs30Scope
+      ? candidate.market === "SE" || candidate.market === "US"
+      : eligibleAgInvestCandidate(candidate.market, candidate.ticker, sessionDate);
+    const scopeReason = `AG_INVEST_SCOPE_OMXS30_ONLY: ${candidate.market ?? "UNKNOWN"}:${candidate.ticker} is not an OMXS30 member on decision day ${sessionDate}`;
+    // Historical sessions retain their original evaluation rules. From the
+    // effective decision date onward, an out-of-scope candidate is explicitly
+    // blocked in both review and decision status, not merely omitted at ranking.
+    const review = inActiveUniverse
+      ? baseReview
+      : { ...baseReview, status: "BLOCKED", reasons: [...baseReview.reasons, scopeReason] };
     // Signal selection is distinct from the public, mandatory board-review gate.
-    const decision = screenCandidate(candidate, review, sessionDate, selectedAt,{reports});
+    const decision = inActiveUniverse
+      ? screenCandidate(candidate, review, sessionDate, selectedAt, { reports })
+      : { status: "BLOCKED", reasons: [...review.reasons] };
     const rawScore = candidateSelectionScore(candidate);
     return {
       candidate,
       review,
       decision,
+      inActiveUniverse,
       score: Number.isFinite(rawScore) ? Number(rawScore.toFixed(6)) : 0,
     };
   });
 
-  const eligible = evaluated.filter(({ decision, candidate }) =>
+  const eligible = evaluated.filter(({ decision, candidate, inActiveUniverse }) =>
     decision.status === "TRADEABLE" &&
+    inActiveUniverse &&
     isAcceptedSignalDate(candidate.signalDate, sessionDate, candidate.market ?? "SE") &&
-    Boolean(candidate.signalSource) &&
-    (candidate.market === "SE" || candidate.market === "US"),
+    Boolean(candidate.signalSource),
   );
   const directionsByTicker = new Map<string, Set<"LONG" | "SHORT">>();
   for (const { candidate } of eligible) {
@@ -162,7 +177,8 @@ export function buildTop3SelectionSnapshot(
 
   // Ranking and source balance are unchanged; opposing underlying signals are
   // excluded before ranking rather than arbitrarily preferring one direction.
-  for (const market of ["SE", "US"] as const) {
+  const evaluatedMarkets = sessionDate < OMXS30_SCOPE_START ? ["SE", "US"] as const : ["SE"] as const;
+  for (const market of evaluatedMarkets) {
     for (const direction of ["LONG", "SHORT"] as const) {
       const pool = conflictFreeEligible
         .filter(({ candidate }) => candidate.market === market && candidate.direction === direction)
@@ -182,7 +198,7 @@ export function buildTop3SelectionSnapshot(
   }
 
   const eligibleRanks = new Map<number, number>();
-  for (const market of ["SE", "US"] as const) {
+  for (const market of evaluatedMarkets) {
     for (const direction of ["LONG", "SHORT"] as const) {
       const pool = conflictFreeEligible
         .filter(({ candidate }) => candidate.market === market && candidate.direction === direction)
