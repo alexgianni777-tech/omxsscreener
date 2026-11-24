@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { quoteRequestTicker } from "../lib/researchQuote";
+import { activeOmxs30Candidate } from "../lib/omxs30ActiveView";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePruneUnusedCandidates, getListCandidatesQueryKey, getListSessionsQueryKey, getGetLastValidTop3QueryKey, useListCandidates, useGetQuotes, getGetQuotesQueryKey, type QuoteResult } from "@workspace/api-client-react";
 import { formatNumber, formatPercent, formatPct, formatDate } from "../lib/utils";
@@ -24,7 +25,7 @@ export function Candidates() {
   // current AG Invest universe unless the user explicitly opens the archive.
   const visibleCandidates = showArchived
     ? (candidates ?? [])
-    : (candidates ?? []).filter(c => c.market === "SE" && c.sessionDate >= "2026-11-23");
+    : (candidates ?? []).filter(activeOmxs30Candidate);
 
   // Never request ongoing quote refreshes for historical US rows by default.
   const tickers = [...new Set(visibleCandidates.map((c) => quoteRequestTicker(c.ticker, c.market)))];
@@ -44,7 +45,7 @@ export function Candidates() {
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Candidate Database</h2>
+          <h2 className="text-3xl font-bold tracking-tight">OMXS30 · kandidater</h2>
           {import.meta.env.DEV && <PruneUnusedButton />}
           <p className="text-muted-foreground mt-1">AG Invest · enbart OMXS30 från 23 november 2026. Historiska USA-affärer finns kvar i arkivet.</p>
         </div>
@@ -82,7 +83,7 @@ export function Candidates() {
 
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
           <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} />
-          Visa historisk och tidigare USA-bevakning
+          Visa separat historikarkiv (äldre signaler och andra marknader)
         </label>
 
         <select 
