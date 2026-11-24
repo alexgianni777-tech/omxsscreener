@@ -6,9 +6,20 @@ import { stockholmToday } from "../lib/persistentTop3Display";
 import { oldSignalWarning } from "../lib/dailyCandidates";
 import { PlanGrid } from "./PlanGrid";
 import { savedDataDate } from "../lib/researchQuote";
+import { filterActiveOmxs30Picks, filterArchivedOmxs30Picks } from "../lib/omxs30ActiveView";
 
-export function SavedTop3Content({ selection: s, today }: { selection: SavedTop3Display; today: string }) {
-  const stale = s.revision.picks.some(p => oldSignalWarning(p.signalDate, today, p.market ?? "") != null ||
+export function SavedTop3Content({ selection: s, today, omxs30Only = false }: {
+  selection: SavedTop3Display;
+  today: string;
+  omxs30Only?: boolean;
+}) {
+  const [showArchived, setShowArchived] = React.useState(false);
+  const activePicks = filterActiveOmxs30Picks(s.revision.picks, s.date);
+  const archivedPicks = filterArchivedOmxs30Picks(s.revision.picks, s.date);
+  const visiblePicks = !omxs30Only
+    ? s.revision.picks
+    : showArchived ? archivedPicks : activePicks;
+  const stale = visiblePicks.some(p => oldSignalWarning(p.signalDate, today, p.market ?? "") != null ||
     d1Freshness(savedDataDate(s.dataDates, p.source, p.signalDate, p.market ?? ""), today, p.market ?? "").status !== "CURRENT");
   return <>
     <h3 className="text-sm font-semibold flex flex-wrap items-center gap-2">Senast giltiga sparade Top 3
@@ -18,9 +29,26 @@ export function SavedTop3Content({ selection: s, today }: { selection: SavedTop3
       {stale ? "STALE / ej nytt köp utan liveverifiering." : "Sparad screening — inte ett live-entrybesked."}
       {" "}Kontrollera aktuell kurs, faktisk kurstidpunkt och rapportkalender före eget beslut.
     </p>
+    {omxs30Only && (
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button type="button" aria-pressed={showArchived} data-testid="toggle-saved-top3-archive"
+          onClick={() => setShowArchived((value) => !value)}
+          className="rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-muted">
+          {showArchived ? `Visa aktiva OMXS30-picks (${activePicks.length})` : `Visa Top 3-arkiv (${archivedPicks.length})`}
+        </button>
+        {showArchived && <span role="status" className="text-xs text-amber-700">
+          ARKIV · historiska/utanför OMXS30 · ingen live-entrybekräftelse
+        </span>}
+      </div>
+    )}
+    {omxs30Only && !showArchived && visiblePicks.length === 0 && (
+      <p className="mt-2 text-xs text-muted-foreground">
+        Inga aktiva OMXS30-picks i den senast giltiga versionen. Äldre eller utanför-index-picks finns i arkivet.
+      </p>
+    )}
     <div className="mt-3 grid gap-3 sm:grid-cols-2">
-      {(["SE", "US"] as const).flatMap(market => (["LONG", "SHORT"] as const).map(direction => {
-        const picks = s.revision.picks.filter(p => p.market === market && p.direction === direction);
+      {(omxs30Only && !showArchived ? ["SE"] as const : ["SE", "US"] as const).flatMap(market => (["LONG", "SHORT"] as const).map(direction => {
+        const picks = visiblePicks.filter(p => p.market === market && p.direction === direction);
         return picks.length ? <section key={`${market}-${direction}`} className="rounded-md border border-border bg-background/60 p-2.5 min-w-0">
           <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{market === "SE" ? "Sverige" : "USA"} · {direction === "LONG" ? "Long" : "Short"}</h4>
           {picks.map(p => {
@@ -28,6 +56,7 @@ export function SavedTop3Content({ selection: s, today }: { selection: SavedTop3
             return <div key={p.candidateId} className="mt-2 text-xs">
               <div className="flex flex-wrap items-center gap-2"><strong>{p.ticker}</strong>
                 <span className="font-mono text-[11px] text-muted-foreground">{p.signalDate ?? "okänd"}</span></div>
+              {showArchived && omxs30Only && <p className="mt-1 text-[11px] text-amber-700">Arkivpost · inte en aktuell OMXS30-rekommendation.</p>}
               <PlanGrid plan={p} caption="Originalplan · D−1-underlag" />
               <details className="mt-1 text-[11px] text-muted-foreground"><summary className="cursor-pointer">Visa detaljer</summary>
                 <p className="mt-1">{p.source ?? "okänd källa"} · rapport/signal {p.signalDate ?? "okänd"} · datadag {dataDate ?? "okänd"}</p></details>
@@ -41,10 +70,10 @@ export function SavedTop3Content({ selection: s, today }: { selection: SavedTop3
     </Link>
   </>;
 }
-export function SavedTop3() {
+export function SavedTop3({ omxs30Only = false }: { omxs30Only?: boolean }) {
   const query = useGetLastValidTop3({ query: { queryKey: getGetLastValidTop3QueryKey(), retry: false } });
   return <section className="rounded-lg border border-primary/25 bg-card p-3 sm:p-4 shadow-sm" aria-busy={query.isLoading} data-testid="saved-top3">
-    {query.data?.selection ? <SavedTop3Content selection={query.data.selection} today={stockholmToday()} />
+    {query.data?.selection ? <SavedTop3Content selection={query.data.selection} today={stockholmToday()} omxs30Only={omxs30Only} />
       : <p className="text-sm">{query.isLoading ? "Läser senast giltiga sparade Top 3…" : "Ingen giltig sparad Top 3 hittades. Inga picks gissas."}</p>}
     {query.isError && <p role="alert" className="mt-2 text-xs text-amber-600">Senaste status kunde inte hämtas. Sparat urval ändras inte.
       {" "}<button onClick={() => query.refetch()} className="underline" data-testid="button-retry-saved-top3">Försök igen</button></p>}

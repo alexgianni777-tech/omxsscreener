@@ -17,6 +17,11 @@ import {
 import { useTop3Analytics, type Top3Session } from "../lib/useTop3Analytics";
 import { top3SessionsForSource } from "../lib/top3SourceViews";
 import { useMarketIntel } from "../lib/useMarketIntel";
+import {
+  filterActiveOmxs30Picks,
+  filterArchivedOmxs30Picks,
+  OMXS30_ACTIVE_FROM,
+} from "../lib/omxs30ActiveView";
 import { useState, useMemo } from "react";
 import { DashboardLiveTop3 } from "../components/DashboardLiveTop3";
 import { TradeJournal } from "../components/TradeJournal";
@@ -94,7 +99,7 @@ export function Dashboard() {
         <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">Urval och sessioner
           <span className="ml-2 font-normal text-xs text-muted-foreground">sparat officiellt urval, aktuella versioner och sessionens kandidater</span></summary>
         <div className="border-t border-border/50 p-2 sm:p-3 space-y-4">
-      <SavedTop3 />
+      <SavedTop3 omxs30Only />
       <TodaySessionPanel />
       <DashboardLiveTop3 />
         </div>
@@ -388,7 +393,13 @@ function TodaySessionPanel() {
 
   // Find top-3 picks for the latest session from the already-loaded analytics data
   const top3Session = top3?.sessions.find((s) => s.sessionId === latest?.id);
-  const top3Count = top3Session?.picks.length ?? 0;
+  const activeTop3Picks = top3Session
+    ? filterActiveOmxs30Picks(top3Session.picks, top3Session.date)
+    : [];
+  const archivedTop3Count = top3Session
+    ? filterArchivedOmxs30Picks(top3Session.picks, top3Session.date).length
+    : 0;
+  const top3Count = activeTop3Picks.length;
 
   const trendLabel = latest?.marketWeather.trendLabel ?? "";
   const trendUp = trendLabel.includes("BULL");
@@ -471,9 +482,9 @@ function TodaySessionPanel() {
         {/* Right: top3 picks preview + open button */}
         <div className="flex items-center gap-3 sm:flex-col sm:items-end">
           {/* Ticker chips come only from the official snapshot. */}
-          {top3Session?.picks && top3Session.picks.length > 0 ? (
+          {activeTop3Picks.length > 0 ? (
             <div className="flex flex-wrap gap-1">
-              {top3Session.picks.map((p) => (
+              {activeTop3Picks.map((p) => (
                 <span
                   key={`${p.direction}:${p.ticker}:${p.signalSource ?? "unknown"}`}
                   className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded border ${
@@ -503,10 +514,15 @@ function TodaySessionPanel() {
               ))}
               <span className="ml-1 text-muted-foreground font-medium">
                 {top3Session?.selectionStatus === "UNAVAILABLE"
-                  ? "Officiellt urval saknas"
-                  : `${top3Count} officiella picks`}
+                  ? "OMXS30-urval saknas"
+                  : `${top3Count} officiella OMXS30-picks`}
               </span>
             </div>
+          )}
+          {archivedTop3Count > 0 && (
+            <span role="status" className="text-[11px] text-amber-700" data-testid="today-archived-top3-count">
+              {archivedTop3Count} äldre/utanför-index-picks arkiverade · ej aktiva
+            </span>
           )}
           {/* Open session link */}
           <Link
@@ -855,28 +871,64 @@ function SessionTooltip({ active, payload }: TooltipProps<number, string>) {
 
 function Top3Section() {
   const { data, isLoading } = useTop3Analytics();
-
-  const legacySessions = top3SessionsForSource(data?.sessions ?? [], "telegram");
-  const edgeAiSessions = top3SessionsForSource(data?.sessions ?? [], "edgeai");
+  const [showArchive, setShowArchive] = useState(false);
+  const allSessions = data?.sessions ?? [];
+  const activeSessions = allSessions.flatMap((session) => {
+    const picks = filterActiveOmxs30Picks(session.picks, session.date);
+    return picks.length
+      ? [{ ...session, picks, longPicks: picks.filter((pick) => pick.direction === "LONG"),
+        shortPicks: picks.filter((pick) => pick.direction === "SHORT") }]
+      : [];
+  });
+  const archiveSessions = allSessions.flatMap((session) => {
+    const picks = filterArchivedOmxs30Picks(session.picks, session.date);
+    return picks.length
+      ? [{ ...session, picks, longPicks: picks.filter((pick) => pick.direction === "LONG"),
+        shortPicks: picks.filter((pick) => pick.direction === "SHORT") }]
+      : [];
+  });
+  const archivePickCount = allSessions.reduce(
+    (count, session) => count + filterArchivedOmxs30Picks(session.picks, session.date).length,
+    0,
+  );
+  const selectedSessions = showArchive ? archiveSessions : activeSessions;
+  const legacySessions = top3SessionsForSource(selectedSessions, "telegram");
+  const edgeAiSessions = top3SessionsForSource(selectedSessions, "edgeai");
+  const unavailableCount = (showArchive ? allSessions : allSessions.filter((session) => session.date >= OMXS30_ACTIVE_FROM))
+    .filter((session) => session.selectionStatus === "UNAVAILABLE").length;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 border-b border-border pb-2">
         <Trophy className="h-5 w-5 text-muted-foreground" />
-        <h3 className="text-lg font-semibold">Top 3 — officiellt signal-time-urval</h3>
+        <h3 className="text-lg font-semibold">
+          {showArchive ? "Top 3 · historikarkiv" : "Top 3 · OMXS30-resultat"}
+        </h3>
       </div>
       <p className="text-xs text-muted-foreground -mt-4">
-        Frysta urval från första signal-time-importen, endast TRADEABLE och högst tre per market/riktning. Äldre sessioner utan sparad snapshot markeras som otillgängliga och ingår inte i resultatet.
-        {" "}Detta är historiska signalutfall, inte bekräftad netto-edge från verkliga affärer. Verkliga och simulerade fills följs separat i journalen.
+        {showArchive
+          ? "Arkiv: äldre sessioner och picks utanför OMXS30 visas endast för historisk granskning. De är inte aktuella rekommendationer."
+          : "Endast picks för officiella OMXS30-medlemmar på sessionsdatum från 23 november 2026 ingår. Detta är historiska signalutfall, inte bekräftad netto-edge från verkliga affärer."}
+        {" "}Verkliga och simulerade fills följs separat i journalen.
       </p>
-      {(data?.sessions.filter((s) => s.selectionStatus === "UNAVAILABLE").length ?? 0) > 0 && (
+      <button type="button" aria-pressed={showArchive} data-testid="toggle-dashboard-top3-archive"
+        onClick={() => setShowArchive((value) => !value)}
+        className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted">
+        {showArchive ? "Visa aktiva OMXS30-resultat" : `Visa historiskt arkiv (${archivePickCount} picks)`}
+      </button>
+      {showArchive && (
+        <p role="status" className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700">
+          ARKIV · resultat och signaler från tidigare universum/marknader. De räknas inte in i aktiv OMXS30-statistik och får inget live-entrybesked.
+        </p>
+      )}
+      {unavailableCount > 0 && (
         <p className="text-xs text-muted-foreground">
-          Historik utan officiellt urval: {data?.sessions.filter((s) => s.selectionStatus === "UNAVAILABLE").length} sessioner. De räknas inte till någon källas resultat.
+          Sessioner utan sparat officiellt urval: {unavailableCount}. De räknas inte till någon källas resultat.
         </p>
       )}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Top3MarketCard label="Legacy / Telegram — officiella picks" sessions={legacySessions} isLoading={isLoading} accentColor="hsl(var(--primary))" />
-        <Top3MarketCard label="EdgeAI (SE + US) — officiella picks" sessions={edgeAiSessions} isLoading={isLoading} accentColor="hsl(var(--success, 142 71% 45%))" />
+        <Top3MarketCard label={showArchive ? "Arkiv · Telegram" : "OMXS30 · Telegram"} sessions={legacySessions} isLoading={isLoading} accentColor="hsl(var(--primary))" />
+        <Top3MarketCard label={showArchive ? "Arkiv · EdgeAI" : "OMXS30 · EdgeAI"} sessions={edgeAiSessions} isLoading={isLoading} accentColor="hsl(var(--success, 142 71% 45%))" />
       </div>
     </div>
   );

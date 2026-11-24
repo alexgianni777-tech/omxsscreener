@@ -4,8 +4,8 @@ import { readFileSync } from "node:fs";
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 test("dashboard keeps official and current selections ahead of folded historical analysis without unmounting features", () => {
   const s = source("../pages/dashboard.tsx");
-  assert.ok(s.indexOf("<MarketIntelSection />") < s.indexOf("<SavedTop3 />"));
-  assert.ok(s.indexOf("<SavedTop3 />") < s.indexOf("<TodaySessionPanel />"));
+  assert.ok(s.indexOf("<MarketIntelSection />") < s.indexOf("<SavedTop3 omxs30Only />"));
+  assert.ok(s.indexOf("<SavedTop3 omxs30Only />") < s.indexOf("<TodaySessionPanel />"));
   assert.ok(s.indexOf("<DashboardLiveTop3 />") < s.indexOf('data-testid="details-historical-stats"'));
   for (const tag of ["details-historical-stats", "details-trade-journal", "details-manual-catalysts", "details-groundzero"])
     assert.ok(s.includes(tag));
@@ -18,6 +18,22 @@ test("dashboard keeps official and current selections ahead of folded historical
   assert.ok(home.includes("if (!sessionsResponse.ok) throw new Error"));
   assert.ok(home.includes('data-testid="status-session-load-error"'));
   assert.ok(home.includes('data-testid="status-challenge-load-error"'));
+});
+test("dashboard Top 3 cards use dated OMXS30 scope and separate archive display", () => {
+  const dashboard = source("../pages/dashboard.tsx");
+  const live = source("./DashboardLiveTop3.tsx");
+  const saved = source("./SavedTop3.tsx");
+  assert.ok(dashboard.includes("filterActiveOmxs30Picks"));
+  assert.ok(dashboard.includes("filterArchivedOmxs30Picks"));
+  assert.ok(dashboard.includes('data-testid="toggle-dashboard-top3-archive"'));
+  assert.ok(live.includes("OMXS30_TOP3_POLICY_VERSION"));
+  assert.ok(live.includes("filterActiveOmxs30Picks"));
+  assert.ok(live.includes("filterArchivedOmxs30Picks"));
+  assert.ok(live.includes("revisions={revisions}"));
+  assert.ok(saved.includes("filterActiveOmxs30Picks"));
+  assert.ok(saved.includes("filterArchivedOmxs30Picks"));
+  assert.ok(saved.includes('data-testid="toggle-saved-top3-archive"'));
+  assert.ok(!saved.includes("LiveEntryGuard"));
 });
 test("mobile layout preserves logout and nav semantics and tables scroll rather than getting globally clipped", () => {
   const layout = source("./layout.tsx"), css = source("../index.css");
