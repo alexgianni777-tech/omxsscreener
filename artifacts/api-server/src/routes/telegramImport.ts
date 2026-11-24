@@ -40,6 +40,7 @@ import { aggregateSessionSource } from "../lib/candidateSynchronizationPolicy";
 import { snapshotNewSessionTop3 } from "../lib/top3SelectionPolicy";
 import { isAcceptedSignalDate, stockholmSignalDate } from "../lib/signalDatePolicy";
 import { AUTOMATIC_EARNINGS_CHECK_ENABLED } from "../lib/screeningReview";
+import { describeAgInvestScopeViolations, findAgInvestScopeViolations } from "../lib/omxs30Scope";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey", "ripHistorical"] });
 
@@ -194,6 +195,21 @@ router.post("/telegram-import", async (req: Request, res: Response): Promise<voi
   importReport.warnings = session.dataWarnings ?? [];
   const today = stockholmSignalDate();
   const date = isAcceptedSignalDate(reportDate, today) ? today : reportDate;
+  // Membership is evaluated on the trading/decision session. The source
+  // report date and dataAsOf remain untouched as provenance (often D-1).
+  // Reject before database reads or writes so a mixed/out-of-scope Telegram
+  // report cannot partially create candidates or alter an existing session.
+  const scopeViolations = findAgInvestScopeViolations({ SE: candidates }, date);
+  if (scopeViolations.length > 0) {
+    res.status(422).json({
+      error: describeAgInvestScopeViolations(scopeViolations, date),
+      rejectedCandidates: scopeViolations,
+      reportDate,
+      decisionDate: date,
+      dataAsOf: session.dataAsOf ?? null,
+    });
+    return;
+  }
   const [existingSessionForDate] = await db
     .select({ id: screenerSessionsTable.id })
     .from(screenerSessionsTable)
