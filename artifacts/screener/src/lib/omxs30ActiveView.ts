@@ -13,7 +13,7 @@ const NOVEMBER = new Set([
   "SHB-A.ST", "SWED-A.ST", "TEL2-B.ST", "TELIA.ST", "VOLV-B.ST",
 ]);
 export function activeOmxs30Candidate(c: {
-  market: string | null;
+  market?: string | null;
   ticker: string;
   sessionDate: string;
 }): boolean {
