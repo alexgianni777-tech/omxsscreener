@@ -16,7 +16,7 @@ import {
 } from "recharts";
 import { useTop3Analytics, type Top3Session } from "../lib/useTop3Analytics";
 import { top3SessionsForSource } from "../lib/top3SourceViews";
-import { useMarketIntel, type MarketIntelData } from "../lib/useMarketIntel";
+import { useMarketIntel } from "../lib/useMarketIntel";
 import { useState, useMemo } from "react";
 import { DashboardLiveTop3 } from "../components/DashboardLiveTop3";
 import { TradeJournal } from "../components/TradeJournal";
@@ -618,152 +618,52 @@ function WeekSummarySection({ equityCurve }: { equityCurve: EquityPoint[] }) {
 
 // ─── Market Intel ─────────────────────────────────────────────────────────────
 
-function fgColor(score: number): string {
-  if (score <= 25) return "#ef4444"; // extreme fear
-  if (score <= 45) return "#f97316"; // fear
-  if (score <= 55) return "#eab308"; // neutral
-  if (score <= 75) return "#84cc16"; // greed
-  return "#22c55e";                  // extreme greed
-}
-
-function fgLabel(rating: string): string {
-  const map: Record<string, string> = {
-    "Extreme Fear": "Extrem Rädsla",
-    "Fear": "Rädsla",
-    "Neutral": "Neutralt",
-    "Greed": "Girighet",
-    "Extreme Greed": "Extrem Girighet",
-  };
-  return map[rating] ?? rating;
-}
-
 export function MarketIntelSection() {
-  const { data, isLoading } = useMarketIntel();
-
-  const peRows: { label: string; key: keyof MarketIntelData["pe"]; avg: number }[] = [
-    { label: "S&P 500 (SPY)", key: "sp500", avg: 17 },
-    { label: "Nasdaq 100 (QQQ)", key: "nasdaq", avg: 25 },
-    { label: "OMXS30", key: "omxs30", avg: 15 },
-  ];
+  const { data, isLoading, isError } = useMarketIntel();
+  const pe = data?.pe?.omxs30;
+  const fetchedAt = typeof data?.fetchedAt === "string" && Number.isFinite(Date.parse(data.fetchedAt))
+    ? new Date(data.fetchedAt).toLocaleString("sv-SE")
+    : null;
+  const verifiedTrailing = fetchedAt && typeof pe?.trailing === "number" && Number.isFinite(pe.trailing)
+    ? pe.trailing
+    : null;
+  const verifiedForward = fetchedAt && typeof pe?.forward === "number" && Number.isFinite(pe.forward)
+    ? pe.forward
+    : null;
 
   return (
-    <section className="rounded-lg border border-border bg-card p-3 sm:p-4" data-testid="market-weather">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold">Marknadsläge · separat omvärldsdata</h3>
-        <p className="text-xs font-mono" data-testid="text-market-weather-summary">
-          {isLoading ? <span className="text-muted-foreground">Läser marknadsläge…</span>
-            : !data?.fearGreed ? <span className="text-muted-foreground">Fear &amp; Greed saknas</span>
-            : <>F&amp;G <strong style={{ color: fgColor(data.fearGreed.score) }}>{data.fearGreed.score}</strong> {fgLabel(data.fearGreed.rating)}</>}
-          {data && peRows.map(({ label, key }) => data.pe[key].trailing != null
-            ? <span key={key} className="ml-2 text-muted-foreground">{label.split(" (")[0]} P/E {Math.round((data.pe[key].trailing as number) * 10) / 10}</span> : null)}
+    <section className="rounded-lg border border-border bg-card p-3 sm:p-4 space-y-3" data-testid="market-weather">
+      <div>
+        <h3 className="text-sm font-semibold">OMXS30 · svensk marknadsreferens</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          P/E visas endast när Yahoo-källan lämnar ett numeriskt värde och hämtningstid.
         </p>
       </div>
-      <details className="mt-2">
-        <summary className="cursor-pointer text-xs text-muted-foreground">Visa Fear &amp; Greed och P/E-detaljer</summary>
-      <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Fear & Greed */}
-        <div className="bg-card border border-border rounded-lg p-5 shadow-sm">
-          <div className="text-sm font-medium text-muted-foreground mb-3">CNN Fear &amp; Greed Index</div>
-          {isLoading ? (
-            <div className="h-20 bg-muted animate-pulse rounded" />
-          ) : !data?.fearGreed ? (
-            <p className="text-sm text-muted-foreground">Kunde inte hämta data.</p>
-          ) : (
-            <>
-              <div className="flex items-center gap-4 mb-3">
-                <div
-                  className="text-4xl font-black font-mono"
-                  style={{ color: fgColor(data.fearGreed.score) }}
-                >
-                  {data.fearGreed.score}
-                </div>
-                <div>
-                  <div className="font-semibold" style={{ color: fgColor(data.fearGreed.score) }}>
-                    {fgLabel(data.fearGreed.rating)}
-                  </div>
-                  <div className="text-xs text-muted-foreground">av 100</div>
-                </div>
-              </div>
-              {/* Progress bar */}
-              <div className="w-full h-2.5 bg-muted rounded-full overflow-hidden mb-3">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{
-                    width: `${data.fearGreed.score}%`,
-                    backgroundColor: fgColor(data.fearGreed.score),
-                  }}
-                />
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                <div>
-                  <div className="text-muted-foreground">Igår</div>
-                  <div className="font-mono font-semibold">{data.fearGreed.previousClose}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground">1 vecka</div>
-                  <div className="font-mono font-semibold">{data.fearGreed.previousWeek}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground">1 månad</div>
-                  <div className="font-mono font-semibold">{data.fearGreed.previousMonth}</div>
-                </div>
-              </div>
-            </>
-          )}
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Läser OMXS30-referenser…</p>
+      ) : isError ? (
+        <p className="text-sm text-muted-foreground">OMXS30-referenser kunde inte hämtas · ej verifierade.</p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="omxs30-pe">
+          <div className="rounded-md bg-muted/50 p-3">
+            <p className="text-xs text-muted-foreground">OMXS30 P/E · historiskt</p>
+            <p className="mt-1 font-mono text-lg font-semibold">
+              {verifiedTrailing == null ? "Ej verifierat" : verifiedTrailing.toFixed(1)}
+            </p>
+          </div>
+          <div className="rounded-md bg-muted/50 p-3">
+            <p className="text-xs text-muted-foreground">OMXS30 P/E · framåtblickande</p>
+            <p className="mt-1 font-mono text-lg font-semibold">
+              {verifiedForward == null ? "Ej verifierat" : verifiedForward.toFixed(1)}
+            </p>
+          </div>
         </div>
-
-        {/* P/E Ratios */}
-        <div className="bg-card border border-border rounded-lg p-5 shadow-sm">
-          <div className="text-sm font-medium text-muted-foreground mb-3">P/E-tal (aktuellt vs historiskt snitt)</div>
-          {isLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => <div key={i} className="h-10 bg-muted animate-pulse rounded" />)}
-            </div>
-          ) : !data ? (
-            <p className="text-sm text-muted-foreground">Kunde inte hämta data.</p>
-          ) : (
-            <div className="space-y-3">
-              {peRows.map(({ label, key, avg }) => {
-                const pe = data.pe[key];
-                const trailing = pe.trailing != null ? Math.round(pe.trailing * 10) / 10 : null;
-                const forward = pe.forward != null ? Math.round(pe.forward * 10) / 10 : null;
-                const vsAvg = trailing != null ? trailing - avg : null;
-                const color = vsAvg == null ? "" : vsAvg > 5 ? "text-destructive" : vsAvg < -2 ? "text-success" : "text-muted-foreground";
-                return (
-                  <div key={key} className="flex items-center justify-between">
-                    <span className="text-sm">{label}</span>
-                    <div className="flex items-center gap-3 text-right">
-                      <div>
-                        <div className={`font-mono font-bold text-sm ${color}`}>
-                          {trailing ?? "–"}
-                        </div>
-                        <div className="text-xs text-muted-foreground">trailing</div>
-                      </div>
-                      <div>
-                        <div className="font-mono text-sm text-muted-foreground">
-                          {forward ?? "–"}
-                        </div>
-                        <div className="text-xs text-muted-foreground">forward</div>
-                      </div>
-                      <div>
-                        <div className="font-mono text-xs text-muted-foreground">
-                          snitt ~{avg}
-                        </div>
-                        {vsAvg != null && (
-                          <div className={`text-xs font-semibold ${color}`}>
-                            {vsAvg > 0 ? "+" : ""}{vsAvg.toFixed(1)}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-      </details>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Källa: Yahoo Finance, OMXS30-referens (^OMX)
+        {fetchedAt ? ` · hämtad ${fetchedAt}` : " · hämtningstid ej verifierad"}.
+        {" "}Källdagens fullständiga kursdata kontrolleras i senaste sessionen.
+      </p>
     </section>
   );
 }
