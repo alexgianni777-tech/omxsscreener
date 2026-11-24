@@ -27,3 +27,14 @@ test("import scope rejects US and Swedish non-index proposals while keeping Inve
   ]);
   assert.equal(eligibleAgInvestCandidate("SE", "INVE-B", "2026-11-24"), true);
 });
+
+test("import scope uses the decision day rather than the prior-close data date", () => {
+  const dataAsOf = "2026-11-30";
+  const decisionDate = "2026-12-01";
+  assert.equal(eligibleAgInvestCandidate("SE", "LIFCO-B", dataAsOf), true);
+  assert.deepEqual(
+    findAgInvestScopeViolations({ SE: [{ ticker: "LIFCO-B" }] }, decisionDate),
+    [{ market: "SE", ticker: "LIFCO-B" }],
+  );
+  assert.equal(eligibleAgInvestCandidate("SE", "SOBI", decisionDate), true);
+});

@@ -48,6 +48,7 @@ import { isAcceptedSignalDate, stockholmSignalDate } from "../lib/signalDatePoli
 import { buildTop3LiveSelection, type Top3LiveCandidate } from "../lib/top3LiveSelection";
 import { parseSessionImportResponse } from "../lib/sessionImportResponse";
 import { pastedSignalSource } from "../lib/pastedSignalSource";
+import { describeAgInvestScopeViolations, findAgInvestScopeViolations } from "../lib/omxs30Scope";
 
 const router: IRouter = Router();
 
@@ -83,6 +84,22 @@ router.post("/screener/sessions/import", async (req, res): Promise<void> => {
 
   if (!parsed.data.targetDate && isAcceptedSignalDate(reportDate, stockholmSignalDate())) {
     session = { ...session, date: stockholmSignalDate() };
+  }
+  // Validate the active trading/decision session, not the source report or
+  // market-data date. A D-1 close remains provenance and is not rewritten.
+  const scopeViolations = findAgInvestScopeViolations(
+    { SE: session.candidates },
+    session.date,
+  );
+  if (scopeViolations.length > 0) {
+    res.status(422).json({
+      error: describeAgInvestScopeViolations(scopeViolations, session.date),
+      rejectedCandidates: scopeViolations,
+      reportDate,
+      decisionDate: session.date,
+      dataAsOf: session.dataAsOf ?? null,
+    });
+    return;
   }
   // Check for duplicate date
   const existing = await db
@@ -385,6 +402,23 @@ router.put("/screener/sessions/:id/reimport", async (req, res): Promise<void> =>
       .json({
         error: `Date mismatch: imported text has date ${parsedSession.date}, but session has date ${existingSession.date}`,
       });
+    return;
+  }
+
+  // The session date is the trading decision day; parsedSession.date and
+  // parsedSession.dataAsOf remain the source/report provenance.
+  const scopeViolations = findAgInvestScopeViolations(
+    { SE: parsedSession.candidates },
+    existingSession.date,
+  );
+  if (scopeViolations.length > 0) {
+    res.status(422).json({
+      error: describeAgInvestScopeViolations(scopeViolations, existingSession.date),
+      rejectedCandidates: scopeViolations,
+      reportDate: parsedSession.date,
+      decisionDate: existingSession.date,
+      dataAsOf: parsedSession.dataAsOf ?? null,
+    });
     return;
   }
 
