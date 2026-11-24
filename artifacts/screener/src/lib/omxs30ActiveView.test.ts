@@ -3,7 +3,9 @@ import test from "node:test";
 import {
   activeOmxs30Candidate,
   filterActiveOmxs30Candidates,
+  filterActiveOmxs30Picks,
   filterArchivedCandidates,
+  filterArchivedOmxs30Picks,
 } from "./omxs30ActiveView.ts";
 
 const active = (ticker: string, sessionDate = "2026-11-24", market = "SE") =>
@@ -30,6 +32,28 @@ test("dated membership changes from Lifco B to Sobi on December 1", () => {
   assert.equal(active("SOBI", "2026-11-30"), false);
   assert.equal(active("LIFCO-B", "2026-12-01"), false);
   assert.equal(active("SOBI", "2026-12-01"), true);
+});
+
+test("dashboard Top 3 filters active and archived picks by the session decision date", () => {
+  const picks = [
+    { ticker: "INVE-B.ST", market: "SE" },
+    { ticker: "AAPL", market: "US" },
+    { ticker: "MYCR.ST", market: "SE" },
+    { ticker: "LIFCO-B.ST", market: "SE" },
+    { ticker: "SOBI.ST", market: "SE" },
+  ];
+  assert.deepEqual(
+    filterActiveOmxs30Picks(picks, "2026-11-30").map((pick) => pick.ticker),
+    ["INVE-B.ST", "LIFCO-B.ST"],
+  );
+  assert.deepEqual(
+    filterActiveOmxs30Picks(picks, "2026-12-01").map((pick) => pick.ticker),
+    ["INVE-B.ST", "SOBI.ST"],
+  );
+  assert.deepEqual(
+    filterArchivedOmxs30Picks(picks, "2026-12-01").map((pick) => pick.ticker),
+    ["AAPL", "MYCR.ST", "LIFCO-B.ST"],
+  );
 });
 
 test("pre-scope and invalid session dates fail closed", () => {

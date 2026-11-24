@@ -5,6 +5,7 @@
  */
 export const OMXS30_ACTIVE_FROM = "2026-11-23";
 export const OMXS30_DECEMBER_REBALANCE = "2026-12-01";
+export const OMXS30_TOP3_POLICY_VERSION = "official-top3-v8-omxs30";
 
 const NOVEMBER_MEMBERS = new Set([
   "ABB.ST", "ADDT-B.ST", "ALFA.ST", "ASSA-B.ST", "AZN.ST",
@@ -71,4 +72,23 @@ export function filterActiveOmxs30Candidates<T extends Omxs30CandidateIdentity>(
 /** Archive is the complement of today's dated OMXS30-eligible view; rows are never deleted. */
 export function filterArchivedCandidates<T extends Omxs30CandidateIdentity>(candidates: readonly T[]): T[] {
   return candidates.filter((candidate) => !activeOmxs30Candidate(candidate));
+}
+
+export type Omxs30Top3PickIdentity = {
+  market?: string | null;
+  ticker: string;
+};
+
+export function filterActiveOmxs30Picks<T extends Omxs30Top3PickIdentity>(
+  picks: readonly T[],
+  sessionDate: string,
+): T[] {
+  return picks.filter((pick) => activeOmxs30Candidate({ ...pick, sessionDate }));
+}
+
+export function filterArchivedOmxs30Picks<T extends Omxs30Top3PickIdentity>(
+  picks: readonly T[],
+  sessionDate: string,
+): T[] {
+  return picks.filter((pick) => !activeOmxs30Candidate({ ...pick, sessionDate }));
 }
