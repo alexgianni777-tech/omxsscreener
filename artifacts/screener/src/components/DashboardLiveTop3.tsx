@@ -22,10 +22,14 @@ export function DashboardLiveTop3() {
     }))
     .sort((a, b) => b.revision - a.revision);
   const current = revisions[0];
-  const liveCandidates = filterActiveOmxs30Picks(
-    detail.data?.top3LiveSelection?.picks ?? [],
-    detail.data?.date ?? "",
-  );
+  const candidatesById = new Map((detail.data?.candidates ?? []).map((candidate) => [candidate.id, candidate]));
+  const livePicksWithIdentity = (detail.data?.top3LiveSelection?.picks ?? []).flatMap((pick) => {
+    const candidate = candidatesById.get(pick.candidateId);
+    // The live-selection API stores candidateId, not ticker. Missing candidate
+    // details must fail closed rather than bypass the OMXS30 identity check.
+    return candidate?.ticker ? [{ ...pick, ticker: candidate.ticker }] : [];
+  });
+  const liveCandidates = filterActiveOmxs30Picks(livePicksWithIdentity, detail.data?.date ?? "");
   const visiblePicks = current?.picks ?? liveCandidates;
   const archivedPickCount = (detail.data?.top3Revisions ?? []).reduce(
     (count, revision) => count + filterArchivedOmxs30Picks(revision.picks, detail.data?.date ?? "").length,
