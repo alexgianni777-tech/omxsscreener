@@ -1,11 +1,13 @@
 import React from "react";
 import { quoteRequestTicker } from "../lib/researchQuote";
 import { Link } from "wouter";
-import type { Top3LiveSelection } from "@workspace/api-client-react";
+import { d1Freshness, isTradingDay, previousMarketDay, validMarketDate } from "@workspace/market-calendar";
+import type { CandidateDataQuality, Top3LiveSelection } from "@workspace/api-client-react";
 import { CheckCircle2, AlertTriangle, ChevronRight } from "lucide-react";
 import { LiveEntryGuard } from "./LiveEntryGuard";
 import type { EntryQuote } from "../lib/liveEntryGuard";
 import { PlanGrid } from "./PlanGrid";
+import { filterActiveOmxs30Picks, filterArchivedOmxs30Picks } from "../lib/omxs30ActiveView";
 
 export type LiveSelection = Top3LiveSelection;
 type Cand = {
@@ -16,6 +18,7 @@ type Cand = {
   stopPrice: number;
   targetPrice: number;
   rr: number;
+  dataQuality?: CandidateDataQuality | null;
   signalDate?: string | null;
   signalSource?: string | null;
   signalAgeBars?: number | null;
@@ -71,13 +74,76 @@ export function DecisionBadge({ decision }: { decision?: { status: string; reaso
 
 const NAMES = { telegram: "Telegram", edgeai: "EdgeAI" } as const;
 
+type PreviewPick = LiveSelection["picks"][number];
+type PreviewArchiveRow = { pick: PreviewPick; candidate?: Cand; reason: string };
+
+/** Dated OMXS30 membership and verified D−1 data are required for the active groups. */
+export function partitionLiveTop3Picks(
+  picks: readonly PreviewPick[],
+  candidates: readonly Cand[],
+  sessionDate: string | null | undefined,
+  official: boolean,
+): { activePicks: PreviewPick[]; archivedPicks: PreviewArchiveRow[] } {
+  const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+  const activePicks: PreviewPick[] = [];
+  const archivedPicks: PreviewArchiveRow[] = [];
+
+  for (const pick of picks) {
+    const candidate = byId.get(pick.candidateId);
+    let reason: string | null = null;
+
+    if (!validMarketDate(sessionDate) || isTradingDay(sessionDate, "SE") !== true) {
+      reason = "Sessionsdatum saknas, är ogiltigt eller är inte en verifierad svensk handelsdag.";
+    } else if (!candidate) {
+      reason = "Kandidatunderlag saknas.";
+    } else if (pick.market !== "SE" || candidate.market !== "SE") {
+      reason = "Ej verifierad svensk OMXS30-kandidat.";
+    } else {
+      const identity = [{ ticker: candidate.ticker, market: pick.market }];
+      const activeIdentity = filterActiveOmxs30Picks(identity, sessionDate);
+      if (!activeIdentity.length) {
+        const archivedIdentity = filterArchivedOmxs30Picks(identity, sessionDate);
+        reason = archivedIdentity.length
+          ? "Utanför OMXS30 på sessionsdatumet eller före aktivt OMXS30-scope."
+          : "OMXS30-medlemskap kunde inte verifieras.";
+      }
+    }
+    if (!reason && candidate && !candidate.dataQuality?.dataAsOf) {
+      reason = "Verifierat marknadsdatadatum saknas.";
+    }
+    if (!reason && candidate?.dataQuality?.dataAsOf && validMarketDate(sessionDate)) {
+      const freshness = d1Freshness(candidate.dataQuality.dataAsOf, sessionDate, "SE");
+      if (freshness.status !== "CURRENT") {
+        reason = freshness.status === "STALE"
+          ? `Marknadsdata är stale (${candidate.dataQuality.dataAsOf}); förväntad D−1-dag är ${freshness.expected ?? "okänd"}.`
+          : freshness.status === "CONFLICT"
+            ? `Marknadsdatumet ${candidate.dataQuality.dataAsOf} ligger efter förväntad D−1-dag ${freshness.expected ?? "okänd"}.`
+            : "D−1-marknadsdatum kunde inte verifieras.";
+      } else {
+        const decision = official
+          ? candidate.officialSelection?.decision ?? candidate.decision
+          : candidate.decision;
+        if (["STALE", "CONFLICT", "INVALID"].includes(decision?.status ?? "")) {
+          reason = `Screeningstatus ${decision?.status} — flyttad från aktiv vy.`;
+        }
+      }
+    }
+
+    if (reason) archivedPicks.push({ pick, candidate, reason });
+    else activePicks.push(pick);
+  }
+
+  return { activePicks, archivedPicks };
+}
+
 export function LiveTop3Preview({
-  live, candidates, frozen, sessionId, quotes,
+  live, candidates, frozen, sessionId, sessionDate, quotes,
 }: {
   live: LiveSelection;
   candidates: Cand[];
   frozen: Frozen;
   sessionId: number;
+  sessionDate?: string | null;
   onCutoff: () => void;
   quotes?: Record<string, EntryQuote>;
 }) {
@@ -96,15 +162,22 @@ export function LiveTop3Preview({
     })
     : live.picks;
   const byId = new Map(candidates.map((c) => [c.id, c]));
+  const { activePicks, archivedPicks } = partitionLiveTop3Picks(
+    displayPicks,
+    candidates,
+    sessionDate,
+    official,
+  );
+  const expectedDataDate = validMarketDate(sessionDate) && isTradingDay(sessionDate, "SE") === true
+    ? previousMarketDay(sessionDate, "SE")
+    : null;
   const groups = [
-    { key: "SE:LONG", label: "Sverige · Topp 3 Köp" },
-    { key: "US:LONG", label: "USA · Topp 3 Köp" },
-    { key: "SE:SHORT", label: "Sverige · Topp 3 Sälj" },
-    { key: "US:SHORT", label: "USA · Topp 3 Sälj" },
+    { key: "LONG", label: "OMXS30 · Topp 3 Köp / Long", direction: "LONG" },
+    { key: "SHORT", label: "OMXS30 · Topp 3 Sälj / Short", direction: "SHORT" },
   ].map((g) => ({
     ...g,
-    picks: displayPicks
-      .filter((p) => `${p.market}:${p.direction}` === g.key)
+    picks: activePicks
+      .filter((p) => p.direction === g.direction)
       .sort((a, b) => a.rank - b.rank)
       .slice(0, 3),
   })).filter((g) => g.picks.length > 0);
@@ -115,14 +188,14 @@ export function LiveTop3Preview({
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 data-testid="text-live-title" className="text-sm font-semibold">
-            {official
-              ? "Officiellt Top 3 – fryst urval"
-              : "Preliminär Top 3 – inväntar båda dagens källor"}
+            OMXS30 · {official ? "officiellt Top 3 – fryst urval" : "preliminär Top 3"}
           </h3>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
-            {official
+            Session {sessionDate && validMarketDate(sessionDate) ? sessionDate : "ej verifierad"}
+            {" · "}förväntad svensk datadag D−1: {expectedDataDate ?? "ej verifierad"}
+            {" · "}{official
               ? "Urvalet är sparat. Senare importer ändrar inte dagens officiella picks."
-              : "Låses direkt när både dagens Telegram och EdgeAI finns. Förhandsvisningen räknas inte i officiell statistik."}
+              : "Förhandsvisningen räknas inte i officiell statistik."}
           </p>
         </div>
         {frozen?.available && (
@@ -172,20 +245,28 @@ export function LiveTop3Preview({
       )}
 
       {show &&
-        (picks.length === 0 ? (
+        (picks.length === 0 && archivedPicks.length === 0 ? (
           <p className="mt-3 text-xs text-muted-foreground">
             {official ? "Urvalet är låst, men inga kandidater klarade handelsreglerna." : "Servern har inga preliminära val just nu."}
           </p>
         ) : (
           <div className="mt-3 space-y-3">
-            <p data-testid="text-screening-explainer" className="text-[11px] text-muted-foreground">TRADEABLE/WAIT/BLOCKED är screeningstatus, inte entrybekräftelse. Livekontrollen per rad avgör.</p>
+            <p data-testid="text-screening-explainer" className="text-[11px] text-muted-foreground">
+              Endast svenska OMXS30-medlemmar med verifierat D−1-underlag visas aktivt. Screeningstatus är inte ordergodkännande.
+            </p>
+            {picks.length === 0 && (
+              <p className="text-xs text-muted-foreground">Inga kandidater klarade OMXS30- och D−1-kontrollen för den här sessionen.</p>
+            )}
             {groups.map((g) => (
-              <div key={g.key} data-testid={`group-live-${g.key}`}>
+              <div key={g.key} data-testid={`group-live-SE:${g.direction}`}>
                 <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{g.label}</div>
                 <ol className="space-y-2">
             {g.picks.map((p) => {
               const c = byId.get(p.candidateId);
-              const decision = official ? c?.officialSelection?.decision : c?.decision;
+              const decision = official
+                ? c?.officialSelection?.decision ?? c?.decision
+                : c?.decision;
+              const liveGuardAllowed = decision?.status === "TRADEABLE" || decision?.status === "WAIT";
               return (
                 <li key={p.candidateId} data-testid={`row-live-pick-${p.candidateId}`} className="rounded-lg border border-border px-3 py-2">
                   <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -194,9 +275,16 @@ export function LiveTop3Preview({
                     {c?.signalDate && <span className="font-mono text-[11px] text-muted-foreground">{c.signalDate}</span>}
                     <span className="ml-auto"><DecisionBadge decision={decision} /></span>
                   </div>
+                  {c && <p className="mt-1 text-[11px] text-muted-foreground">
+                    Datadag {c.dataQuality?.dataAsOf ?? "ej verifierad"} · källa {c.dataQuality?.source ?? "okänd"}
+                  </p>}
                   {c && <PlanGrid plan={c} caption="Originalplan · D−1-underlag" />}
-                  {c && <LiveEntryGuard plan={{ ...c, direction: p.direction }}
-                    quote={quotes?.[quoteRequestTicker(c.ticker, c.market)]} signal={c} />}
+                  {c && liveGuardAllowed
+                    ? <LiveEntryGuard plan={{ ...c, direction: p.direction }}
+                      quote={quotes?.[quoteRequestTicker(c.ticker, c.market)]} signal={c} />
+                    : <p className="mt-1 rounded-md bg-muted/50 px-2 py-1.5 text-[11px] text-muted-foreground">
+                      Live-entrykontroll visas inte: screeningstatus är inte entryberättigad.
+                    </p>}
                   <details className="mt-1 text-[11px] text-muted-foreground">
                     <summary className="cursor-pointer select-none">Visa detaljer</summary>
                     <p className="mt-1">{p.market} · {p.direction === "SHORT" ? "Sälj" : "Köp"} · {NAMES[p.signalSource]} · poäng {p.score.toFixed(2)}</p>
@@ -210,6 +298,31 @@ export function LiveTop3Preview({
                 </ol>
               </div>
             ))}
+            {archivedPicks.length > 0 && (
+              <details data-testid="details-live-top3-archive" className="rounded-lg border border-border bg-muted/30 p-3">
+                <summary className="cursor-pointer text-xs font-semibold">
+                  Visa arkiv / ej aktiva picks ({archivedPicks.length})
+                </summary>
+                <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                  Arkivrader behålls för granskning men är inte aktuella OMXS30-förslag. Ingen Live Entry Guard eller entrybekräftelse visas här.
+                </p>
+                <ul className="mt-2 space-y-2">
+                  {archivedPicks.map(({ pick, candidate, reason }) => (
+                    <li key={pick.candidateId} data-testid={`row-live-archive-${pick.candidateId}`}
+                      className="rounded-md border border-border px-3 py-2 text-xs">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <strong>{candidate?.ticker.replace(/\.ST$/i, "") ?? `Kandidat ${pick.candidateId}`}</strong>
+                        <span>{pick.market} · {pick.direction === "SHORT" ? "Sälj / Short" : "Köp / Long"}</span>
+                        {candidate?.signalDate && <span className="font-mono text-muted-foreground">{candidate.signalDate}</span>}
+                        <span className="text-amber-700 dark:text-amber-400">ARKIV · ej aktiv signal</span>
+                      </div>
+                      <p className="mt-1 text-[11px] text-muted-foreground">{reason}</p>
+                      {candidate && <PlanGrid plan={candidate} caption="Historisk originalplan · endast arkiv" />}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </div>
         ))}
       {!show && (

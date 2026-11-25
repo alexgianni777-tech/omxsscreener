@@ -680,6 +680,7 @@ export function Today() {
             candidates={allCandidates}
             frozen={session.top3SelectionSnapshot}
             sessionId={session.id}
+            sessionDate={session.date}
             quotes={quotes}
             onCutoff={load}
           />
