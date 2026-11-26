@@ -122,11 +122,11 @@ export function buildTop3SelectionSnapshot(
     // blocked in both review and decision status, not merely omitted at ranking.
     const review = inActiveUniverse
       ? baseReview
-      : { ...baseReview, status: "BLOCKED", reasons: [...baseReview.reasons, scopeReason] };
+      : { ...baseReview, status: "BLOCKED" as const, reasons: [...baseReview.reasons, scopeReason] };
     // Signal selection is distinct from the public, mandatory board-review gate.
     const decision = inActiveUniverse
       ? screenCandidate(candidate, review, sessionDate, selectedAt, { reports })
-      : { status: "BLOCKED", reasons: [...review.reasons] };
+      : { status: "BLOCKED" as const, reasons: [...review.reasons] };
     const rawScore = candidateSelectionScore(candidate);
     return {
       candidate,
