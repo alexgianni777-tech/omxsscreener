@@ -41,6 +41,9 @@ function candidate(
     targetPrice: isShort ? 94 : 106,
     rr: 1.2,
     ...overrides,
+    dataQuality: overrides.dataQuality ?? {
+      dataAsOf: typeof overrides.volumeAsOf === "string" ? overrides.volumeAsOf : "2026-11-11",
+    },
   };
 }
 
@@ -122,6 +125,37 @@ test("active OMXS30 Top 3 selects Investor B and blocks US and Swedish non-membe
     assert.equal(row?.decision.status, "BLOCKED");
     assert.ok(row?.decision.reasons.some((reason) => reason.includes("AG_INVEST_SCOPE_OMXS30_ONLY")));
   }
+});
+
+test("active OMXS30 ranking requires synchronized decision-day D−1 for signal and volume", () => {
+  const decisionDate = "2026-11-26";
+  const now = new Date("2026-11-26T10:00:00.000Z");
+  const expectedDataDate = "2026-11-25";
+  const rows = buildTop3SelectionSnapshot([
+    candidate(21, "INVE-B", "LONG", "SE", {
+      signalDate: decisionDate,
+      volumeAsOf: expectedDataDate,
+      dataQuality: { dataAsOf: expectedDataDate },
+    }),
+    candidate(22, "LIFCO-B", "LONG", "SE", {
+      signalDate: decisionDate,
+      volumeAsOf: "2026-11-24",
+      dataQuality: { dataAsOf: expectedDataDate },
+    }),
+    candidate(23, "SKFVER-B", "LONG", "SE", {
+      signalDate: decisionDate,
+      volumeAsOf: expectedDataDate,
+      dataQuality: { dataAsOf: expectedDataDate },
+    }),
+  ] as any, 105, decisionDate, "mixed", now, regimeReports("BULLISH", "BULLISH", expectedDataDate));
+
+  assert.equal(rows.find((row) => row.candidateId === 21)?.selected, true);
+  assert.equal(rows.find((row) => row.candidateId === 22)?.selected, false);
+  assert.ok(rows.find((row) => row.candidateId === 22)?.decision.reasons
+    .some((reason) => reason.includes("Volymens OHLC-dag")));
+  assert.equal(rows.find((row) => row.candidateId === 23)?.selected, false);
+  assert.ok(rows.find((row) => row.candidateId === 23)?.decision.reasons
+    .some((reason) => reason.includes("RESEARCH_ONLY")));
 });
 
 test("opposing directions for the same canonical underlying are neither auto-selected and carry CONFLICT", () => {

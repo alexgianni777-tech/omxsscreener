@@ -6,6 +6,7 @@ import {
   filterActiveOmxs30Picks,
   filterArchivedCandidates,
   filterArchivedOmxs30Picks,
+  isOmxs30ResearchOnlyCandidate,
 } from "./omxs30ActiveView.ts";
 
 const active = (ticker: string, sessionDate = "2026-11-24", market = "SE") =>
@@ -32,6 +33,16 @@ test("dated membership changes from Lifco B to Sobi on December 1", () => {
   assert.equal(active("SOBI", "2026-11-30"), false);
   assert.equal(active("LIFCO-B", "2026-12-01"), false);
   assert.equal(active("SOBI", "2026-12-01"), true);
+});
+
+test("temporary SKF Vertevo is in the dated scope but explicitly research-only", () => {
+  assert.equal(active("SKFVER-B", "2026-11-25"), false);
+  assert.equal(active("SKFVER-B", "2026-11-26"), true);
+  assert.equal(active("SKFVER-B", "2026-11-30"), true);
+  assert.equal(active("SKFVER-B", "2026-12-01"), false);
+  assert.equal(isOmxs30ResearchOnlyCandidate({
+    ticker: "SKFVER-B", market: "SE", sessionDate: "2026-11-27",
+  }), true);
 });
 
 test("dashboard Top 3 filters active and archived picks by the session decision date", () => {

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { eligibleAgInvestCandidate, findAgInvestScopeViolations } from "./omxs30Scope.ts";
+import {
+  eligibleAgInvestCandidate,
+  findAgInvestScopeViolations,
+  isOmxs30ResearchOnlyCandidate,
+} from "./omxs30Scope.ts";
 
 test("OMXS30 validation accepts Investor B and applies the dated Lifco-to-Sobi change", () => {
   assert.equal(eligibleAgInvestCandidate("SE", "INVE B", "2026-11-24"), true);
@@ -12,7 +16,12 @@ test("OMXS30 validation accepts Investor B and applies the dated Lifco-to-Sobi c
   assert.equal(eligibleAgInvestCandidate("SE", "SOBI", "2026-11-30"), false);
   assert.equal(eligibleAgInvestCandidate("SE", "LIFCO-B", "2026-12-01"), false);
   assert.equal(eligibleAgInvestCandidate("SE", "SOBI", "2026-12-01"), true);
-  assert.equal(eligibleAgInvestCandidate("SE", "SKFVER-B", "2026-11-27"), false);
+  assert.equal(eligibleAgInvestCandidate("SE", "SKFVER-B", "2026-11-25"), false);
+  assert.equal(eligibleAgInvestCandidate("SE", "SKFVER-B", "2026-11-26"), true);
+  assert.equal(eligibleAgInvestCandidate("SE", "SKFVER-B", "2026-11-30"), true);
+  assert.equal(eligibleAgInvestCandidate("SE", "SKFVER-B", "2026-12-01"), false);
+  assert.equal(isOmxs30ResearchOnlyCandidate("SE", "SKFVER-B", "2026-11-26"), true);
+  assert.equal(isOmxs30ResearchOnlyCandidate("SE", "SKFVER-B", "2026-12-01"), false);
 });
 
 test("import scope rejects US and Swedish non-index proposals while keeping Investor B", () => {

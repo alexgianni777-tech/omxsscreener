@@ -5,6 +5,9 @@
  */
 export const OMXS30_ACTIVE_FROM = "2026-11-23";
 export const OMXS30_DECEMBER_REBALANCE = "2026-12-01";
+export const SKF_VERTEVO_RESEARCH_START = "2026-11-26";
+export const SKF_VERTEVO_RESEARCH_END = "2026-11-30";
+export const SKF_VERTEVO_TICKER = "SKFVER-B.ST";
 export const OMXS30_TOP3_POLICY_VERSION = "official-top3-v8-omxs30";
 
 const NOVEMBER_MEMBERS = new Set([
@@ -20,6 +23,7 @@ const DECEMBER_MEMBERS = new Set([
   ...[...NOVEMBER_MEMBERS].filter((ticker) => ticker !== "LIFCO-B.ST"),
   "SOBI.ST",
 ]);
+const INTERIM_RESEARCH_MEMBERS = new Set([...NOVEMBER_MEMBERS, SKF_VERTEVO_TICKER]);
 
 const SYMBOL_ALIASES: Readonly<Record<string, string>> = {
   "INVESTOR B": "INVE-B.ST",
@@ -59,10 +63,23 @@ export function activeOmxs30Candidate(candidate: Omxs30CandidateIdentity): boole
 
   const ticker = normalizeTicker(candidate.ticker);
   if (!ticker) return false;
-  const members = candidate.sessionDate < OMXS30_DECEMBER_REBALANCE
-    ? NOVEMBER_MEMBERS
-    : DECEMBER_MEMBERS;
+  const members = candidate.sessionDate >= SKF_VERTEVO_RESEARCH_START &&
+      candidate.sessionDate <= SKF_VERTEVO_RESEARCH_END
+    ? INTERIM_RESEARCH_MEMBERS
+    : candidate.sessionDate < OMXS30_DECEMBER_REBALANCE
+      ? NOVEMBER_MEMBERS
+      : DECEMBER_MEMBERS;
   return members.has(ticker);
+}
+
+export function isOmxs30ResearchOnlyCandidate(candidate: Omxs30CandidateIdentity): boolean {
+  if (
+    candidate.market !== "SE" ||
+    !validIsoDate(candidate.sessionDate) ||
+    candidate.sessionDate < SKF_VERTEVO_RESEARCH_START ||
+    candidate.sessionDate > SKF_VERTEVO_RESEARCH_END
+  ) return false;
+  return normalizeTicker(candidate.ticker) === SKF_VERTEVO_TICKER;
 }
 
 export function filterActiveOmxs30Candidates<T extends Omxs30CandidateIdentity>(candidates: readonly T[]): T[] {

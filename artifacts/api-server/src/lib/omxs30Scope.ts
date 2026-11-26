@@ -7,6 +7,9 @@
  */
 export const OMXS30_SCOPE_START = "2026-11-23";
 export const OMXS30_DECEMBER_REBALANCE = "2026-12-01";
+export const SKF_VERTEVO_RESEARCH_START = "2026-11-26";
+export const SKF_VERTEVO_RESEARCH_END = "2026-11-30";
+export const SKF_VERTEVO_TICKER = "SKFVER-B.ST";
 
 const NOVEMBER_MEMBERS = [
   "ABB.ST", "ADDT-B.ST", "ALFA.ST", "ASSA-B.ST", "AZN.ST",
@@ -49,7 +52,27 @@ export function omxs30Members(decisionDate: string): ReadonlySet<string> {
   if (!isIsoDate(decisionDate)) {
     throw new Error("A valid Stockholm decision date is required for OMXS30 validation");
   }
-  return new Set(decisionDate < OMXS30_DECEMBER_REBALANCE ? NOVEMBER_MEMBERS : DECEMBER_MEMBERS);
+  const members = decisionDate < OMXS30_DECEMBER_REBALANCE
+    ? NOVEMBER_MEMBERS
+    : DECEMBER_MEMBERS;
+  const datedMembers = new Set<string>(members);
+  if (decisionDate >= SKF_VERTEVO_RESEARCH_START && decisionDate <= SKF_VERTEVO_RESEARCH_END) {
+    datedMembers.add(SKF_VERTEVO_TICKER);
+  }
+  return datedMembers;
+}
+
+/** The temporary constituent is importable as research, but never rankable. */
+export function isOmxs30ResearchOnlyCandidate(
+  market: unknown,
+  ticker: unknown,
+  decisionDate: string,
+): boolean {
+  return market === "SE" &&
+    isIsoDate(decisionDate) &&
+    decisionDate >= SKF_VERTEVO_RESEARCH_START &&
+    decisionDate <= SKF_VERTEVO_RESEARCH_END &&
+    normalizedOmxs30Ticker(ticker) === SKF_VERTEVO_TICKER;
 }
 
 /** Fail closed for US, unknown, and non-constituent symbols. */
