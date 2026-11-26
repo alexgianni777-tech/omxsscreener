@@ -2,7 +2,11 @@ import { candidateSelectionScore, selectSourceBalancedCandidates } from "./candi
 import { screenCandidate, reviewCandidate } from "./screeningReview.ts";
 import type { SourceReport } from "@workspace/market-calendar/research-policy";
 import { isAcceptedSignalDate } from "./signalDatePolicy";
-import { eligibleAgInvestCandidate, OMXS30_SCOPE_START } from "./omxs30Scope";
+import {
+  eligibleAgInvestCandidate,
+  isOmxs30ResearchOnlyCandidate,
+  OMXS30_SCOPE_START,
+} from "./omxs30Scope";
 
 export const TOP3_POLICY_VERSION = "official-top3-v8-omxs30";
 export const TOP3_SELECTION_TYPE = "AUTO";
@@ -113,10 +117,13 @@ export function buildTop3SelectionSnapshot(
   const evaluated = candidates.map((candidate) => {
     const baseReview = reviewCandidate(candidate, sessionSource, selectedAt, { reports });
     const beforeOmxs30Scope = sessionDate < OMXS30_SCOPE_START;
+    const researchOnly = isOmxs30ResearchOnlyCandidate(candidate.market, candidate.ticker, sessionDate);
     const inActiveUniverse = beforeOmxs30Scope
       ? candidate.market === "SE" || candidate.market === "US"
       : eligibleAgInvestCandidate(candidate.market, candidate.ticker, sessionDate);
-    const scopeReason = `AG_INVEST_SCOPE_OMXS30_ONLY: ${candidate.market ?? "UNKNOWN"}:${candidate.ticker} is not an OMXS30 member on decision day ${sessionDate}`;
+    const scopeReason = researchOnly
+      ? `AG_INVEST_SCOPE_OMXS30_ONLY: ${candidate.ticker} is RESEARCH_ONLY for decision day ${sessionDate}; verified history is required before any active import or ranking`
+      : `AG_INVEST_SCOPE_OMXS30_ONLY: ${candidate.market ?? "UNKNOWN"}:${candidate.ticker} is not an OMXS30 member on decision day ${sessionDate}`;
     // Historical sessions retain their original evaluation rules. From the
     // effective decision date onward, an out-of-scope candidate is explicitly
     // blocked in both review and decision status, not merely omitted at ranking.

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { decideCandidate, reviewCandidate } from "./screeningReview.ts";
-import {previousMarketDay,signalSessionDate} from "@workspace/market-calendar";
+import { previousMarketDay } from "@workspace/market-calendar";
 
 const edgeCandidate = {
   market:"SE",
@@ -20,7 +20,14 @@ const edgeCandidate = {
   signalRsi: 50,
   signalGapPct: 0,
   volMultiplier: 1,
-  volumeAsOf: previousMarketDay(signalSessionDate(new Date(),"SE"),"SE"),
+  volumeAsOf: previousMarketDay(new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Stockholm", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date()),"SE"),
+  dataQuality: {
+    dataAsOf: previousMarketDay(new Intl.DateTimeFormat("sv-SE", {
+      timeZone: "Europe/Stockholm", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date()),"SE"),
+  },
   earningsInDays: 10,
   earningsKnowledge: "SIGNAL_TIME" as const,
   entryPrice: 100,
@@ -172,7 +179,13 @@ test("stale comparison uses the Stockholm calendar date", () => {
   const approved = { status: "APPROVED" as const, reasons: [] };
   const justAfterMidnightStockholm = new Date("2026-07-10T22:30:00.000Z");
   const decision = decideCandidate(
-    { ...edgeCandidate, signalDate: "2026-07-11", volumeAsOf:"2026-07-10",rsi: 20 },
+    {
+      ...edgeCandidate,
+      signalDate: "2026-07-11",
+      volumeAsOf: "2026-07-10",
+      dataQuality: { dataAsOf: "2026-07-10" },
+      rsi: 20,
+    },
     approved,
     "2026-07-11",
     justAfterMidnightStockholm,

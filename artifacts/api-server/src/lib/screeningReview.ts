@@ -1,6 +1,7 @@
 import { isAcceptedSignalDate } from "./signalDatePolicy";
-import { marketDate, signalSessionDate, validMarketDate } from "@workspace/market-calendar";
+import { marketDate, previousMarketDay, signalSessionDate, validMarketDate } from "@workspace/market-calendar";
 import { resolveYahooTicker } from "./omxs30TickerMap";
+import { isOmxs30ResearchOnlyCandidate, OMXS30_SCOPE_START } from "./omxs30Scope";
 import { qualifyResearch,marketRegime,evidenceDataDate,hasVerifiedAtr,BOARD_REVIEW_REQUIRED,manualReportNotice,
   type SourceReport,type Qualification } from "@workspace/market-calendar/research-policy";
 
@@ -60,6 +61,16 @@ export type CandidateDecision = {
 function statusFor(reasons: string[], blockers: string[]): ReviewStatus {
   if (blockers.length > 0) return "BLOCKED";
   return reasons.length > 0 ? "WARN" : "APPROVED";
+}
+
+function candidateMarketDataAsOf(candidate: CandidateReviewInput): string | null {
+  if (candidate.dataDate !== undefined) {
+    return validMarketDate(candidate.dataDate) ? candidate.dataDate : null;
+  }
+  const quality = candidate.dataQuality;
+  if (!quality || typeof quality !== "object" || Array.isArray(quality)) return null;
+  const dataAsOf = (quality as Record<string, unknown>).dataAsOf;
+  return validMarketDate(dataAsOf) ? dataAsOf : null;
 }
 
 export function reviewCandidate(
@@ -215,6 +226,7 @@ export function screenCandidate(
   }
 
   const invalid: string[] = [];
+  const activeOmxs30Blockers: string[] = [];
   if (!Number.isFinite(candidate.price) || candidate.price <= 0) {
     invalid.push("Screenad kurs saknas eller är ogiltig.");
   }
@@ -244,6 +256,23 @@ export function screenCandidate(
   ) {
     invalid.push("Entry-, stop- eller targetdata saknas eller är ogiltig.");
   }
+  if (candidate.market === "SE" && validMarketDate(sessionDate) && sessionDate >= OMXS30_SCOPE_START) {
+    const expectedDataDate = previousMarketDay(sessionDate, "SE");
+    const dataAsOf = candidateMarketDataAsOf(candidate);
+    if (!expectedDataDate) {
+      activeOmxs30Blockers.push("OMXS30:s förväntade D−1-dag kan inte verifieras med börskalendern.");
+    } else {
+      if (dataAsOf !== expectedDataDate) {
+        activeOmxs30Blockers.push(`OMXS30-källdagen ${dataAsOf ?? "saknas"} avviker från förväntad D−1 ${expectedDataDate}.`);
+      }
+      if (candidate.volumeAsOf !== expectedDataDate) {
+        activeOmxs30Blockers.push(`Volymens OHLC-dag ${candidate.volumeAsOf ?? "saknas"} avviker från OMXS30 D−1 ${expectedDataDate}.`);
+      }
+    }
+    if (isOmxs30ResearchOnlyCandidate("SE", candidate.ticker, sessionDate)) {
+      activeOmxs30Blockers.push("SKF Vertevo är tillfälligt RESEARCH_ONLY 2026-11-26–2026-11-30; den får inte rankas som aktiv Top 3.");
+    }
+  }
   if (invalid.length > 0) return { status: "INVALID", reasons: [...invalid, ...review.reasons] };
 
   const today = marketDate(now, market);
@@ -255,6 +284,9 @@ export function screenCandidate(
       status: "STALE",
       reasons: [`Signalen är från ${candidate.signalDate}; kontrollera en ny snapshot och live-pris före trade.`, ...review.reasons],
     };
+  }
+  if (activeOmxs30Blockers.length > 0) {
+    return { status: "BLOCKED", reasons: [...activeOmxs30Blockers, ...review.reasons] };
   }
   if (review.status === "BLOCKED") return { status: "BLOCKED", reasons: review.reasons };
   const qualification=candidateQualification(candidate,candidate.signalSource??null,now,context);

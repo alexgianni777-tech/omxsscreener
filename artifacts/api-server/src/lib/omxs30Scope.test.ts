@@ -17,8 +17,8 @@ test("OMXS30 validation accepts Investor B and applies the dated Lifco-to-Sobi c
   assert.equal(eligibleAgInvestCandidate("SE", "LIFCO-B", "2026-12-01"), false);
   assert.equal(eligibleAgInvestCandidate("SE", "SOBI", "2026-12-01"), true);
   assert.equal(eligibleAgInvestCandidate("SE", "SKFVER-B", "2026-11-25"), false);
-  assert.equal(eligibleAgInvestCandidate("SE", "SKFVER-B", "2026-11-26"), true);
-  assert.equal(eligibleAgInvestCandidate("SE", "SKFVER-B", "2026-11-30"), true);
+  assert.equal(eligibleAgInvestCandidate("SE", "SKFVER-B", "2026-11-26"), false);
+  assert.equal(eligibleAgInvestCandidate("SE", "SKFVER-B", "2026-11-30"), false);
   assert.equal(eligibleAgInvestCandidate("SE", "SKFVER-B", "2026-12-01"), false);
   assert.equal(isOmxs30ResearchOnlyCandidate("SE", "SKFVER-B", "2026-11-26"), true);
   assert.equal(isOmxs30ResearchOnlyCandidate("SE", "SKFVER-B", "2026-12-01"), false);

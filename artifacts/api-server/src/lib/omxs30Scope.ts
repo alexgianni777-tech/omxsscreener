@@ -47,7 +47,7 @@ export function normalizedOmxs30Ticker(input: unknown): string | null {
   return symbol.endsWith(".ST") ? symbol : `${symbol}.ST`;
 }
 
-/** Returns the documented list for the supplied Stockholm decision date. */
+/** Returns the active, tradeable list for the supplied Stockholm decision date. */
 export function omxs30Members(decisionDate: string): ReadonlySet<string> {
   if (!isIsoDate(decisionDate)) {
     throw new Error("A valid Stockholm decision date is required for OMXS30 validation");
@@ -55,14 +55,10 @@ export function omxs30Members(decisionDate: string): ReadonlySet<string> {
   const members = decisionDate < OMXS30_DECEMBER_REBALANCE
     ? NOVEMBER_MEMBERS
     : DECEMBER_MEMBERS;
-  const datedMembers = new Set<string>(members);
-  if (decisionDate >= SKF_VERTEVO_RESEARCH_START && decisionDate <= SKF_VERTEVO_RESEARCH_END) {
-    datedMembers.add(SKF_VERTEVO_TICKER);
-  }
-  return datedMembers;
+  return new Set(members);
 }
 
-/** The temporary constituent is importable as research, but never rankable. */
+/** Temporary SKF Vertevo is research-only during the transition, not importable as a new active proposal. */
 export function isOmxs30ResearchOnlyCandidate(
   market: unknown,
   ticker: unknown,
@@ -82,6 +78,7 @@ export function eligibleAgInvestCandidate(
   decisionDate: string,
 ): boolean {
   if (market !== "SE" || decisionDate < OMXS30_SCOPE_START) return false;
+  if (isOmxs30ResearchOnlyCandidate(market, ticker, decisionDate)) return false;
   return omxs30Members(decisionDate).has(normalizedOmxs30Ticker(ticker) ?? "");
 }
 

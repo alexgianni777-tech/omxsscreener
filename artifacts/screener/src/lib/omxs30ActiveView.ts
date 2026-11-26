@@ -23,7 +23,6 @@ const DECEMBER_MEMBERS = new Set([
   ...[...NOVEMBER_MEMBERS].filter((ticker) => ticker !== "LIFCO-B.ST"),
   "SOBI.ST",
 ]);
-const INTERIM_RESEARCH_MEMBERS = new Set([...NOVEMBER_MEMBERS, SKF_VERTEVO_TICKER]);
 
 const SYMBOL_ALIASES: Readonly<Record<string, string>> = {
   "INVESTOR B": "INVE-B.ST",
@@ -63,12 +62,9 @@ export function activeOmxs30Candidate(candidate: Omxs30CandidateIdentity): boole
 
   const ticker = normalizeTicker(candidate.ticker);
   if (!ticker) return false;
-  const members = candidate.sessionDate >= SKF_VERTEVO_RESEARCH_START &&
-      candidate.sessionDate <= SKF_VERTEVO_RESEARCH_END
-    ? INTERIM_RESEARCH_MEMBERS
-    : candidate.sessionDate < OMXS30_DECEMBER_REBALANCE
-      ? NOVEMBER_MEMBERS
-      : DECEMBER_MEMBERS;
+  const members = candidate.sessionDate < OMXS30_DECEMBER_REBALANCE
+    ? NOVEMBER_MEMBERS
+    : DECEMBER_MEMBERS;
   return members.has(ticker);
 }
 

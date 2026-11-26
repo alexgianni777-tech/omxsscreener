@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildTop3SelectionSnapshot, TOP3_POLICY_VERSION } from "./top3SelectionPolicyCore.ts";
+import { omxs30Members } from "./omxs30Scope.ts";
 
 function candidate(
   id: number,
@@ -156,6 +157,53 @@ test("active OMXS30 ranking requires synchronized decision-day D−1 for signal 
   assert.equal(rows.find((row) => row.candidateId === 23)?.selected, false);
   assert.ok(rows.find((row) => row.candidateId === 23)?.decision.reasons
     .some((reason) => reason.includes("RESEARCH_ONLY")));
+});
+
+test("29 synchronized members remain usable when one member is stale; wrong index date ranks none", () => {
+  const decisionDate = "2026-12-02";
+  const expectedDataDate = "2026-12-01";
+  const now = new Date("2026-12-02T10:00:00.000Z");
+  const tickers = [...omxs30Members(decisionDate)];
+  assert.equal(tickers.length, 30);
+
+  const candidates = tickers.map((ticker, index) => candidate(
+    index + 100,
+    ticker,
+    "LONG",
+    "SE",
+    {
+      signalDate: decisionDate,
+      volumeAsOf: index === 29 ? "2026-11-30" : expectedDataDate,
+      dataQuality: { dataAsOf: expectedDataDate },
+    },
+  ));
+  const currentRows = buildTop3SelectionSnapshot(
+    candidates as any,
+    106,
+    decisionDate,
+    "telegram",
+    now,
+    regimeReports("BULLISH", "BULLISH", expectedDataDate),
+  );
+  assert.equal(currentRows.filter((row) => row.decision.status === "TRADEABLE").length, 29);
+  assert.equal(currentRows.find((row) => row.candidateId === 129)?.selected, false);
+  assert.ok(currentRows.find((row) => row.candidateId === 129)?.decision.reasons
+    .some((reason) => reason.includes("Volymens OHLC-dag")));
+
+  const wrongIndexRows = buildTop3SelectionSnapshot(
+    [candidate(130, tickers[0], "LONG", "SE", {
+      signalDate: decisionDate,
+      volumeAsOf: expectedDataDate,
+      dataQuality: { dataAsOf: expectedDataDate },
+    })] as any,
+    107,
+    decisionDate,
+    "telegram",
+    now,
+    regimeReports("BULLISH", "BULLISH", "2026-11-30"),
+  );
+  assert.equal(wrongIndexRows[0]?.selected, false);
+  assert.equal(wrongIndexRows[0]?.decision.status, "WAIT");
 });
 
 test("opposing directions for the same canonical underlying are neither auto-selected and carry CONFLICT", () => {

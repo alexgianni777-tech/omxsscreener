@@ -25,3 +25,4 @@
 - [Autoscale import recovery](autoscale-import-recovery.md) — await wake checks while CPU is allocated; durable receipts prevent restart duplicates; local workflow ≠ active schedule.
 - [Source quality policy](source-quality-policy.md) — quality is a safety overlay; never infer historical qualification from newer data or edit upstream without separate approval.
 - [Nix runtime compatibility](nix-runtime-compatibility.md) — installed native libraries may require a newer glibc loader than the default scripting runtime.
+- [OMXS30 D−1 and interim members](omxs30-d1-membership.md) — membership uses the decision day; SKF Vertevo is research-only Nov 26–30, and active OHLC/volume must match Swedish D−1.
