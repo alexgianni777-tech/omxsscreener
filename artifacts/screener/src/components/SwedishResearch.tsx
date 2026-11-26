@@ -14,21 +14,25 @@ import { trendAlignment } from "../lib/sourceMarketEvidence";
 import { SourceProvenance } from "./SourceProvenance";
 import { ResearchMarketSections, type MarketEvidenceSignal } from "./ResearchMarketSections";
 import { CashResearchRanking } from "./CashResearch";
+import { filterActiveOmxs30Picks } from "../lib/omxs30ActiveView";
 
 export function researchPicks(selection: SavedTop3Display): DailyPick[] {
   return selection.revision.picks.map(p => ({ ...p, market: p.market ?? "", source: p.source ?? "okänd", signalDate: p.signalDate ?? null }));
 }
 
 export function SwedishResearchContent({ selection, signals = [], reports = [], statusReports, quotes = {}, today, onRefresh, refreshing = false, quoteError = false,
-  diagnosticSignals, diagnosticReports, diagnosticDate, diagnosticSessionId, marketDates }: {
+  diagnosticSignals, diagnosticReports, diagnosticDate, diagnosticSessionId, marketDates, omxs30Only = true }: {
   selection: SavedTop3Display; signals?: readonly ResearchSignal[]; reports?: readonly SessionSourceReport[]; quotes?: Record<string, QuoteResult>;
   today: string; onRefresh?: () => void; refreshing?: boolean; quoteError?: boolean;
   statusReports?: readonly SessionSourceReport[];
   diagnosticSignals?: readonly MarketEvidenceSignal[]; diagnosticReports?: readonly SessionSourceReport[]; diagnosticDate?: string;
   diagnosticSessionId?: number;
   marketDates?: { SE: string; US: string };
+  omxs30Only?: boolean;
 }) {
-  const picks = researchPicks(selection);
+  const allPicks = researchPicks(selection);
+  const picks = omxs30Only ? filterActiveOmxs30Picks(allPicks, selection.date) : allPicks;
+  const archivedCount = allPicks.length - picks.length;
   const groups = marketDailyPicks(picks, "SE");
   const reference = (p: DailyPick) => marketDates?.[p.market as "SE" | "US"] ?? today;
   const freshness = (p: DailyPick) => d1Freshness(savedDataDate(selection.dataDates, p.source, p.signalDate, p.market), reference(p), p.market);
@@ -40,7 +44,7 @@ export function SwedishResearchContent({ selection, signals = [], reports = [], 
   return <>
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
-        <h2 className="text-xl font-semibold tracking-tight">Sverige &amp; USA · Top 3</h2>
+        <h2 className="text-xl font-semibold tracking-tight">{omxs30Only ? "OMXS30 · Top 3" : "Sverige & USA · Top 3"}</h2>
         <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span className="font-mono" data-testid="text-research-date">Session {selection.date}</span>
           <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-primary">
@@ -48,7 +52,7 @@ export function SwedishResearchContent({ selection, signals = [], reports = [], 
           {stale && <span data-testid="status-research-stale" className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-700">STALE</span>}
           {unknownDate && <span className="text-muted-foreground">NO DATA · datadag eller börskalender ej verifierad</span>}
           <span>Long {groups[0].picks.length}/3 · Short {groups[1].picks.length}/3</span>
-          <span>USA: Long {marketDailyPicks(picks, "US")[0].picks.length}/3 · Short {marketDailyPicks(picks, "US")[1].picks.length}/3</span>
+          {!omxs30Only && <span>USA: Long {marketDailyPicks(picks, "US")[0].picks.length}/3 · Short {marketDailyPicks(picks, "US")[1].picks.length}/3</span>}
         </p>
       </div>
       <button type="button" data-testid="button-refresh-quotes" onClick={onRefresh} disabled={!onRefresh || refreshing}
@@ -59,15 +63,19 @@ export function SwedishResearchContent({ selection, signals = [], reports = [], 
       Senast giltiga sparade urval behålls tills ett nytt giltigt finns. Underlag från föregående stängning; inte ett köpbesked.
       {stale && " Gammalt eller ej styrkt datadatum: inget nytt köp utan egen liveverifiering."}
     </p>
+    {omxs30Only && archivedCount > 0 && <p role="status" className="mt-2 text-xs text-amber-700" data-testid="research-archive-count">
+      {archivedCount} äldre eller utanför OMXS30-pick(s) behålls i sessionens historik och visas inte som aktuella förslag.{" "}
+      <Link href={`/sessions/${selection.sessionId}`} className="underline">Öppna historikarkivet</Link>
+    </p>}
     {diagnosticDate && diagnosticDate>selection.date && <p role="status" className="mt-2 text-xs text-amber-800 dark:text-amber-300">
       Nyare session inläst: {diagnosticDate}. Det sparade urvalet från {selection.date} visas fortfarande;
       den nyare importen har inte gett ett nytt giltigt komplett urval. Importdatum är inte marknadsdag eller entrybekräftelse.
       {!!diagnosticSessionId&&<Link href={`/sessions/${diagnosticSessionId}`} className="ml-1 underline">Visa senaste researchunderlaget</Link>}
     </p>}
-    <SourceProvenance reports={statusReports ?? reports} context={statusReports ? "senaste kvitton per källa" : "urvalets session"} />
+    <SourceProvenance reports={statusReports ?? reports} context={statusReports ? "senaste kvitton per källa" : "urvalets session"} omxs30Only={omxs30Only} />
     {quoteError && <p role="alert" className="mt-2 text-xs text-destructive">Kurshämtningen misslyckades. Planerna är oförändrade; försök igen eller kontrollera Avanza.</p>}
-    <ResearchMarketSections picks={picks} signals={diagnosticSignals ?? signals} reports={diagnosticReports ?? reports}
-      sessionDate={diagnosticDate ?? selection.date} renderPick={p => <ResearchCard key={p.candidateId} pick={p}
+    <ResearchMarketSections picks={picks} omxs30Only={omxs30Only} signals={diagnosticSignals ?? signals} reports={diagnosticReports ?? reports}
+      sessionDate={diagnosticDate ?? selection.date} decisionDate={selection.date} renderPick={p => <ResearchCard key={p.candidateId} pick={p}
           signal={signals.find(c => c.id === p.candidateId && (c.signalDate ?? null) === (p.signalDate ?? null) &&
             c.entryPrice === p.entryPrice && c.stopPrice === p.stopPrice && c.targetPrice === p.targetPrice)}
           reports={reports} dataDate={savedDataDate(selection.dataDates, p.source, p.signalDate, p.market)} quote={quotes[quoteRequestTicker(p.ticker, p.market)]}
@@ -129,11 +137,13 @@ export function PreliminaryResearchContent({ picks, sessionDate, signals = [], s
   picks: readonly DailyPick[]; sessionDate: string; signals?: readonly ResearchSignal[]; quotes?: Record<string, QuoteResult>;
   statusReports?: readonly SessionSourceReport[]; onRefresh?: () => void; refreshing?: boolean; quoteError?: boolean;
 }) {
-  const groups = marketDailyPicks(picks, "SE");
+  const activePicks = filterActiveOmxs30Picks(picks, sessionDate);
+  const archivedCount = picks.length - activePicks.length;
+  const groups = marketDailyPicks(activePicks, "SE");
   return <>
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
-        <h2 className="text-xl font-semibold tracking-tight">Sverige &amp; USA · Top 3</h2>
+        <h2 className="text-xl font-semibold tracking-tight">OMXS30 · preliminär Top 3</h2>
         <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span className="font-mono">Session {sessionDate}</span>
           <span data-testid="status-research-preliminary" className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-700">PRELIMINÄR</span>
@@ -145,9 +155,12 @@ export function PreliminaryResearchContent({ picks, sessionDate, signals = [], s
         {refreshing ? "Hämtar priser…" : "Uppdatera priser"}</button>
     </div>
     <p className="mt-2 text-xs text-muted-foreground">Ingen giltig sparad Top 3 finns. Preliminärt urval ur sessionens befintliga rankning; inte sparat, inte officiellt, inte ett köpbesked.</p>
-    {statusReports && <SourceProvenance reports={statusReports} context="senaste kvitton per källa" />}
+    {archivedCount > 0 && <p role="status" className="mt-2 text-xs text-amber-700" data-testid="research-archive-count">
+      {archivedCount} USA- eller utanför-index-pick(s) visas inte aktivt; sessionens historik bevaras.
+    </p>}
+    {statusReports && <SourceProvenance reports={statusReports} context="senaste kvitton per källa" omxs30Only />}
     {quoteError && <p role="alert" className="mt-2 text-xs text-destructive">Kurshämtningen misslyckades. Planerna är oförändrade.</p>}
-    <ResearchMarketSections picks={picks} signals={signals} reports={statusReports}
+    <ResearchMarketSections picks={activePicks} signals={signals} reports={statusReports}
       sessionDate={sessionDate} renderPick={p => <ResearchCard key={p.candidateId} pick={p}
           signal={signals.find(c => c.id === p.candidateId && (c.signalDate ?? null) === (p.signalDate ?? null) &&
             c.entryPrice === p.entryPrice && c.stopPrice === p.stopPrice && c.targetPrice === p.targetPrice)}
@@ -186,7 +199,9 @@ export function SwedishResearch({ latestReports }: { latestReports?: readonly Se
     return c ? [{ candidateId: p.candidateId, rank: p.rank, market: p.market ?? "", direction: p.direction, source: p.signalSource ?? "okänd",
       ticker: c.ticker, signalDate: c.signalDate, category: c.category, entryPrice: c.entryPrice, stopPrice: c.stopPrice, targetPrice: c.targetPrice, rr: c.rr }] : [];
   }).filter(p => !isolatedDailyPick(p, detail.data!.sourceReports ?? [])) : [];
-  const shown = (["SE", "US"] as const).flatMap(market => marketDailyPicks(s ? researchPicks(s) : prelim, market).flatMap(g => g.picks));
+  const candidatePicks = s ? researchPicks(s) : prelim;
+  const activeSessionDate = s?.date ?? detail.data?.date ?? "";
+  const shown = filterActiveOmxs30Picks(candidatePicks, activeSessionDate);
   const params = { tickers: [...new Set(shown.map(p => quoteRequestTicker(p.ticker, p.market)))].join(",") };
   const quotes = useGetQuotes(params, { query: { enabled: false, retry: false, queryKey: getGetQuotesQueryKey(params) } });
   const map: Record<string, QuoteResult> = {};

@@ -4,9 +4,11 @@ import { d1Freshness, signalSessionDate } from "@workspace/market-calendar";
 import { advisoryTrend, evidenceText } from "../lib/sourceMarketEvidence";
 
 /** These are frozen report observations, never a live index quote. */
-export function SourceMarketEvidence({ receipt }: { receipt: SessionSourceReport }) {
+export function SourceMarketEvidence({ receipt, marketScope = "ALL" }: {
+  receipt: SessionSourceReport; marketScope?: "SE" | "ALL";
+}) {
   return <div className="mt-1 space-y-1">
-    {(receipt.source === "telegram" ? ["SE"] as const : ["SE", "US"] as const).map(market => {
+    {(receipt.source === "telegram" || marketScope === "SE" ? ["SE"] as const : ["SE", "US"] as const).map(market => {
       const snapshot = receipt.marketContext?.[market];
       const index = snapshot?.indexSnapshot;
       const weather = snapshot?.weather;
@@ -31,7 +33,7 @@ export function SourceMarketEvidence({ receipt }: { receipt: SessionSourceReport
         {!snapshot && <p>Historiskt källväder saknas i detta äldre kvitto; återställs inte från en annan källa.</p>}
       </div>;
     })}
-    {receipt.source === "telegram" && <p>Telegram är en svensk rapport; amerikansk marknadsdag tillhandahålls inte och USA-synkning jämförs inte.</p>}
+    {receipt.source === "telegram" && marketScope !== "SE" && <p>Telegram är en svensk rapport; amerikansk marknadsdag tillhandahålls inte och USA-synkning jämförs inte.</p>}
     {receipt.source === "edgeai" && <p>Trend är rådgivande, inte bevisad edge eller entrygodkännande. RESEARCH ONLY och övriga spärrar gäller oförändrat.</p>}
   </div>;
 }

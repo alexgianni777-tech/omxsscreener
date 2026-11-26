@@ -18,7 +18,9 @@ function importTime(value?: string): string {
 }
 
 /** Stored session receipts only: no requests, polling or inferred market dates. */
-export function SourceProvenance({ reports = [], context }: { reports?: readonly SessionSourceReport[]; context?: string }) {
+export function SourceProvenance({ reports = [], context, omxs30Only = false }: {
+  reports?: readonly SessionSourceReport[]; context?: string; omxs30Only?: boolean;
+}) {
   const sources = ["telegram", "edgeai"].map(source => {
     const history = reports.filter(r => r.source === source);
     const latest = history.at(-1);
@@ -53,7 +55,8 @@ export function SourceProvenance({ reports = [], context }: { reports?: readonly
       {sources.map(s => <p key={`${s.source}-dates`} className="break-words">
         <span className="font-medium text-foreground">{s.source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"}</span>
         {" · "}Rapportdatum {day(s.accepted?.reportDate)}
-        {" · "}Marknadsdag SE {day(s.accepted?.dataDates?.SE)} / USA {s.source === "telegram" ? "ingår inte i svensk rapport" : day(s.accepted?.dataDates?.US)}
+        {" · "}Marknadsdag SE {day(s.accepted?.dataDates?.SE)}
+        {!omxs30Only && <> / USA {s.source === "telegram" ? "ingår inte i svensk rapport" : day(s.accepted?.dataDates?.US)}</>}
          {" · "}Senast lyckad import: {importTime(s.accepted?.importedAt)}
       </p>)}
     </div>
@@ -61,7 +64,7 @@ export function SourceProvenance({ reports = [], context }: { reports?: readonly
       <summary className="cursor-pointer">Källornas separata indexunderlag och rådgivande trend</summary>
       {sources.map(s => s.accepted ? <section key={s.source} className="mt-2">
         <p className="font-medium">{s.source === "telegram" ? "Telegram" : "GitHub/EdgeAI"}</p>
-        <SourceMarketEvidence receipt={s.accepted} />
+        <SourceMarketEvidence receipt={s.accepted} marketScope={omxs30Only ? "SE" : "ALL"} />
       </section> : null)}
     </details>
     {sources.filter(s => s.latest?.status === "FAILED").map(s => <p key={`${s.source}-error`} role="alert" className="mt-1 break-words font-medium text-destructive">
@@ -77,7 +80,7 @@ export function SourceProvenance({ reports = [], context }: { reports?: readonly
       <p className="mt-1">Importens varningar gäller inte automatiskt varje aktie. Ej verifierad omfattning kräver försiktighet; endast säkert kopplade konflikter märks på kortet.</p>
     </details>)}
     <p data-testid="source-date-alignment" className={alignWarn ? "mt-1 font-semibold text-amber-700" : "mt-1"}>{alignment}</p>
-    {a?.reportDate && b?.reportDate && a.reportDate !== b.reportDate && <p className="mt-1">
+    {!omxs30Only && a?.reportDate && b?.reportDate && a.reportDate !== b.reportDate && <p className="mt-1">
       Olika rapportdatum: Telegram {day(a.reportDate)}, EdgeAI {day(b.reportDate)}. Marknadsdag jämförs separat för Sverige; USA ingår inte i Telegram.
     </p>}
     {verified && completeDates && alignWarn && <p className="mt-1 text-amber-700 dark:text-amber-400">
@@ -93,7 +96,9 @@ export function SourceProvenance({ reports = [], context }: { reports?: readonly
         {sources.map(s => <p key={s.source} className="break-words">
           <span className="font-medium text-foreground">{s.source === "edgeai" ? "GitHub/EdgeAI" : "Telegram"}</span>
           {" · "}{s.latest?.status === "FAILED" && s.accepted ? "Senast lyckad import: " : ""}
-          Rapportdatum {day(s.accepted?.reportDate)} · Marknadsdag Sverige {day(s.accepted?.dataDates?.SE)} · Marknadsdag USA {s.source === "telegram" ? "ingår inte i svensk rapport" : day(s.accepted?.dataDates?.US)} · Importerad {importTime(s.accepted?.importedAt)}
+          Rapportdatum {day(s.accepted?.reportDate)} · Marknadsdag Sverige {day(s.accepted?.dataDates?.SE)}
+          {!omxs30Only && <> · Marknadsdag USA {s.source === "telegram" ? "ingår inte i svensk rapport" : day(s.accepted?.dataDates?.US)}</>}
+          {" · "}Importerad {importTime(s.accepted?.importedAt)}
           {s.latest?.status === "FAILED" && <> · Senaste avvisade försök {importTime(s.latest.importedAt)}</>}
         </p>)}
         <p>Sparade kvitton, inte livekontroll av leverans eller kurs. Importtid visas i Stockholmstid. Datum utan verifierat kvitto visas som okända.</p>

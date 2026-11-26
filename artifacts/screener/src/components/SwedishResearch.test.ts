@@ -17,7 +17,7 @@ const selection: any = { sessionId: 7, date: "2026-10-09", kind: "RECOMMENDATION
     picks: [1, 2, 3, 4].map(i => pick(i, "LONG")).concat([pick(5, "SHORT"), pick(6, "LONG", "US")]) },
   dataDates: [{ source: "edgeai", signalDate: "2026-10-09", dataDate: "2026-10-08" }] };
 const render = (props: any) => renderToStaticMarkup(React.createElement(Router, { ssrPath: "/" },
-  React.createElement(SwedishResearchContent, { selection, today: "2026-10-12", ...props })));
+  React.createElement(SwedishResearchContent, { selection, today: "2026-10-12", omxs30Only: false, ...props })));
 test("newer imports are distinguished from the retained original selection, with an explicit research link",()=>{
   const html=render({diagnosticDate:"2026-10-12",diagnosticSessionId:88});
   assert.ok(html.includes("Nyare session inläst: 2026-10-12"));
@@ -113,14 +113,32 @@ test("a US Yahoo symbol cannot be shown as a verified current price for a Swedis
   assert.ok(html.includes('data-entry-status="UNKNOWN"'));
   assert.ok(!html.includes("53,82"));
 });
-test("both markets are prominent, max 3 per side, and all four groups remain visible", () => {
-  const html = render({});
-  assert.equal((html.match(/data-testid="research-card-/g) ?? []).length, 5);
-  assert.ok(!html.includes("research-card-4") && html.includes("research-card-6"));
-  assert.ok(html.includes("Long 3/3 · Short 1/3"));
-  assert.ok(html.includes("Köp / Long") && html.includes("Sälj / Short"));
-  for (const market of ["SE", "US"]) for (const direction of ["LONG", "SHORT"])
-    assert.ok(html.includes(`data-testid="research-${market}-${direction}"`));
+test("active research shows only dated OMXS30 members and keeps excluded picks in history", () => {
+  const currentSelection = {
+    ...selection,
+    date: "2026-11-26",
+    revision: { ...selection.revision, picks: [
+      { ...pick(21, "LONG"), ticker: "INVE-B.ST", signalDate: "2026-11-26" },
+      { ...pick(22, "SHORT"), ticker: "SCA-B.ST", signalDate: "2026-11-26" },
+      { ...pick(23, "LONG", "US"), ticker: "AAPL", signalDate: "2026-11-26" },
+      { ...pick(24, "SHORT"), ticker: "MYCR.ST", signalDate: "2026-11-26" },
+    ] },
+    dataDates: [{ source: "edgeai", signalDate: "2026-11-26", dataDate: "2026-11-25" }],
+  };
+  const reports: any[] = [
+    { source: "telegram", status: "SUCCESS", reportDate: "2026-11-26", importedAt: "2026-11-26T08:00:00Z",
+      dataDates: { SE: "2026-11-25", US: null }, warnings: [] },
+    { source: "edgeai", status: "SUCCESS", reportDate: "2026-11-26", importedAt: "2026-11-26T08:01:00Z",
+      dataDates: { SE: "2026-11-25", US: "2026-11-25" }, warnings: [] },
+  ];
+  const html = render({ selection: currentSelection, today: "2026-11-26", reports, statusReports: reports, omxs30Only: true });
+  assert.equal((html.match(/data-testid="research-card-/g) ?? []).length, 2);
+  assert.ok(html.includes("OMXS30 · Top 3"));
+  assert.ok(html.includes("INVE-B.ST") && html.includes("SCA-B.ST"));
+  assert.ok(!html.includes("AAPL") && !html.includes("MYCR.ST"));
+  assert.ok(!html.includes("USA") && !html.includes("research-market-US"));
+  assert.ok(html.includes("research-SE-LONG") && html.includes("research-SE-SHORT"));
+  assert.ok(html.includes("2 äldre eller utanför OMXS30-pick(s)"));
 });
 test("November 3 US empty sections explain October 30 signal and market dates without promoting old cases", () => {
   const reports: any[] = [{ source: "edgeai", status: "SUCCESS", reportDate: "2026-11-02",
@@ -134,9 +152,9 @@ test("November 3 US empty sections explain October 30 signal and market dates wi
   const html = renderToStaticMarkup(React.createElement(ResearchMarketSections, {
     picks: [], signals, reports, sessionDate: "2026-11-03", renderPick: () => null,
   }));
-  assert.ok(html.includes("empty-US-LONG") && html.includes("empty-US-SHORT"));
-  assert.ok(html.includes("2026-10-30") && html.includes("2026-11-02") && html.includes("Datumspärr"));
-  assert.ok(html.includes("STALE") && html.includes("NO TRADE"));
+  assert.ok(html.includes("research-market-SE"));
+  assert.ok(!html.includes("research-market-US") && !html.includes("USA"));
+  assert.ok(!html.includes("AAPL"));
   assert.ok(!html.includes("TRADEABLE") && !html.includes('data-entry-status="READY"'));
 });
 test("previous-weekday dates remain valid across a weekend; unknown/future signal dates stay blocked", () => {
@@ -220,14 +238,17 @@ test("single entry verdict remains visible; technical guard is disclosed; invali
   assert.ok(html.includes("data-entry-status="));
 });
 
-test("GETI-B quarantined saved plan stays visible with source-conflict warning and guard never READY", () => {
-  const sel: any = { ...selection, revision: { ...selection.revision, picks: [{ ...pick(9, "LONG"), ticker: "GETI B" }] } };
-  const report = { source: "edgeai", signalDate: "2026-10-09", reportDate: "2026-10-09", generatedAt: null, importedAt: "2026-10-09T08:00:00Z",
-    fingerprint: "v2:q", status: "SUCCESS", dataDates: { SE: "2026-10-08", US: null }, warnings: ["GETI-B"],
-    quarantinedIdentities: ["SE|MOMENTUM|GETI-B|LONG|2026-10-09|edgeai"] };
+test("current OMXS30 quarantined saved plan stays visible with source-conflict warning and guard never READY", () => {
+  const signalDate = "2026-11-26";
+  const sel: any = { ...selection, date: signalDate,
+    dataDates: [{ source: "edgeai", signalDate, dataDate: "2026-11-25" }],
+    revision: { ...selection.revision, picks: [{ ...pick(9, "LONG"), ticker: "INVE-B.ST", signalDate }] } };
+  const report = { source: "edgeai", signalDate, reportDate: signalDate, generatedAt: null, importedAt: "2026-11-26T08:00:00Z",
+    fingerprint: "v2:q", status: "SUCCESS", dataDates: { SE: "2026-11-25", US: null }, warnings: ["INVE-B"],
+    quarantinedIdentities: ["SE|MOMENTUM|INVE-B|LONG|2026-11-26|edgeai"] };
   const html = renderToStaticMarkup(React.createElement(Router, { ssrPath: "/" }, React.createElement(SwedishResearchContent, {
-    selection: sel, today: "2026-10-12", reports: [report],
-    quotes: { "SE:GETI B": { ticker: "GETI B", yahooTicker: "GETI-B.ST", livePrice: 100, marketState: "REGULAR", asOf: new Date().toISOString() } } })));
+    selection: sel, today: signalDate, reports: [report],
+    quotes: { "SE:INVE-B.ST": { ticker: "INVE-B.ST", yahooTicker: "INVE-B.ST", livePrice: 100, marketState: "REGULAR", asOf: new Date().toISOString() } } })));
   assert.ok(html.includes("research-card-9"));
   assert.ok(html.includes("Källkonflikt – ingen entrybekräftelse"));
   assert.ok(html.includes('data-entry-status="UNKNOWN"'));

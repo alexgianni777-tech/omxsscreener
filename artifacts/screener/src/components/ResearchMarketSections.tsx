@@ -2,6 +2,7 @@ import React from "react";
 import { d1Freshness } from "@workspace/market-calendar";
 import type { SessionSourceReport } from "@workspace/api-client-react";
 import { marketDailyPicks, oldSignalWarning, type DailyPick } from "../lib/dailyCandidates";
+import { filterActiveOmxs30Picks } from "../lib/omxs30ActiveView";
 
 export type MarketEvidenceSignal = {
   market?: string | null; direction?: string; signalDate?: string | null;
@@ -29,22 +30,24 @@ export function marketEvidence(market: "SE" | "US", direction: string,
     staleData, futureData };
 }
 
-/** Four equally visible groups, including empty US groups. No new ranking. */
-export function ResearchMarketSections({ picks, signals = [], reports = [], sessionDate, renderPick }: {
+/** Active research is OMXS30-only; out-of-scope rows remain available in session history. */
+export function ResearchMarketSections({ picks, signals = [], reports = [], sessionDate, decisionDate = sessionDate, renderPick, omxs30Only = true }: {
   picks: readonly DailyPick[]; signals?: readonly MarketEvidenceSignal[];
-  reports?: readonly SessionSourceReport[]; sessionDate: string;
+  reports?: readonly SessionSourceReport[]; sessionDate: string; decisionDate?: string;
   renderPick: (pick: DailyPick) => React.ReactNode;
+  omxs30Only?: boolean;
 }) {
-  return <><nav aria-label="Marknader" className="mt-4 flex flex-wrap gap-2 text-sm font-medium">
-    <a href="#research-market-SE" className="rounded-lg bg-muted px-3 py-2 hover:bg-muted/70">Sverige · Long / Short</a>
-    <a href="#research-market-US" className="rounded-lg bg-muted px-3 py-2 hover:bg-muted/70">USA · Long / Short</a>
-  </nav><div className="mt-5 grid min-w-0 gap-6 lg:grid-cols-2">
-    {(["SE", "US"] as const).map(market => <section key={market} id={`research-market-${market}`} className="min-w-0 scroll-mt-4" data-testid={`research-market-${market}`}>
-      <h3 className="mb-3 border-b border-border pb-2 text-base font-semibold">{market === "SE" ? "Sverige" : "USA"}</h3>
+  const activePicks = omxs30Only ? filterActiveOmxs30Picks(picks, decisionDate) : [...picks];
+  return <><nav aria-label="OMXS30-signalgrupper" className="mt-4 flex flex-wrap gap-2 text-sm font-medium">
+    <a href="#research-SE-LONG" className="rounded-lg bg-muted px-3 py-2 hover:bg-muted/70">OMXS30 · Köp / Long</a>
+    <a href="#research-SE-SHORT" className="rounded-lg bg-muted px-3 py-2 hover:bg-muted/70">OMXS30 · Sälj / Short</a>
+  </nav><div className="mt-5 grid min-w-0 gap-6">
+    <section id="research-market-SE" className="min-w-0 scroll-mt-4" data-testid="research-market-SE">
+      <h3 className="mb-3 border-b border-border pb-2 text-base font-semibold">OMXS30 · Sverige</h3>
       <div className="space-y-5">
-        {marketDailyPicks(picks, market).map(group => {
-          const evidence = marketEvidence(market, group.direction, signals, reports, sessionDate);
-          return <section key={group.direction} className="min-w-0" data-testid={`research-${market}-${group.direction}`}>
+        {marketDailyPicks(activePicks, "SE").map(group => {
+          const evidence = marketEvidence("SE", group.direction, signals, reports, sessionDate);
+          return <section id={`research-SE-${group.direction}`} key={group.direction} className="min-w-0" data-testid={`research-SE-${group.direction}`}>
             <h4 className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold">
               <span>Topp 3 {group.direction === "LONG" ? "Köp / Long" : "Sälj / Short"}</span>
               <span className="font-mono text-xs font-normal text-muted-foreground">{group.picks.length}/3</span>
@@ -54,7 +57,7 @@ export function ResearchMarketSections({ picks, signals = [], reports = [], sess
               {" · "}Rapportdag: {evidence.reportDate ?? "okänd"}
               {" · "}Senaste signaldatum: {evidence.newestSignal ?? "saknas"}.
             </p>
-            {!group.picks.length && <div className="space-y-2 rounded-lg bg-muted/40 p-3 text-xs leading-relaxed" data-testid={`empty-${market}-${group.direction}`}>
+            {!group.picks.length && <div className="space-y-2 rounded-lg bg-muted/40 p-3 text-xs leading-relaxed" data-testid={`empty-SE-${group.direction}`}>
               <p className="font-medium">Inga giltiga förslag i visat urval · NO TRADE.</p>
               <p>Kontrollerad mot inläst session {sessionDate || "okänd"}: {evidence.count} importerade screeningcase,
                 {" "}{evidence.blockedDates} med för gammalt, framtida eller okänt signaldatum.</p>
@@ -67,12 +70,12 @@ export function ResearchMarketSections({ picks, signals = [], reports = [], sess
               {evidence.count > evidence.blockedDates && <p className="text-muted-foreground">
                 Ett godkänt signaldatum räcker inte: sparat urval, källkrav, risk- och konfliktkontroller måste också vara uppfyllda. Se sessionens beslut för enskilda case.
               </p>}
-              <p className="text-muted-foreground">Inga äldre case ersätter giltiga förslag. Börskalender för Sverige och USA används; okänt kalenderår godkänns inte.</p>
+              <p className="text-muted-foreground">Endast daterat OMXS30-medlemskap och verifierat svenskt marknadsunderlag får visas aktivt; äldre eller utanför-index-case ligger kvar i sessionens historik.</p>
             </div>}
             <ul className="space-y-3">{group.picks.map(renderPick)}</ul>
           </section>;
         })}
       </div>
-    </section>)}
+    </section>
   </div></>;
 }
