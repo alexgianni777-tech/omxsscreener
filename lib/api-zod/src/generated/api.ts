@@ -332,6 +332,84 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
+ * Checks the latest completed Swedish session against Yahoo Finance Chart API. The provider is unofficial and not guaranteed. Results are cached in memory; this endpoint never writes to trading history or substitutes an older bar.
+ * @summary Manually requested, read-only OMXS30 D−1 coverage check
+ */
+export const getOmxs30CoverageResponseExpectedMemberCountMin = 0;
+
+export const getOmxs30CoverageResponseValidMemberCountMin = 0;
+
+export const getOmxs30CoverageResponseStaleCountMin = 0;
+
+export const getOmxs30CoverageResponseMissingCountMin = 0;
+
+export const getOmxs30CoverageResponsePartialCountMin = 0;
+
+export const getOmxs30CoverageResponseNotTestedCountMin = 0;
+
+
+
+export const GetOmxs30CoverageResponse = zod.object({
+  "provider": zod.literal("Yahoo Finance Chart API (inofficiell/experimentell)"),
+  "decisionDate": zod.string(),
+  "expectedDataAsOf": zod.string().nullable(),
+  "generatedAt": zod.string(),
+  "status": zod.enum(['READY', 'PARTIAL', 'BLOCKED']),
+  "rankingEligible": zod.boolean(),
+  "index": zod.object({
+  "ticker": zod.string(),
+  "actualYahooSymbol": zod.string().nullable(),
+  "status": zod.enum(['READY', 'STALE', 'MISSING', 'PARTIAL', 'NOT_TESTED']),
+  "httpStatus": zod.int().nullable(),
+  "dataAsOf": zod.string().nullable(),
+  "latestAvailableDate": zod.string().nullable(),
+  "checkedAt": zod.string(),
+  "ohlcv": zod.union([zod.object({
+  "open": zod.number(),
+  "high": zod.number(),
+  "low": zod.number(),
+  "close": zod.number(),
+  "volume": zod.number().nullable()
+}),zod.null()]),
+  "rankEligible": zod.boolean(),
+  "reason": zod.string().nullable()
+}),
+  "expectedMemberCount": zod.int().min(getOmxs30CoverageResponseExpectedMemberCountMin),
+  "validMemberCount": zod.int().min(getOmxs30CoverageResponseValidMemberCountMin),
+  "staleCount": zod.int().min(getOmxs30CoverageResponseStaleCountMin),
+  "missingCount": zod.int().min(getOmxs30CoverageResponseMissingCountMin),
+  "partialCount": zod.int().min(getOmxs30CoverageResponsePartialCountMin),
+  "notTestedCount": zod.int().min(getOmxs30CoverageResponseNotTestedCountMin),
+  "members": zod.array(zod.object({
+  "ticker": zod.string(),
+  "actualYahooSymbol": zod.string().nullable(),
+  "status": zod.enum(['READY', 'STALE', 'MISSING', 'PARTIAL', 'NOT_TESTED']),
+  "httpStatus": zod.int().nullable(),
+  "dataAsOf": zod.string().nullable(),
+  "latestAvailableDate": zod.string().nullable(),
+  "checkedAt": zod.string(),
+  "ohlcv": zod.union([zod.object({
+  "open": zod.number(),
+  "high": zod.number(),
+  "low": zod.number(),
+  "close": zod.number(),
+  "volume": zod.number().nullable()
+}),zod.null()]),
+  "rankEligible": zod.boolean(),
+  "reason": zod.string().nullable()
+})),
+  "researchOnly": zod.array(zod.object({
+  "ticker": zod.string(),
+  "actualYahooSymbol": zod.string(),
+  "status": zod.enum(['EVENT_ONLY']),
+  "rankEligible": zod.literal(false),
+  "reason": zod.string()
+})),
+  "notice": zod.string()
+})
+
+
+/**
  * @summary Import raw screener text and parse into a session
  */
 export const importSessionBodyConfirmedTelegramDefault = false;

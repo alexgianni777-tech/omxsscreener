@@ -18,6 +18,11 @@ import { useTop3Analytics, type Top3Session } from "../lib/useTop3Analytics";
 import { top3SessionsForSource } from "../lib/top3SourceViews";
 import { useMarketIntel } from "../lib/useMarketIntel";
 import {
+  getGetOmxs30CoverageQueryKey,
+  useGetOmxs30Coverage,
+} from "@workspace/api-client-react";
+import { Button } from "../components/ui/button";
+import {
   filterActiveOmxs30Picks,
   filterArchivedOmxs30Picks,
   OMXS30_ACTIVE_FROM,
@@ -636,6 +641,15 @@ function WeekSummarySection({ equityCurve }: { equityCurve: EquityPoint[] }) {
 
 export function MarketIntelSection() {
   const { data, isLoading, isError } = useMarketIntel();
+  const coverage = useGetOmxs30Coverage({
+    query: {
+      queryKey: getGetOmxs30CoverageQueryKey(),
+      enabled: false,
+      retry: false,
+      refetchOnWindowFocus: false,
+      staleTime: 15 * 60_000,
+    },
+  });
   const pe = data?.pe?.omxs30;
   const fetchedAt = typeof data?.fetchedAt === "string" && Number.isFinite(Date.parse(data.fetchedAt))
     ? new Date(data.fetchedAt).toLocaleString("sv-SE")
@@ -680,6 +694,111 @@ export function MarketIntelSection() {
         {fetchedAt ? ` · hämtad ${fetchedAt}` : " · hämtningstid ej verifierad"}.
         {" "}Källdagens fullständiga kursdata kontrolleras i senaste sessionen.
       </p>
+      <div className="border-t border-border/60 pt-3 space-y-3" data-testid="omxs30-d1-coverage">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 className="text-sm font-semibold">D−1-täckning · index och 30 OMXS30-bolag</h4>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Hämtas endast när du trycker. 31 seriella anrop, lokal servercache i 15 minuter.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={coverage.isFetching}
+            onClick={() => void coverage.refetch()}
+            data-testid="button-check-omxs30-d1"
+          >
+            {coverage.isFetching ? "Kontrollerar…" : "Kontrollera D−1-täckning"}
+          </Button>
+        </div>
+        {coverage.isError && (
+          <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm">
+            D−1-kontrollen kunde inte hämtas. Ingen äldre kurs används som reserv.
+          </div>
+        )}
+        {coverage.data && (
+          <div className="space-y-3" aria-live="polite">
+            <div className={`rounded-md border p-3 text-sm ${
+              coverage.data.status === "READY"
+                ? "border-emerald-600/30 bg-emerald-600/5"
+                : "border-amber-600/30 bg-amber-600/5"
+            }`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <strong>
+                  {coverage.data.status === "READY"
+                    ? "D−1-täckning komplett"
+                    : coverage.data.index.status !== "READY"
+                      ? "Ranking spärrad: OMXS30-indexet saknar verifierad D−1"
+                      : "Ofullständig D−1-täckning"}
+                </strong>
+                <span className="font-mono text-xs">
+                  {coverage.data.validMemberCount}/{coverage.data.expectedMemberCount} bolag · index {coverage.data.index.status}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Beslutsdag {coverage.data.decisionDate} · krävd prisdag {coverage.data.expectedDataAsOf ?? "ej fastställd"} ·
+                {" "}genererad {new Date(coverage.data.generatedAt).toLocaleString("sv-SE")}
+              </p>
+              {(coverage.data.staleCount > 0 || coverage.data.missingCount > 0 ||
+                coverage.data.partialCount > 0 || coverage.data.notTestedCount > 0) && (
+                <p className="mt-1 text-xs font-medium text-amber-800 dark:text-amber-300">
+                  Stale {coverage.data.staleCount} · saknas {coverage.data.missingCount} · partiell {coverage.data.partialCount} · ej testad {coverage.data.notTestedCount}.
+                  {" "}Endast rader med READY kan bidra; saknade serier ersätts inte.
+                </p>
+              )}
+            </div>
+            <div className="overflow-x-auto rounded-md border border-border/60">
+              <table className="w-full min-w-[760px] text-xs">
+                <thead className="bg-muted/50 text-left">
+                  <tr>
+                    <th className="p-2 font-semibold">Instrument</th>
+                    <th className="p-2 font-semibold">Status</th>
+                    <th className="p-2 font-semibold">Källdag</th>
+                    <th className="p-2 font-semibold">OHLC</th>
+                    <th className="p-2 font-semibold">Volym</th>
+                    <th className="p-2 font-semibold">HTTP / orsak</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[coverage.data.index, ...coverage.data.members].map((row) => (
+                    <tr key={`${row.ticker}-${row.actualYahooSymbol ?? "none"}`} className="border-t border-border/50">
+                      <td className="p-2 font-mono">
+                        {row.ticker}
+                        <span className="block text-muted-foreground">{row.actualYahooSymbol ?? "symbol saknas"}</span>
+                      </td>
+                      <td className={`p-2 font-semibold ${row.status === "READY" ? "text-emerald-700 dark:text-emerald-400" : "text-amber-800 dark:text-amber-300"}`}>
+                        {row.status}{row.rankEligible ? " · rankningsbar" : ""}
+                      </td>
+                      <td className="p-2 font-mono">{row.dataAsOf ?? row.latestAvailableDate ?? "—"}</td>
+                      <td className="p-2 font-mono">
+                        {row.ohlcv
+                          ? `${row.ohlcv.open.toFixed(2)} / ${row.ohlcv.high.toFixed(2)} / ${row.ohlcv.low.toFixed(2)} / ${row.ohlcv.close.toFixed(2)}`
+                          : "—"}
+                      </td>
+                      <td className="p-2 font-mono">
+                        {row.ohlcv?.volume == null ? "okänd" : row.ohlcv.volume.toLocaleString("sv-SE")}
+                      </td>
+                      <td className="max-w-[300px] p-2">
+                        {row.httpStatus ?? "—"}{row.reason ? ` · ${row.reason}` : ""}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {coverage.data.researchOnly.map((row) => (
+              <p key={row.ticker} className="rounded-md border border-amber-600/30 bg-amber-600/5 p-3 text-xs">
+                <strong>{row.ticker} · EVENT ONLY · ej rankningsbar.</strong> {row.reason}
+              </p>
+            ))}
+            <p className="text-xs text-muted-foreground">
+              Källa: {coverage.data.provider}. {coverage.data.notice}
+            </p>
+          </div>
+        )}
+      </div>
     </section>
   );
 }

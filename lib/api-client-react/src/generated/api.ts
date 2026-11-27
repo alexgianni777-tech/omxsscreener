@@ -46,6 +46,7 @@ import type {
   LogoutSuccess,
   MobileTokenExchangeRequest,
   MobileTokenExchangeSuccess,
+  Omxs30CoverageReport,
   PortfolioPositionInput,
   PortfolioPositionRecord,
   PortfolioPositionUpdate,
@@ -611,6 +612,84 @@ export function useHealthCheck<TData = Awaited<ReturnType<typeof healthCheck>>, 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getHealthCheckQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetOmxs30CoverageUrl = () => {
+
+
+
+
+  return `/api/omxs30/coverage`
+}
+
+/**
+ * Checks the latest completed Swedish session against Yahoo Finance Chart API. The provider is unofficial and not guaranteed. Results are cached in memory; this endpoint never writes to trading history or substitutes an older bar.
+ * @summary Manually requested, read-only OMXS30 D−1 coverage check
+ */
+export const getOmxs30Coverage = async ( options?: Parameters<typeof customFetch>[1]): Promise<Omxs30CoverageReport> => {
+
+  return customFetch<Omxs30CoverageReport>(getGetOmxs30CoverageUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOmxs30CoverageQueryKey = () => {
+    return [
+    `/api/omxs30/coverage`
+    ] as const;
+    }
+
+
+export const getGetOmxs30CoverageQueryOptions = <TData = Awaited<ReturnType<typeof getOmxs30Coverage>>, TError = ErrorType<ErrorEnvelope>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOmxs30Coverage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOmxs30CoverageQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOmxs30Coverage>>> = ({ signal }) => getOmxs30Coverage({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOmxs30Coverage>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOmxs30CoverageQueryResult = NonNullable<Awaited<ReturnType<typeof getOmxs30Coverage>>>
+export type GetOmxs30CoverageQueryError = ErrorType<ErrorEnvelope>
+
+
+/**
+ * Checks the latest completed Swedish session against Yahoo Finance Chart API. The provider is unofficial and not guaranteed. Results are cached in memory; this endpoint never writes to trading history or substitutes an older bar.
+ * @summary Manually requested, read-only OMXS30 D−1 coverage check
+ */
+export function useGetOmxs30Coverage<TData = Awaited<ReturnType<typeof getOmxs30Coverage>>, TError = ErrorType<ErrorEnvelope>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOmxs30Coverage>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOmxs30CoverageQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

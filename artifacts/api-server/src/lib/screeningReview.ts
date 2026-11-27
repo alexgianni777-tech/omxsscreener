@@ -2,6 +2,7 @@ import { isAcceptedSignalDate } from "./signalDatePolicy";
 import { marketDate, previousMarketDay, signalSessionDate, validMarketDate } from "@workspace/market-calendar";
 import { resolveYahooTicker } from "./omxs30TickerMap";
 import { isOmxs30ResearchOnlyCandidate, OMXS30_SCOPE_START } from "./omxs30Scope";
+import { omxs30CoverageRankingBlocker } from "./omxs30DataCoverage";
 import { qualifyResearch,marketRegime,evidenceDataDate,hasVerifiedAtr,BOARD_REVIEW_REQUIRED,manualReportNotice,
   type SourceReport,type Qualification } from "@workspace/market-calendar/research-policy";
 
@@ -271,6 +272,16 @@ export function screenCandidate(
     }
     if (isOmxs30ResearchOnlyCandidate("SE", candidate.ticker, sessionDate)) {
       activeOmxs30Blockers.push("SKF Vertevo är tillfälligt RESEARCH_ONLY 2026-11-26–2026-11-30; den får inte rankas som aktiv Top 3.");
+    }
+    if (expectedDataDate && candidate.ticker) {
+      const coverageBlocker = omxs30CoverageRankingBlocker(
+        candidate.market,
+        candidate.ticker,
+        sessionDate,
+        expectedDataDate,
+        now,
+      );
+      if (coverageBlocker) activeOmxs30Blockers.push(coverageBlocker);
     }
   }
   if (invalid.length > 0) return { status: "INVALID", reasons: [...invalid, ...review.reasons] };

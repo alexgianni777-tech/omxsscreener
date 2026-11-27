@@ -39,6 +39,94 @@ export interface GroundZeroState {
   history: GroundZeroSnapshot[];
 }
 
+export interface Omxs30CoverageOhlcv {
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  /** @nullable */
+  volume: number | null;
+}
+
+export type Omxs30CoverageRowStatus = typeof Omxs30CoverageRowStatus[keyof typeof Omxs30CoverageRowStatus];
+
+
+export const Omxs30CoverageRowStatus = {
+  READY: 'READY',
+  STALE: 'STALE',
+  MISSING: 'MISSING',
+  PARTIAL: 'PARTIAL',
+  NOT_TESTED: 'NOT_TESTED',
+} as const;
+
+export interface Omxs30CoverageRow {
+  ticker: string;
+  /** @nullable */
+  actualYahooSymbol: string | null;
+  status: Omxs30CoverageRowStatus;
+  /** @nullable */
+  httpStatus: number | null;
+  /** @nullable */
+  dataAsOf: string | null;
+  /** @nullable */
+  latestAvailableDate: string | null;
+  checkedAt: string;
+  ohlcv: Omxs30CoverageOhlcv | null;
+  rankEligible: boolean;
+  /** @nullable */
+  reason: string | null;
+}
+
+export type Omxs30ResearchOnlyStatus = typeof Omxs30ResearchOnlyStatus[keyof typeof Omxs30ResearchOnlyStatus];
+
+
+export const Omxs30ResearchOnlyStatus = {
+  EVENT_ONLY: 'EVENT_ONLY',
+} as const;
+
+export interface Omxs30ResearchOnly {
+  ticker: string;
+  actualYahooSymbol: string;
+  status: Omxs30ResearchOnlyStatus;
+  rankEligible: false;
+  reason: string;
+}
+
+export type Omxs30CoverageReportStatus = typeof Omxs30CoverageReportStatus[keyof typeof Omxs30CoverageReportStatus];
+
+
+export const Omxs30CoverageReportStatus = {
+  READY: 'READY',
+  PARTIAL: 'PARTIAL',
+  BLOCKED: 'BLOCKED',
+} as const;
+
+export interface Omxs30CoverageReport {
+  provider: 'Yahoo Finance Chart API (inofficiell/experimentell)';
+  decisionDate: string;
+  /** @nullable */
+  expectedDataAsOf: string | null;
+  generatedAt: string;
+  status: Omxs30CoverageReportStatus;
+  rankingEligible: boolean;
+  index: Omxs30CoverageRow;
+  /** @minimum 0 */
+  expectedMemberCount: number;
+  /** @minimum 0 */
+  validMemberCount: number;
+  /** @minimum 0 */
+  staleCount: number;
+  /** @minimum 0 */
+  missingCount: number;
+  /** @minimum 0 */
+  partialCount: number;
+  /** @minimum 0 */
+  notTestedCount: number;
+  members: Omxs30CoverageRow[];
+  researchOnly: Omxs30ResearchOnly[];
+  notice: string;
+}
+
 export interface AuthUser {
   id: string;
   /** @nullable */

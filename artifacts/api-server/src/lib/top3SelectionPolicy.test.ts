@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildTop3SelectionSnapshot, TOP3_POLICY_VERSION } from "./top3SelectionPolicyCore.ts";
 import { omxs30Members } from "./omxs30Scope.ts";
+import { expectedCompletedMarketDay, signalSessionDate } from "@workspace/market-calendar";
+import { getOmxs30DailyCoverage } from "./omxs30DataCoverage.ts";
 
 function candidate(
   id: number,
@@ -204,6 +206,63 @@ test("29 synchronized members remain usable when one member is stale; wrong inde
   );
   assert.equal(wrongIndexRows[0]?.selected, false);
   assert.equal(wrongIndexRows[0]?.decision.status, "WAIT");
+});
+
+test("a fresh Yahoo coverage miss blocks that member before active Top 3 ranking", async (context) => {
+  const now = new Date();
+  const decisionDate = signalSessionDate(now, "SE");
+  const expectedDataAsOf = expectedCompletedMarketDay(now, "SE");
+  assert.ok(expectedDataAsOf);
+  const tickers = [...omxs30Members(decisionDate)];
+  context.mock.method(globalThis, "fetch", async (input: Parameters<typeof globalThis.fetch>[0]) => {
+    const symbol = decodeURIComponent(new URL(input.toString()).pathname.split("/").at(-1) ?? "");
+    if (symbol === "ABB.ST") return new Response("Not Found", { status: 404 });
+    const date = Math.floor(new Date(`${expectedDataAsOf}T12:00:00.000Z`).getTime() / 1000);
+    return Response.json({
+      chart: {
+        result: [{
+          meta: {
+            symbol,
+            currency: "SEK",
+            exchangeName: "Stockholm",
+            exchangeTimezoneName: "Europe/Stockholm",
+          },
+          timestamp: [date],
+          indicators: {
+            quote: [{
+              open: [100],
+              high: [110],
+              low: [90],
+              close: [105],
+              volume: [symbol === "^OMX" ? 0 : 1000],
+            }],
+          },
+        }],
+      },
+    }, { headers: { etag: `etag-${symbol}` } });
+  });
+  const coverage = await getOmxs30DailyCoverage(now);
+  assert.equal(coverage.validMemberCount, 29);
+  const selectionNow = new Date();
+
+  const rows = buildTop3SelectionSnapshot([
+    candidate(401, "ABB", "LONG", "SE", {
+      signalDate: decisionDate,
+      volumeAsOf: expectedDataAsOf,
+      dataQuality: { dataAsOf: expectedDataAsOf },
+    }),
+    candidate(402, "INVE-B", "LONG", "SE", {
+      signalDate: decisionDate,
+      volumeAsOf: expectedDataAsOf,
+      dataQuality: { dataAsOf: expectedDataAsOf },
+    }),
+  ] as any, 108, decisionDate, "telegram", selectionNow, regimeReports("BULLISH", "BULLISH", expectedDataAsOf));
+
+  const staleMember = rows.find((row) => row.ticker === "ABB.ST");
+  assert.equal(staleMember?.decision.status, "BLOCKED");
+  assert.ok(staleMember?.decision.reasons.some((reason) => /täckningen är MISSING/.test(reason)));
+  assert.equal(rows.find((row) => row.ticker === "INVE-B.ST")?.decision.reasons
+    .some((reason) => /täckningen är MISSING/.test(reason)), false);
 });
 
 test("opposing directions for the same canonical underlying are neither auto-selected and carry CONFLICT", () => {

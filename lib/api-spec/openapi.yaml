@@ -146,6 +146,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
 
+  /omxs30/coverage:
+    get:
+      operationId: getOmxs30Coverage
+      tags: [dashboard]
+      summary: Manually requested, read-only OMXS30 D−1 coverage check
+      description: >
+        Checks the latest completed Swedish session against Yahoo Finance Chart API.
+        The provider is unofficial and not guaranteed. Results are cached in memory;
+        this endpoint never writes to trading history or substitutes an older bar.
+      responses:
+        "200":
+          description: Index and dated member OHLCV coverage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Omxs30CoverageReport"
+        "502":
+          description: Coverage check could not be completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "503":
+          description: External access is disabled in end-to-end test mode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
   /screener/sessions/import:
     post:
       operationId: importSession
@@ -756,6 +785,70 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/GroundZeroSnapshot"
+    Omxs30CoverageOhlcv:
+      type: object
+      required: [open, high, low, close, volume]
+      properties:
+        open: { type: number }
+        high: { type: number }
+        low: { type: number }
+        close: { type: number }
+        volume: { type: ["number", "null"] }
+    Omxs30CoverageRow:
+      type: object
+      required: [ticker, actualYahooSymbol, status, httpStatus, dataAsOf, latestAvailableDate, checkedAt, ohlcv, rankEligible, reason]
+      properties:
+        ticker: { type: string }
+        actualYahooSymbol: { type: ["string", "null"] }
+        status:
+          type: string
+          enum: [READY, STALE, MISSING, PARTIAL, NOT_TESTED]
+        httpStatus: { type: ["integer", "null"] }
+        dataAsOf: { type: ["string", "null"] }
+        latestAvailableDate: { type: ["string", "null"] }
+        checkedAt: { type: string }
+        ohlcv:
+          oneOf:
+            - $ref: "#/components/schemas/Omxs30CoverageOhlcv"
+            - type: "null"
+        rankEligible: { type: boolean }
+        reason: { type: ["string", "null"] }
+    Omxs30ResearchOnly:
+      type: object
+      required: [ticker, actualYahooSymbol, status, rankEligible, reason]
+      properties:
+        ticker: { type: string }
+        actualYahooSymbol: { type: string }
+        status: { type: string, enum: [EVENT_ONLY] }
+        rankEligible: { type: boolean, const: false }
+        reason: { type: string }
+    Omxs30CoverageReport:
+      type: object
+      required: [provider, decisionDate, expectedDataAsOf, generatedAt, status, rankingEligible, index, expectedMemberCount, validMemberCount, staleCount, missingCount, partialCount, notTestedCount, members, researchOnly, notice]
+      properties:
+        provider: { type: string, const: "Yahoo Finance Chart API (inofficiell/experimentell)" }
+        decisionDate: { type: string }
+        expectedDataAsOf: { type: ["string", "null"] }
+        generatedAt: { type: string }
+        status: { type: string, enum: [READY, PARTIAL, BLOCKED] }
+        rankingEligible: { type: boolean }
+        index:
+          $ref: "#/components/schemas/Omxs30CoverageRow"
+        expectedMemberCount: { type: integer, minimum: 0 }
+        validMemberCount: { type: integer, minimum: 0 }
+        staleCount: { type: integer, minimum: 0 }
+        missingCount: { type: integer, minimum: 0 }
+        partialCount: { type: integer, minimum: 0 }
+        notTestedCount: { type: integer, minimum: 0 }
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/Omxs30CoverageRow"
+        researchOnly:
+          type: array
+          items:
+            $ref: "#/components/schemas/Omxs30ResearchOnly"
+        notice: { type: string }
     AuthUser:
       type: object
       required: [id, email, firstName, lastName, profileImageUrl]
