@@ -18,7 +18,7 @@ test("NIBE/SCA mobile presentation rounds only display, keeps plan before compac
   };
   const before = JSON.stringify(revision);
   const html = renderToStaticMarkup(React.createElement(Router, { ssrPath: "/" },
-    React.createElement(CurrentTop3Selection, { revisions: [revision], sessionId: 1, quotes: {} })));
+    React.createElement(CurrentTop3Selection, { revisions: [revision], sessionId: 1, sessionDate: "2026-11-26", quotes: {} })));
   const closed = html.replace(/<details\b[^>]*>[\s\S]*?<\/details>/g, "");
   for (const n of ["43,66", "42,05", "47,70", "2,51", "118,20", "115,56", "122,59", "1,66"])
     assert.ok(closed.includes(n), n);

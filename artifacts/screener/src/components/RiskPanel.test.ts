@@ -16,13 +16,14 @@ test("long/short risk uses the original plan; instruments are not levered underl
   assert.ok(unknown.includes("kostnader ej verifierade"));
   assert.equal(JSON.stringify(short), before);
 });
-test("manual catalyst cases have requested dates/times and never claim confirmed dates or buy signals", () => {
+test("manual catalyst cases remain in an explicit non-active archive", () => {
   assert.deepEqual(MANUAL_CATALYSTS.map(c => [c.symbol, c.date]), [
     ["SAM", "2026-10-22"], ["BUD", "2026-10-29"], ["TAP", "2026-11-05"], ["C", "2026-10-13"], ["BAC", "2026-10-14"],
   ]);
   const html = renderToStaticMarkup(React.createElement(ManualCatalysts));
-  assert.ok(html.includes("inga automatiska köpsignaler"));
-  assert.ok(html.includes("inte automatiskt verifierade"));
+  assert.ok(html.includes("Historiskt arkiv"));
+  assert.ok(html.includes("ARKIV"));
+  assert.ok(html.includes("inte OMXS30-kandidater"));
   assert.ok(html.includes("före USA-öppning"));
 });
 test("stop loss is not an absolute risk guarantee; known time stops remain separate from unlimited share-short risk",()=>{

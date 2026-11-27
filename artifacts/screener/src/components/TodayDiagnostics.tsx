@@ -28,12 +28,14 @@ export function TodayDiagnostics({
   candidates,
   live,
   frozen,
+  omxs30Only = false,
 }: {
   sessionDate: string;
   today: string;
   candidates: TodayDiagnosticCandidate[];
   live?: DiagnosticLiveSelection | null;
   frozen?: DiagnosticFrozenSelection;
+  omxs30Only?: boolean;
 }) {
   const diagnostics = deriveTodayDiagnostics({
     sessionDate,
@@ -54,6 +56,9 @@ export function TodayDiagnostics({
   }, [diagnostics]);
 
   if (!diagnostics) return null;
+  const visibleGroups = diagnostics.groups.filter(group => !omxs30Only || group.market === "SE");
+  const visibleOutsideMain = diagnostics.outsideMainCounts.filter(item => !omxs30Only || item.market !== "US");
+  const visibleOutsideSelected = diagnostics.outsideSelectedCounts.filter(item => !omxs30Only || item.market !== "US");
 
   return (
     <section
@@ -106,7 +111,7 @@ export function TodayDiagnostics({
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {diagnostics.groups.map((group) => (
+        {visibleGroups.map((group) => (
           <div
             key={`${group.source}:${group.market}`}
             data-testid={`card-diagnostics-${group.source}-${group.market}`}
@@ -177,22 +182,22 @@ export function TodayDiagnostics({
         </div>
       </div>
 
-      {(diagnostics.outsideMainCounts.length > 0 || diagnostics.outsideSelectedCounts.length > 0) && (
+       {(visibleOutsideMain.length > 0 || visibleOutsideSelected.length > 0) && (
         <div data-testid="list-diagnostics-outside-counts" className="mt-3 rounded-lg border border-border px-3 py-2 text-xs">
-          <p className="font-semibold">Utanför EdgeAI/Telegram · SE/US-räkningen</p>
+           <p className="font-semibold">Utanför EdgeAI/Telegram-urvalet</p>
           <p className="mt-1 text-muted-foreground">
-            Manuella och andra/okända källor samt okänd marknad visas här, inte i huvudräkningen.
+             Manuella och andra/okända källor samt okänd marknad visas här, inte i huvudräkningen.
           </p>
           <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">
-            {diagnostics.outsideMainCounts.map((item) => (
+             {visibleOutsideMain.map((item) => (
               <li key={`${item.source}:${item.market}`}>
                 {item.source} · {item.market}: {item.count}
               </li>
             ))}
           </ul>
-          {diagnostics.outsideSelectedCounts.length > 0 && (
+           {visibleOutsideSelected.length > 0 && (
             <ul className="mt-2 space-y-1 border-t border-border pt-2 text-muted-foreground">
-              {diagnostics.outsideSelectedCounts.map((item) => (
+               {visibleOutsideSelected.map((item) => (
                 <li key={`${item.source}:${item.market}:${item.direction}`}>
                   Val utanför huvudräkningen · {item.source} · {item.market} · {item.direction}: prelim.{" "}
                   {item.preliminary ?? "ej tillgängligt"} · officiellt {item.official ?? "ej tillgängligt"}

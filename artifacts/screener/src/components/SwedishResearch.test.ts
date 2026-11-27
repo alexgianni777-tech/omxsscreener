@@ -214,7 +214,7 @@ test("today is the single prominent research surface; historical dashboard stays
   const home = readFileSync(new URL("../pages/today.tsx", import.meta.url), "utf8");
   assert.equal((home.match(/<SwedishResearch\b/g) ?? []).length, 1);
   assert.ok(home.includes("latestReports={session?.sourceReports ?? []}"));
-  const saved = home.indexOf("<SavedTop3 />");
+  const saved = home.indexOf("<SavedTop3 omxs30Only />");
   assert.ok(home.lastIndexOf("<details", saved) > home.indexOf("<SwedishResearch />"));
 
   const history = readFileSync(new URL("../pages/dashboard.tsx", import.meta.url), "utf8");

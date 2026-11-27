@@ -9,9 +9,9 @@ export const MANUAL_CATALYSTS = [
 ] as const;
 export function ManualCatalysts() {
   return <details className="rounded-lg border border-border bg-card p-3 text-xs">
-    <summary className="cursor-pointer font-semibold">Manuell rapport-/katalysatorbevakning · inga automatiska köpsignaler</summary>
-    <p className="mt-2 text-amber-600">Användarangivna bevakningsdatum, inte automatiskt verifierade. Kontrollera bolagets aktuella rapportdatum,
-      tidpunkt och instrumentets handels-/knock-out-status före handel. Ingen ranking eller signal ändras.</p>
+    <summary className="cursor-pointer font-semibold">Historiskt arkiv · äldre manuella bevakningsfall</summary>
+    <p className="mt-2 text-amber-600">ARKIV · dessa poster är inte OMXS30-kandidater, aktuella signaler eller orderförslag.
+      Användarangivna datum är inte automatiskt verifierade; ingen ranking eller signal ändras.</p>
     <ul className="mt-2 space-y-1">{MANUAL_CATALYSTS.map(c =>
       <li key={c.symbol}><strong>{c.symbol} · {c.name}</strong> · {c.date} · {c.timing} · manuellt bevakningscase
         <DataFreshness reportDate={c.date} source="manuell rapportbevakning" manual event />

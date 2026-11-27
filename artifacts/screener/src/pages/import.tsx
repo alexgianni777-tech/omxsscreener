@@ -226,11 +226,11 @@ export function Import() {
           <div className="min-w-0">
             <p className="text-sm font-medium">Importera från EdgeAI</p>
             <p className="text-xs text-muted-foreground truncate">
-              Hämtar senaste SE/US-setups direkt från{" "}
+              Hämtar svenska OMXS30-setups direkt från{" "}
               <span className="font-mono text-blue-400/80">edgeai/public/data.json</span>
               {edgeStatus.kind === "success" && (
                 <span className="text-emerald-400 ml-1">
-                  · {edgeStatus.setupCount} signaler till session {edgeStatus.date}
+                  · {edgeStatus.setupCount} OMXS30-signaler till session {edgeStatus.date}
                 </span>
               )}
               {edgeStatus.kind === "error" && (
@@ -245,10 +245,10 @@ export function Import() {
               <div className="mt-2 space-y-1 text-[11px] leading-4 text-muted-foreground" aria-live="polite">
                 <p>
                   Källcache: {edgeCacheLabel(edgeStatus.kind === "error" ? edgeStatus.meta?.cacheStatus : edgeStatus.meta.cacheStatus)}
-                  {edgeStatus.kind === "success" && ` · ingår: ${edgeStatus.meta.includedMarkets?.join(", ") ?? "okänt"}`}
+                  {edgeStatus.kind === "success" && ` · aktiv marknad: ${edgeStatus.meta.includedMarkets?.filter(market => market === "SE").join(", ") || "ingen verifierad OMXS30-data"}`}
                   {edgeStatus.kind === "conflict" && " · befintlig session kräver bekräftelse; inget nytt sparat"}
                 </p>
-                {(["SE", "US"] as const).map((market) => (
+                {(["SE"] as const).map((market) => (
                   <p key={market}>{edgeMarketLabel(
                     market,
                     edgeStatus.kind === "error" ? edgeStatus.meta?.marketStatus?.[market] : edgeStatus.meta.marketStatus?.[market],

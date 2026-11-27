@@ -12,12 +12,36 @@ test("dashboard keeps official and current selections ahead of folded historical
   assert.equal((s.match(/<DashboardLiveTop3 \/>/g) ?? []).length, 1);
   assert.ok(s.includes("<TradeJournal />")); assert.ok(s.includes("<GroundZero />"));
   const home = source("../pages/today.tsx");
-  assert.ok(home.indexOf("<MarketIntelSection />") < home.indexOf("<SavedTop3 />"));
-  assert.ok(home.indexOf("<SavedTop3 />") < home.indexOf("Challenge · registrerat modellkonto"));
+  assert.ok(home.indexOf("<MarketIntelSection />") < home.indexOf("<SavedTop3 omxs30Only />"));
+  assert.ok(home.indexOf("<SavedTop3 omxs30Only />") < home.indexOf("Challenge · registrerat modellkonto"));
   assert.ok(home.includes("max-w-5xl"));
   assert.ok(home.includes("if (!sessionsResponse.ok) throw new Error"));
   assert.ok(home.includes('data-testid="status-session-load-error"'));
   assert.ok(home.includes('data-testid="status-challenge-load-error"'));
+});
+test("active research and review routes fail closed to dated OMXS30 members", () => {
+  const home = source("../pages/today.tsx");
+  const importPage = source("../pages/import.tsx");
+  const radar = source("../pages/radar.tsx");
+  const tradeDesk = source("../pages/trade-desk.tsx");
+  const earnings = source("../pages/earnings.tsx");
+  const currentTop3 = source("./CurrentTop3Selection.tsx");
+  const daily = source("./DailyCandidates.tsx");
+  assert.ok(home.includes("activeOmxs30Candidate"));
+  assert.ok(home.includes("filterActiveOmxs30Picks"));
+  assert.ok(home.includes('data-testid="today-archive-count"'));
+  assert.ok(!home.includes("🇺🇸 USA"));
+  assert.ok(importPage.includes('(["SE"] as const).map'));
+  assert.ok(!importPage.includes("SE/US-setups"));
+  assert.ok(radar.includes('const laneKeys = ["SE-LONG", "SE-SHORT"]'));
+  assert.ok(radar.includes('data-testid="radar-archive-count"'));
+  assert.ok(tradeDesk.includes("activeOmxs30Candidate"));
+  assert.ok(tradeDesk.includes('const market = selected?.market === "SE" ? selected.market : null'));
+  assert.ok(earnings.includes("activeOmxs30Candidate"));
+  assert.ok(earnings.includes('data-testid="earnings-archive"'));
+  assert.ok(currentTop3.includes("filterActiveOmxs30Picks"));
+  assert.ok(!currentTop3.includes('(["SE", "US"] as const)'));
+  assert.ok(daily.includes("<SourceProvenance reports={reports} omxs30Only />"));
 });
 test("dashboard Top 3 cards use dated OMXS30 scope and separate archive display", () => {
   const dashboard = source("../pages/dashboard.tsx");

@@ -284,7 +284,7 @@ export function SessionDetail() {
         <ImportDiffBanner diff={session.importDiff} importedAt={session.lastImportAt} />
       )}
       {!!session.top3Revisions?.length && (
-        <CurrentTop3Selection revisions={session.top3Revisions} sessionId={session.id} quotes={quoteMap} candidates={session.candidates} />
+        <CurrentTop3Selection revisions={session.top3Revisions} sessionId={session.id} sessionDate={session.date} quotes={quoteMap} candidates={session.candidates} />
       )}
       {!session.top3Revisions?.length && session.top3LiveSelection && (
         <LiveTop3Preview

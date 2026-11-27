@@ -28,6 +28,7 @@ import { LiveEntryGuard } from "../components/LiveEntryGuard";
 import type { Top3Revision } from "@workspace/api-client-react";
 import { edgeAiMetrics } from "../lib/edgeAiMetrics";
 import { createLatestRequestGuard } from "../lib/latestRequestGuard";
+import { activeOmxs30Candidate, filterActiveOmxs30Picks } from "../lib/omxs30ActiveView";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const api = (p: string) => `${BASE}/api${p}`;
@@ -298,20 +299,25 @@ export function Today() {
       .slice(0, n);
   }
 
-  const allCandidates = session?.candidates ?? [];
+  const storedCandidates = session?.candidates ?? [];
+  const allCandidates = session
+    ? storedCandidates.filter(candidate => activeOmxs30Candidate({
+        ticker: candidate.ticker, market: candidate.market, sessionDate: session.date,
+      }))
+    : [];
+  const archivedCandidateCount = storedCandidates.length - allCandidates.length;
   const edgeAiCandidates = allCandidates.filter(c => c.signalSource === "edgeai");
   const hasMarket = allCandidates.some(c => c.market != null);
   // LONG (köp) and SHORT (sälj) are separate pick pools
   const longCands = allCandidates.filter(c => c.direction !== "SHORT");
   const shortCands = allCandidates.filter(c => c.direction === "SHORT");
   const sePicks = hasMarket ? selectPicks(longCands.filter(c => c.market === "SE")) : [];
-  const usPicks = hasMarket ? selectPicks(longCands.filter(c => c.market === "US")) : [];
   const seShortPicks = hasMarket ? selectPicks(shortCands.filter(c => c.market === "SE")) : [];
-  const usShortPicks = hasMarket ? selectPicks(shortCands.filter(c => c.market === "US")) : [];
-  // LONG picks first, SHORT picks last — a "Topp 3 Sälj" divider renders between them
+  // Only dated OMXS30 members can enter the active list. Out-of-scope rows
+  // remain in the session archive and are never used for live quote checks.
   const picks: Candidate[] = hasMarket
-    ? [...sePicks, ...usPicks, ...seShortPicks, ...usShortPicks]
-    : [...selectPicks(longCands), ...selectPicks(shortCands)];
+    ? [...sePicks, ...seShortPicks]
+    : [];
   // ── Market regime flags (hoisted so picks.map can reference them) ─────────────
   const mw = session?.marketWeather;
   const isRiskOff = /risk.?off|motvind|kontrak/i.test(mw?.trendLabel ?? "");
@@ -331,12 +337,17 @@ export function Today() {
   // ── Yahoo Finance price check ─────────────────────────────────────────────
 
   const currentRevision = [...(session?.top3Revisions ?? [])].sort((a, b) => b.revision - a.revision)[0];
+  const activeRevisionPicks = session && currentRevision
+    ? filterActiveOmxs30Picks(currentRevision.picks, session.date)
+    : [];
   const entryTickers = [...new Set([
     ...picks.map(p => quoteRequestTicker(p.ticker, p.market)),
-    ...(currentRevision?.picks ?? []).map(p => quoteRequestTicker(p.ticker, p.market)),
+    ...activeRevisionPicks.map(p => quoteRequestTicker(p.ticker, p.market)),
     ...(session?.top3LiveSelection?.picks ?? []).flatMap(p => {
       const candidate = session?.candidates.find(c => c.id === p.candidateId);
-      return candidate ? [quoteRequestTicker(candidate.ticker, candidate.market)] : [];
+      return candidate && session && activeOmxs30Candidate({
+        ticker: candidate.ticker, market: candidate.market, sessionDate: session.date,
+      }) ? [quoteRequestTicker(candidate.ticker, "SE")] : [];
     }),
   ])];
   const fetchLivePrices = async () => {
@@ -474,8 +485,8 @@ export function Today() {
       <MarketIntelSection />
       <SwedishResearch latestReports={session?.sourceReports ?? []} />
       <details className="rounded-xl border border-border bg-card" data-testid="details-saved-top3">
-        <summary className="cursor-pointer p-4 text-sm font-medium">Fullt sparat urval inklusive USA</summary>
-        <div className="border-t border-border p-2 sm:p-3"><SavedTop3 /></div>
+        <summary className="cursor-pointer p-4 text-sm font-medium">Historiskt Top 3-arkiv · äldre och utanför OMXS30</summary>
+        <div className="border-t border-border p-2 sm:p-3"><SavedTop3 omxs30Only /></div>
       </details>
       <details className="rounded-xl border border-border bg-card">
         <summary className="cursor-pointer p-4 text-sm font-medium">Challenge · registrerat modellkonto och riskinställningar</summary>
@@ -567,8 +578,14 @@ export function Today() {
       </details>
       {/* ── Today's Picks ─────────────────────────────────────────────────── */}
       <details data-testid="details-session-workspace" className="rounded-xl border border-border bg-card p-3">
-        <summary className="cursor-pointer text-sm font-medium">Sessionsarbetsyta<span className="ml-2 text-xs font-normal text-muted-foreground">ändringsbar research, USA, statistik-picks, diagnostik och utfallsloggning</span></summary>
+        <summary className="cursor-pointer text-sm font-medium">Sessionsarbetsyta<span className="ml-2 text-xs font-normal text-muted-foreground">OMXS30-research, statistik-picks, diagnostik och utfallsloggning</span></summary>
         <div className="mt-3">
+        {archivedCandidateCount > 0 && session && (
+          <p role="status" data-testid="today-archive-count" className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-800">
+            {archivedCandidateCount} äldre eller utanför OMXS30-kandidat(er) är dolda från aktiva signaler och bevaras i{" "}
+            <Link href={`/sessions/${session.id}`} className="underline">sessionsarkivet</Link>.
+          </p>
+        )}
         <div className="flex items-center justify-between mb-3 px-1">
           <div>
             <div className="flex items-center gap-2">
@@ -630,11 +647,11 @@ export function Today() {
         </div>
 
         {session && <DailyCandidates
-          picks={currentRevision?.picks ?? session.top3LiveSelection?.picks ?? []}
+          picks={filterActiveOmxs30Picks(currentRevision?.picks ?? session.top3LiveSelection?.picks ?? [], session.date)}
           signals={session.candidates} reports={session.sourceReports}
           sessionDate={session.date} preliminary={!currentRevision} />}
         {!!session?.top3Revisions?.length && (
-          <CurrentTop3Selection revisions={session.top3Revisions} sessionId={session.id} quotes={quotes} candidates={session.candidates} />
+          <CurrentTop3Selection revisions={session.top3Revisions} sessionId={session.id} sessionDate={session.date} quotes={quotes} candidates={storedCandidates} />
         )}
         {session?.top3Revisions?.length && picks.length > 0 ? (
           <p className="mb-3 text-xs text-muted-foreground">Ursprungliga statistik-picks och registrerade trades visas nedan. Deras nivåer ändras inte av den aktuella listan ovan.</p>
@@ -669,9 +686,10 @@ export function Today() {
           <TodayDiagnostics
             sessionDate={session.date}
             today={todayISO()}
-            candidates={allCandidates}
+            candidates={storedCandidates}
             live={session.top3LiveSelection}
             frozen={session.top3SelectionSnapshot}
+            omxs30Only
           />
         )}
         {session && isToday && !session.top3Revisions?.length && session.top3LiveSelection && (
@@ -689,7 +707,7 @@ export function Today() {
           <div data-testid="edgeai-import-preview" className="mt-3 rounded-xl border border-border bg-card p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold">Importerade EdgeAI-signaler · {edgeAiCandidates.length} st</h3>
+                <h3 className="text-sm font-semibold">Aktiva OMXS30-signaler från EdgeAI · {edgeAiCandidates.length} st</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Rapportdatum: {[...new Set(edgeAiCandidates.map((candidate) => candidate.signalDate).filter(Boolean))].join(", ") || "okänt"}. Inte officiellt Top 3.
                   {!isToday && " Äldre signaler – inte nya förslag för i dag."}
@@ -705,7 +723,7 @@ export function Today() {
                 <span key={candidate.id} title={candidate.decision?.reasons.join(" ") || undefined} className="rounded-md border border-border bg-muted/50 px-2 py-1 text-xs">
                   <span className="font-mono font-semibold">{candidate.ticker}</span>
                   <span className="ml-1.5 text-muted-foreground">
-                    {candidate.market ?? "—"} · {candidate.direction === "SHORT" ? "Sälj" : "Köp"}
+                    OMXS30 · {candidate.direction === "SHORT" ? "Sälj" : "Köp"}
                   </span>
                   <span className="ml-1.5"><DecisionBadge decision={candidate.decision} /></span>
                 </span>
@@ -794,7 +812,7 @@ export function Today() {
                 )}
                 {showHeader && (
                   <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 pt-2 pb-2 flex items-center gap-1.5">
-                    {candidate.market === "SE" ? "🇸🇪 Sverige" : "🇺🇸 USA"}
+                    OMXS30 · Sverige
                   </div>
                 )}
                 {isFirstShort && (

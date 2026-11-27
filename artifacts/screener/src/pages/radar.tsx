@@ -13,6 +13,7 @@ import {
 } from "@workspace/api-client-react";
 import { advisoryTrend } from "../lib/sourceMarketEvidence";
 import { candidateReceipt, radarSourceHealth, selectRadarLane } from "../lib/marketRadarModel";
+import { activeOmxs30Candidate, filterActiveOmxs30Picks } from "../lib/omxs30ActiveView";
 
 const sourceName: Record<string, string> = {
   edgeai: "EdgeAI",
@@ -114,15 +115,18 @@ export function Radar() {
   const latestId = sessions.data?.[0]?.id ?? 0;
   const detail = useGetSession(latestId, { query: { enabled: latestId > 0, queryKey: getGetSessionQueryKey(latestId) } });
   const lastTop3 = useGetLastValidTop3({ query: { queryKey: getGetLastValidTop3QueryKey() } });
-  const candidates = detail.data?.candidates ?? [];
+  const storedCandidates = detail.data?.candidates ?? [];
+  const candidates = detail.data
+    ? storedCandidates.filter(candidate => activeOmxs30Candidate({
+        ticker: candidate.ticker, market: candidate.market, sessionDate: detail.data!.date,
+      }))
+    : [];
+  const archivedCandidateCount = storedCandidates.length - candidates.length;
   const grouped = useMemo(() => {
     const lanes: Record<string, Candidate[]> = {};
-    for (const market of ["SE", "US", "ÖVRIGT"] as const) {
-      for (const direction of ["LONG", "SHORT"]) {
-        const key = `${market}-${direction}`;
-        const laneMarket = market === "ÖVRIGT" ? null : market;
-        lanes[key] = selectRadarLane(candidates, laneMarket, direction as "LONG" | "SHORT", 5) as Candidate[];
-      }
+    for (const direction of ["LONG", "SHORT"] as const) {
+      const key = `SE-${direction}`;
+      lanes[key] = selectRadarLane(candidates, "SE", direction, 5) as Candidate[];
     }
     return lanes;
   }, [candidates]);
@@ -131,7 +135,7 @@ export function Radar() {
   const screenerTop = candidates.filter(c => c.signalSource === "screener" ||
     String(c.signalSource ?? "").toLowerCase() === "oraklet")
     .slice().sort((a, b) => a.rank - b.rank || a.ticker.localeCompare(b.ticker)).slice(0, 3);
-  const laneKeys = ["SE-LONG", "SE-SHORT", "US-LONG", "US-SHORT", "ÖVRIGT-LONG", "ÖVRIGT-SHORT"];
+  const laneKeys = ["SE-LONG", "SE-SHORT"];
 
   return (
     <section className="space-y-5" data-testid="workspace-radar" aria-busy={sessions.isLoading || detail.isLoading}>
@@ -149,8 +153,8 @@ export function Radar() {
 
       <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs leading-relaxed">
-          Kandidater visas per marknad och riktning, högst fem per spår. WATCH, RESEARCH och STALE ligger kvar i vyn.
-          En saknad källa filtrerar inte bort en annan. Researchstatus är aldrig ordergodkännande.
+          Aktiva kandidater visas endast för verifierade OMXS30-medlemmar på sessionsdatumet, högst fem per riktning.
+          WATCH, RESEARCH och STALE är researchstatus, aldrig ordergodkännande.
         </div>
         <div className="rounded-xl border border-border bg-card px-4 py-3 text-xs" data-testid="radar-top3-context">
           <span className={`mr-2 inline-block h-2 w-2 rounded-full ${lastTop3.data?.selection ? "bg-primary" : "bg-muted-foreground/40"}`} />
@@ -159,9 +163,11 @@ export function Radar() {
             <summary className="cursor-pointer font-medium">
               Visa sparad lista · {lastTop3.data.selection.date} · {lastTop3.data.selection.kind} · rev {lastTop3.data.selection.revision.revision}
             </summary>
-            <p className="mt-2 text-muted-foreground">Originalsignaler och datadagar visas som bevakningsunderlag. Detta är inte en aktuell kurskontroll eller orderbekräftelse.</p>
-            {lastTop3.data.selection.revision.picks.length ? <ul className="mt-2 divide-y divide-border">
-              {lastTop3.data.selection.revision.picks.map(pick => {
+            <p className="mt-2 text-muted-foreground">Endast datumstyrda OMXS30-picks visas här. Originalsignaler och datadagar är bevakningsunderlag, inte orderbekräftelse.</p>
+            {lastTop3.data.selection.revision.picks.length > filterActiveOmxs30Picks(lastTop3.data.selection.revision.picks, lastTop3.data.selection.date).length &&
+              <p className="mt-2 text-amber-700">Äldre eller utanför-index-picks finns endast i sessionshistoriken.</p>}
+            {filterActiveOmxs30Picks(lastTop3.data.selection.revision.picks, lastTop3.data.selection.date).length ? <ul className="mt-2 divide-y divide-border">
+              {filterActiveOmxs30Picks(lastTop3.data.selection.revision.picks, lastTop3.data.selection.date).map(pick => {
                 const pickDataDate = lastTop3.data?.selection?.dataDates.find(item =>
                   item.market === pick.market && item.source === pick.source && item.signalDate === (pick.signalDate ?? null),
                 )?.dataDate ?? pick.dataQuality?.dataAsOf ?? null;
@@ -171,7 +177,7 @@ export function Radar() {
                     data-testid={`link-saved-top3-${pick.candidateId}`} className="font-semibold text-primary hover:underline">Granska plan</Link>
                 </li>;
               })}
-            </ul> : <p className="mt-2 text-muted-foreground">Den sparade listan saknar kandidater.</p>}
+            </ul> : <p className="mt-2 text-muted-foreground">Inga aktiva OMXS30-picks i den sparade listan.</p>}
             {lastTop3.data.warnings.length > 0 &&
               <p className="mt-2 text-amber-800 dark:text-amber-300">{lastTop3.data.warnings.length} sparad varning(ar); kontrollera originalsessionen.</p>}
           </details>}
@@ -208,14 +214,14 @@ export function Radar() {
                   {item.status === "FAILED" ? "IMPORTFEL" : item.status === "IMPORTED" ? "KVITTERAD" : "EJ KVITTERAD I SESSION"}
                 </span></div>
               <p className="mt-1 text-muted-foreground">{item.candidateCount} kandidater i senaste sessionen</p>
-              {item.latest && <p className="mt-1 text-muted-foreground">Senaste kvitto i sessionen · {item.latest.dataDates?.SE ?? "SE okänd"} / {item.latest.dataDates?.US ?? "US okänd"}</p>}
+              {item.latest && <p className="mt-1 text-muted-foreground">Senaste svenska datakvitto · {item.latest.dataDates?.SE ?? "ej verifierat"}</p>}
             </div>)}
           </div>
           {reports.length ? <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {reports.map((r, i) => <div key={`${r.source}-${r.importedAt}-${i}`} className="min-w-0 rounded-lg bg-muted/50 p-3 text-xs" data-testid={`radar-source-report-${i}`}>
               <div className="flex justify-between gap-2"><strong>{sourceName[r.source.toLowerCase()] ?? r.source}</strong><span className={r.status === "SUCCESS" ? "text-success" : "text-destructive"}>{r.status ?? "STATUS OKÄND"}</span></div>
               <p className="mt-1 text-muted-foreground">Signal {r.signalDate} · rapport {r.reportDate}</p>
-              <p className="mt-1 text-muted-foreground">Import {when(r.importedAt)} · SE {r.dataDates?.SE ?? "okänd"} · US {r.dataDates?.US ?? "okänd"}</p>
+              <p className="mt-1 text-muted-foreground">Import {when(r.importedAt)} · OMXS30-data {r.dataDates?.SE ?? "ej verifierat"}</p>
               {r.warnings?.length ? <p className="mt-1 text-amber-800 dark:text-amber-300">{r.warnings.length} varning(ar) · se sessionen för detaljer</p> : null}
             </div>)}
           </div> : <p className="mt-2 text-xs text-muted-foreground">Inga källrapporter registrerade i den här sessionen.</p>}
@@ -234,6 +240,10 @@ export function Radar() {
         {candidates.length === 0 && <div className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground" data-testid="radar-no-candidates">
           Sessionen innehåller inga kandidater.
         </div>}
+        {archivedCandidateCount > 0 && detail.data && <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-800" data-testid="radar-archive-count">
+          {archivedCandidateCount} äldre eller utanför-index-kandidat(er) dolda från aktiva spår; originalposter finns kvar i{" "}
+          <Link href={`/sessions/${detail.data.id}`} className="underline">sessionsarkivet</Link>.
+        </p>}
         {laneKeys.map(key => {
           const [market, direction] = key.split("-");
           const lane = grouped[key] ?? [];
@@ -247,7 +257,6 @@ export function Radar() {
             </div> : <div className="rounded-lg border border-dashed border-border/80 px-4 py-3 text-xs text-muted-foreground">Inga {market} {direction.toLowerCase()}-kandidater i den senaste sessionen.</div>}
           </section>;
         })}
-        {candidates.some(c => !c.market) && <p className="text-xs text-muted-foreground">Marknad saknas för vissa signaler; de visas under ÖVRIGT och får ingen antagen quote-marknad.</p>}
       </>}
     </section>
   );

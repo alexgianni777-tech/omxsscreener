@@ -7,6 +7,7 @@ import { DecisionBadge } from "./LiveTop3Preview";
 import { LiveEntryGuard, type SignalMetadata } from "./LiveEntryGuard";
 import type { EntryQuote, EntryPlan } from "../lib/liveEntryGuard";
 import { PlanGrid } from "./PlanGrid";
+import { filterActiveOmxs30Picks } from "../lib/omxs30ActiveView";
 
 type GuardCandidate = SignalMetadata & EntryPlan & { id: number };
 type GuardProps = { quotes?: Record<string, EntryQuote>; candidates?: readonly GuardCandidate[] };
@@ -15,16 +16,22 @@ function timestamp(value: string) {
   return new Date(value).toLocaleString("sv-SE", { timeZone: "Europe/Stockholm" });
 }
 
-function Picks({ revision, quotes, candidates }: { revision: Top3Revision } & GuardProps) {
+function Picks({ revision, quotes, candidates, sessionDate }: { revision: Top3Revision; sessionDate: string } & GuardProps) {
+  const activePicks = filterActiveOmxs30Picks(revision.picks, sessionDate)
+    .filter(pick => pick.market === "SE");
+  const archivedCount = revision.picks.length - activePicks.length;
   return (
     <div className="space-y-3">
-      {(["SE", "US"] as const).flatMap((market) => (["LONG", "SHORT"] as const).map((direction) => {
-        const picks = revision.picks.filter((pick) => pick.market === market && pick.direction === direction)
+      {archivedCount > 0 && <p role="status" className="text-xs text-amber-700">
+        {archivedCount} historisk eller utanför-index-pick visas inte aktivt; originalet finns kvar i sessionsarkivet.
+      </p>}
+      {(["LONG", "SHORT"] as const).map((direction) => {
+        const picks = activePicks.filter((pick) => pick.direction === direction)
           .sort((a, b) => a.rank - b.rank);
         if (!picks.length) return null;
         return (
-          <section key={`${market}:${direction}`} data-testid={`revision-group-${market}-${direction}`}>
-            <h4 className="mb-1 text-xs font-semibold">{market === "SE" ? "Sverige" : "USA"} · Topp 3 {direction === "SHORT" ? "Sälj" : "Köp"}</h4>
+          <section key={`SE:${direction}`} data-testid={`revision-group-SE-${direction}`}>
+            <h4 className="mb-1 text-xs font-semibold">OMXS30 · Topp 3 {direction === "SHORT" ? "Sälj" : "Köp"}</h4>
             <ol className="space-y-2">
               {picks.map((pick) => (
                 <li key={pick.candidateId} data-testid={`revision-pick-${pick.candidateId}`} className="rounded-md border border-border p-3">
@@ -59,13 +66,13 @@ function Picks({ revision, quotes, candidates }: { revision: Top3Revision } & Gu
             </ol>
           </section>
         );
-      }))}
+       })}
     </div>
   );
 }
 
 /** Uses revision prices, not the older candidate plan belonging to a logged trade. */
-export function CurrentTop3Selection({ revisions, sessionId, quotes, candidates }: { revisions: Top3Revision[]; sessionId: number } & GuardProps) {
+export function CurrentTop3Selection({ revisions, sessionId, sessionDate, quotes, candidates }: { revisions: Top3Revision[]; sessionId: number; sessionDate: string } & GuardProps) {
   if (!revisions.length) return null;
   const ordered = [...revisions].sort((a, b) => b.revision - a.revision);
   const current = currentSavedRevision(ordered);
@@ -102,7 +109,7 @@ export function CurrentTop3Selection({ revisions, sessionId, quotes, candidates 
           ? <p className="text-sm text-amber-600">Inväntar Telegram och EdgeAI för dagens session. Föregående handelsdags rapporter accepteras.</p>
           : current.picks.length === 0
             ? <p className="text-sm text-muted-foreground">Inga kandidater klarar handelsreglerna i den senaste datan.</p>
-            : <Picks revision={current} quotes={quotes} candidates={candidates} />}
+             : <Picks revision={current} quotes={quotes} candidates={candidates} sessionDate={sessionDate} />}
       </div>
       {history.length > 0 && (
         <details data-testid="revision-history" className="mt-4 border-t border-border pt-3">
@@ -114,7 +121,7 @@ export function CurrentTop3Selection({ revisions, sessionId, quotes, candidates 
                   Version {revision.revision} · {timestamp(revision.selectedAt)} · {revision.picks.length} förslag
                 </summary>
                 <div className="mt-2">
-                  {revision.available ? <Picks revision={revision} /> : <p className="text-xs text-muted-foreground">Båda källorna fanns inte ännu.</p>}
+                   {revision.available ? <Picks revision={revision} sessionDate={sessionDate} /> : <p className="text-xs text-muted-foreground">Båda källorna fanns inte ännu.</p>}
                 </div>
               </details>
             ))}

@@ -20,7 +20,7 @@ export function DailyCandidates({ picks, signals, reports = [], sessionDate, pre
   const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm" }).format(now);
   return <div data-testid="daily-candidates" className="space-y-3">
     <h3 className="text-lg font-semibold">Dagens kandidater · Sverige</h3>
-    <SourceProvenance reports={reports} />
+    <SourceProvenance reports={reports} omxs30Only />
     {["edgeai", "telegram"].map(source => {
       const latest = [...reports].reverse().find(r => r.source === source && r.status !== "FAILED");
       return latest?.warnings?.length ? <details key={`warning-${source}`} className="text-xs text-amber-600 dark:text-amber-400">

@@ -4,6 +4,7 @@ import { TrendingUp, TrendingDown, CalendarDays, AlertTriangle, RefreshCw, Info,
 import { formatNumber, formatPercent } from "../lib/utils";
 import { CandlestickChart } from "../components/CandlestickChart";
 import { EarningsReaction, type EarningsReactionData } from "../components/EarningsReaction";
+import { activeOmxs30Candidate } from "../lib/omxs30ActiveView";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -93,7 +94,14 @@ export function Earnings() {
   const { data, isLoading, isError, refetch, isFetching } = useEarningsScreener();
   const [sortBy, setSortBy] = useState<SortBy>("days");
 
-  const sorted = data ? sortStocks(data.stocks, sortBy) : [];
+  const decisionDate = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm" }).format(new Date());
+  const activeStocks = data?.stocks.filter(stock => activeOmxs30Candidate({
+    ticker: stock.ticker, market: stock.market, sessionDate: decisionDate,
+  })) ?? [];
+  const archivedStocks = data?.stocks.filter(stock => !activeOmxs30Candidate({
+    ticker: stock.ticker, market: stock.market, sessionDate: decisionDate,
+  })) ?? [];
+  const sorted = sortStocks(activeStocks, sortBy);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -105,7 +113,7 @@ export function Earnings() {
             Rapport-screener
           </h2>
           <p className="text-muted-foreground mt-1">
-            OMXS30 + EdgeAI US-aktier med rapport inom ±7 dagar. Historisk data — ingen teknisk signal.
+            OMXS30-bolag med rapport inom ±7 dagar. Datumstyrt medlemskap på dagens beslutsdag · endast historisk rapportdata, ingen teknisk signal.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -165,24 +173,33 @@ export function Earnings() {
         </div>
       )}
 
-      {data && data.stocks.length === 0 && (
+      {data && activeStocks.length === 0 && (
         <div className="flex flex-col items-center justify-center h-64 bg-card border border-border rounded-lg text-muted-foreground gap-3">
           <CalendarDays className="h-12 w-12 opacity-20" />
-          <p className="text-base">Inga bolag rapporterar inom 21 dagar just nu.</p>
-          <p className="text-sm opacity-70">Kolla igen närmre rapportsäsongen.</p>
+          <p className="text-base">Inga verifierade OMXS30-bolag rapporterar inom visningsperioden.</p>
+          <p className="text-sm opacity-70">Inga andra marknader eller utanför-index-bolag visas aktivt.</p>
         </div>
       )}
 
       {data && sorted.length > 0 && (
         <div className="space-y-4">
           <p className="text-xs text-muted-foreground">
-            {sorted.length} bolag hittade · uppdaterad {new Date(data.generatedAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
+            {sorted.length} OMXS30-bolag · beslutsdag {decisionDate} · uppdaterad {new Date(data.generatedAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
           </p>
             {sorted.map((stock) => (
               <EarningsCard key={stock.yahooTicker} stock={stock} pageFetchedAt={data.generatedAt} />
           ))}
         </div>
       )}
+      {archivedStocks.length > 0 && <details className="rounded-lg border border-border bg-card p-3" data-testid="earnings-archive">
+        <summary className="cursor-pointer text-sm font-medium">Visa historiskt arkiv ({archivedStocks.length})</summary>
+        <p role="status" className="mt-2 text-xs text-amber-700">ARKIV · utanför dagens OMXS30-universum · ingen aktiv signal eller entry.</p>
+        <ul className="mt-2 divide-y divide-border text-xs">
+          {archivedStocks.map(stock => <li key={stock.yahooTicker} className="py-2">
+            <strong>{stock.ticker}</strong> · {stock.market === "US" ? "historisk USA-post" : "utanför OMXS30"} · rapport {stock.reportDate ?? stock.earningsDate ?? "datum ej verifierat"}
+          </li>)}
+        </ul>
+      </details>}
     </div>
   );
 }

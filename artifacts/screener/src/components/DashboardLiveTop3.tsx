@@ -63,7 +63,7 @@ export function DashboardLiveTop3() {
       {sessions.isLoading || (id > 0 && detail.isLoading)
         ? <p className="text-sm text-muted-foreground">Hämtar aktuellt urval…</p>
         : detail.data && current
-          ? <CurrentTop3Selection revisions={revisions} sessionId={id} quotes={quoteMap} candidates={detail.data.candidates} />
+          ? <CurrentTop3Selection revisions={revisions} sessionId={id} sessionDate={detail.data.date} quotes={quoteMap} candidates={detail.data.candidates} />
           : <p className="text-sm text-muted-foreground">Inget aktuellt OMXS30-urval med godkänd policyversion finns. Äldre eller utanför-index-picks ersätter inte ett aktuellt entrybesked.</p>}
       {archivedPickCount > 0 && detail.data && (
         <p role="status" className="text-xs text-amber-700" data-testid="dashboard-top3-archive-count">

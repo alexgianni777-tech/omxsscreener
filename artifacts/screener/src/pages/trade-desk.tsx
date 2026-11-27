@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { AlertTriangle, ArrowDownToLine, RefreshCw } from "lucide-react";
 import {
   getGetQuotesQueryKey,
@@ -17,6 +17,7 @@ import { quoteLabels, quoteRequestTicker, researchQuoteForMarket } from "../lib/
 import type { DailyPick } from "../lib/dailyCandidates";
 import { candidateReceipt } from "../lib/marketRadarModel";
 import { trendAlignment } from "../lib/sourceMarketEvidence";
+import { activeOmxs30Candidate } from "../lib/omxs30ActiveView";
 
 function price(value: number) {
   return Number.isFinite(value) ? value.toLocaleString("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "ej verifierat";
@@ -52,11 +53,16 @@ export function TradeDesk() {
   const requestedSession = Number(search.get("session"));
   const activeSessionId = Number.isFinite(requestedSession) && requestedSession > 0 ? requestedSession : latestId;
   const detail = useGetSession(activeSessionId, { query: { enabled: activeSessionId > 0, queryKey: getGetSessionQueryKey(activeSessionId) } });
-  const candidates = detail.data?.candidates ?? [];
+  const storedCandidates = detail.data?.candidates ?? [];
+  const candidates = detail.data
+    ? storedCandidates.filter(candidate => activeOmxs30Candidate({
+        ticker: candidate.ticker, market: candidate.market, sessionDate: detail.data!.date,
+      }))
+    : [];
   const queryId = Number(search.get("candidate"));
   const [selectedId, setSelectedId] = useState<number | null>(Number.isFinite(queryId) && queryId > 0 ? queryId : null);
   const selected = selectedId == null ? candidates[0] : candidates.find(c => c.id === selectedId);
-  const market = selected?.market === "SE" || selected?.market === "US" ? selected.market : null;
+  const market = selected?.market === "SE" ? selected.market : null;
   const sourceReports = detail.data?.sourceReports ?? [];
   const receipt = selected ? candidateReceipt(selected, sourceReports) : null;
   const marketDataDate = selected
@@ -107,14 +113,15 @@ export function TradeDesk() {
       <h2 className="font-semibold">Ingen kandidat i aktuell session</h2><p className="mt-1 text-sm text-muted-foreground">Trade Desk använder bara befintliga sessionsdata.</p>
     </div>}
     {detail.data && selectedId != null && !selected && <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm" data-testid="trade-candidate-missing">
-      Kandidaten finns inte i den valda sessionen. Ingen annan signal väljs automatiskt.
+      Kandidaten finns inte i den aktiva OMXS30-listan för vald session. Ingen annan signal väljs automatiskt.
+      {storedCandidates.some(candidate => candidate.id === selectedId) && <> Den bevarade posten är äldre eller utanför OMXS30 och visas endast i <Link href={`/sessions/${activeSessionId}`} className="underline">sessionsarkivet</Link>.</>}
     </div>}
     {detail.data && activeSessionId !== latestId && <p className="rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground" data-testid="trade-historical-session">
       Historisk session {detail.data.date} · #{detail.data.id}. Originalplanen visas som historisk bevakning, inte som aktiv entry.
     </p>}
     {selected && detail.data && <>
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-        <label className="block text-xs font-medium">Välj befintlig kandidat
+          <label className="block text-xs font-medium">Välj aktiv OMXS30-kandidat
           <select value={selected.id} onChange={event => setSelectedId(Number(event.target.value))}
             className="mt-1.5 w-full rounded-lg border border-border bg-card px-3 py-2.5 text-sm" data-testid="select-trade-candidate">
             {candidates.map(c => <option key={c.id} value={c.id}>{c.ticker} · {c.market ?? "marknad okänd"} · {c.direction} · {c.signalDate ?? "datum okänt"}</option>)}
