@@ -10,6 +10,8 @@ import {
   getListJournalRecordsQueryKey,
 } from "@workspace/api-client-react";
 import type { JournalEntryInput, JournalRecord } from "@workspace/api-client-react";
+import { partitionOmxs30JournalRecords } from "../lib/omxs30PortfolioScope";
+import { activeOmxs30Candidate } from "../lib/omxs30ActiveView";
 
 type Mode = "REAL" | "SIMULATED" | "NOT_TAKEN";
 const MODES: Mode[] = ["REAL", "SIMULATED", "NOT_TAKEN"];
@@ -43,6 +45,54 @@ function L({ t, children }: { t: string; children: React.ReactNode }) {
   return <label className="block text-[10px] text-muted-foreground">{t}<div className="mt-1">{children}</div></label>;
 }
 
+function JournalTable({ rows, testId, archive = false }: { rows: JournalRecord[]; testId: string; archive?: boolean }) {
+  if (rows.length === 0) return <p className="text-muted-foreground/60">→ inga poster i den här vyn</p>;
+  const headers = ["Signal", "Källa", "Volymdatum", "Bucket", "Riktn.", ...(archive ? ["Valuta", "FX entry/exit"] : []),
+    "Instr.", "Entry", "Exit-tid", "Fill", "Stop", "Target", "Exit", "Antal", "Hävst.", "Spread", "Slipp.", "Finans.", "Court.", "Brutto R", "Netto R", "Anteckning"];
+  return <div className="overflow-x-auto">
+    <table className="w-full text-[10px] whitespace-nowrap" data-testid={testId}>
+      <thead><tr className="text-left text-muted-foreground uppercase">
+        {headers.map(header => <th key={header} className="px-2 py-1 font-normal">{header}</th>)}
+      </tr></thead>
+      <tbody>{rows.map(record => {
+        const input = record.input;
+        const verified = executionAnalysis(record);
+        return <tr key={record.id} className="border-t border-border/50" data-testid={`row-journal-${record.id}`}>
+          <td className="px-2 py-1">{record.signal.ticker} {record.signal.signalDate ?? "okänt"}{archive && <span className="ml-1 text-amber-700">· ARKIV</span>}</td>
+          <td className="px-2 py-1">{record.signal.source ?? "okänd"}</td>
+          <td className="px-2 py-1">{record.signal.dataDate ?? "okänt"}</td>
+          <td className="px-2 py-1">{record.signal.bucket}</td>
+          <td className="px-2 py-1">{record.signal.direction}</td>
+          {archive && <>
+            <td className="px-2 py-1">{input.priceCurrency ?? "–"}</td>
+            <td className="px-2 py-1">{num(input.entryFxSek, 4)} / {num(input.exitFxSek, 4)}</td>
+          </>}
+          <td className="px-2 py-1">{input.instrumentKind ?? "–"} {input.side ?? ""}
+            {input.fillPrice != null && input.stopPrice != null && input.targetPrice != null && input.side &&
+              <RiskPanel plan={{ direction: input.side, entryPrice: input.fillPrice, stopPrice: input.stopPrice, targetPrice: input.targetPrice }}
+                instrument={input.instrumentKind ?? "UNDERLYING"} netR={verified.netR} />}
+          </td>
+          <td className="px-2 py-1">{when(input.entryTime)}</td>
+          <td className="px-2 py-1">{when(input.exitTime)}</td>
+          <td className="px-2 py-1">{num(input.fillPrice)}</td>
+          <td className="px-2 py-1">{num(input.stopPrice)}</td>
+          <td className="px-2 py-1">{num(input.targetPrice)}</td>
+          <td className="px-2 py-1">{num(input.exitPrice)}</td>
+          <td className="px-2 py-1">{num(input.quantity, 4)}</td>
+          <td className="px-2 py-1">{input.leverage == null ? "–" : `${num(input.leverage)}x`}</td>
+          <td className="px-2 py-1">{input.mode === "NOT_TAKEN" ? "–" : cost(input.spreadCostKr)}</td>
+          <td className="px-2 py-1">{input.mode === "NOT_TAKEN" ? "–" : cost(input.slippageCostKr)}</td>
+          <td className="px-2 py-1">{input.mode === "NOT_TAKEN" ? "–" : cost(input.financingCostKr)}</td>
+          <td className="px-2 py-1">{input.mode === "NOT_TAKEN" ? "–" : cost(input.commissionKr)}</td>
+          <td className="px-2 py-1">{num(verified.grossR)}</td>
+          <td className="px-2 py-1">{verified.netR == null ? "NOT_VERIFIED" : num(verified.netR)}</td>
+          <td className="px-2 py-1 whitespace-normal min-w-[12rem]">{input.notes}</td>
+        </tr>;
+      })}</tbody>
+    </table>
+  </div>;
+}
+
 export function TradeJournal() {
   const qc = useQueryClient();
   const records = useListJournalRecords();
@@ -56,14 +106,25 @@ export function TradeJournal() {
 
   const set = (k: keyof typeof EMPTY, v: string) => setF((p) => ({ ...p, [k]: v }));
   const cands = candidates.data ?? [];
-  const cand = cands.find((c) => String(c.id) === f.candidateId);
   const rows: JournalRecord[] = (records.data as JournalRecord[] | undefined) ?? [];
+  const partition = useMemo(() => partitionOmxs30JournalRecords(rows, cands), [rows, cands]);
+  const activeRows = partition.active;
+  const archivedRows = partition.archived;
+  const activeCandidates = cands.filter(candidate => activeOmxs30Candidate({
+    ticker: candidate.ticker, market: candidate.market, sessionDate: candidate.sessionDate,
+  }));
+  const cand = activeCandidates.find((c) => String(c.id) === f.candidateId);
   const counts = useMemo(() => {
     const c: Record<Mode, number> = { REAL: 0, SIMULATED: 0, NOT_TAKEN: 0 };
-    rows.forEach((r) => { c[r.input.mode] += 1; });
+    activeRows.forEach((r) => { c[r.input.mode] += 1; });
     return c;
-  }, [rows]);
-  const shown = rows.filter((r) => r.input.mode === filter);
+  }, [activeRows]);
+  const archivedCounts = useMemo(() => {
+    const c: Record<Mode, number> = { REAL: 0, SIMULATED: 0, NOT_TAKEN: 0 };
+    archivedRows.forEach((r) => { c[r.input.mode] += 1; });
+    return c;
+  }, [archivedRows]);
+  const shown = activeRows.filter((r) => r.input.mode === filter);
 
   const submit = () => {
     setNotice(null);
@@ -161,7 +222,8 @@ export function TradeJournal() {
         <p className="mt-2 text-muted-foreground leading-relaxed">
           Journalen är append-only och separat: den ändrar aldrig signaler, utfall eller Challenge Tracker.
           REAL, SIMULATED och NOT_TAKEN är olika underlag och summeras aldrig som bevis på edge.
-          {" "}R beräknas från faktisk fill och initial stop. USD-resultat inkluderar angivna valutakurser.
+          {" "}R beräknas från faktisk fill och initial stop. Nya journalposter är begränsade till aktiva OMXS30-signaler i SEK.
+          Historiska poster och valutauppgifter bevaras separat i arkivet.
           Finansiering och courtage dras en gång; okända värden ger okänt netto-R.
           En verkligt utförd sen eller planbruten trade får journalföras; ogiltig initial risk ger okänt R, inte ett påhittat resultat.
           Tider anges i webbläsarens lokala tidszon och visas här i Stockholmstid.
@@ -169,14 +231,20 @@ export function TradeJournal() {
 
         {records.isLoading && <p>Läser befintlig journal…</p>}
         {records.isError && <p role="alert" className="text-destructive">Journalen kunde inte läsas. Inga tomma eller syntetiska resultat används.</p>}
-        {!records.isLoading && !records.isError && <JournalAnalysis records={rows} />}
+        {!records.isLoading && !records.isError && <JournalAnalysis records={activeRows} />}
+        {archivedRows.length > 0 && <p role="status" className="rounded border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-800">
+          {archivedRows.length} äldre, utanför-index eller ej verifierade journalpost(er) visas endast i arkivet och ingår inte i aktiv OMXS30-analys.
+        </p>}
+        {candidates.isError && <p role="alert" className="text-xs text-amber-700">
+          Medlemskap kunde inte verifieras. Inga signaler kan väljas för nya journalposter; befintliga poster visas inte aktivt.
+        </p>}
         <details className="border border-border rounded">
           <summary className="cursor-pointer px-3 py-2 text-primary" data-testid="button-journal-toggle">Ny journalpost</summary>
           <div className="p-3 space-y-3 border-t border-border bg-muted/20">
             <L t="Källsignal">
               <select value={f.candidateId} onChange={(e) => set("candidateId", e.target.value)} className={inp} data-testid="select-journal-candidate">
                 <option value="">Välj signal…</option>
-                {cands.map((c) => (
+                {activeCandidates.map((c) => (
                   <option key={c.id} value={c.id}>{c.signalDate ?? "okänt datum"} · {c.ticker} · {c.direction} · {c.signalSource ?? "okänd källa"}</option>
                 ))}
               </select>
@@ -210,13 +278,9 @@ export function TradeJournal() {
                   </L>
                   <L t="Prisvaluta (välj uttryckligen)">
                     <select value={f.priceCurrency} onChange={(e) => set("priceCurrency", e.target.value)} className={inp} data-testid="select-journal-currency">
-                      <option value="">Välj…</option><option value="SEK">SEK</option><option value="USD">USD</option>
+                      <option value="">Välj…</option><option value="SEK">SEK</option>
                     </select>
                   </L>
-                  {f.priceCurrency === "USD" && <>
-                    <L t="FX vid entry (SEK per USD)">{numIn("entryFxSek")}</L>
-                    <L t="FX vid exit (SEK per USD)">{numIn("exitFxSek")}</L>
-                  </>}
                   <L t="Entry-tid (lokal tid, sparas som ISO)">
                     <input type="datetime-local" value={f.entryTime} onChange={(e) => set("entryTime", e.target.value)} className={inp} data-testid="input-journal-entryTime" />
                   </L>
@@ -281,56 +345,15 @@ export function TradeJournal() {
         {!records.isLoading && !records.isError && shown.length === 0 && (
           <div className="text-muted-foreground/60">→ inga {filter}-poster</div>
         )}
-        {shown.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-[10px] whitespace-nowrap" data-testid="table-journal">
-              <thead>
-                <tr className="text-left text-muted-foreground uppercase">
-                  {["Signal", "Källa", "Volymdatum", "Bucket", "Riktn.", "Valuta", "FX entry/exit (SEK/USD)", "Instr.", "Entry", "Exit-tid", "Fill", "Stop", "Target", "Exit", "Antal", "Hävst.", "Spread", "Slipp.", "Finans.", "Court.", "Brutto R", "Netto R", "Anteckning"].map((h) => (
-                    <th key={h} className="px-2 py-1 font-normal">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((r) => {
-                  const i = r.input;
-                    const verified=executionAnalysis(r);
-                  return (
-                    <tr key={r.id} className="border-t border-border/50" data-testid={`row-journal-${r.id}`}>
-                      <td className="px-2 py-1">{r.signal.ticker} {r.signal.signalDate ?? "okänt"}</td>
-                      <td className="px-2 py-1">{r.signal.source ?? "okänd"}</td>
-                      <td className="px-2 py-1">{r.signal.dataDate ?? "okänt"}</td>
-                      <td className="px-2 py-1">{r.signal.bucket}</td>
-                      <td className="px-2 py-1">{r.signal.direction}</td>
-                      <td className="px-2 py-1">{i.priceCurrency ?? "–"}</td>
-                      <td className="px-2 py-1">{num(i.entryFxSek, 4)} / {num(i.exitFxSek, 4)}</td>
-                      <td className="px-2 py-1">{i.instrumentKind ?? "–"} {i.side ?? ""}
-                        {i.fillPrice != null && i.stopPrice != null && i.targetPrice != null && i.side &&
-                          <RiskPanel plan={{ direction: i.side, entryPrice: i.fillPrice, stopPrice: i.stopPrice, targetPrice: i.targetPrice }}
-                            instrument={i.instrumentKind ?? "UNDERLYING"} netR={verified.netR} />}
-                      </td>
-                      <td className="px-2 py-1">{when(i.entryTime)}</td>
-                      <td className="px-2 py-1">{when(i.exitTime)}</td>
-                      <td className="px-2 py-1">{num(i.fillPrice)}</td>
-                      <td className="px-2 py-1">{num(i.stopPrice)}</td>
-                      <td className="px-2 py-1">{num(i.targetPrice)}</td>
-                      <td className="px-2 py-1">{num(i.exitPrice)}</td>
-                      <td className="px-2 py-1">{num(i.quantity, 4)}</td>
-                      <td className="px-2 py-1">{i.leverage == null ? "–" : `${num(i.leverage)}x`}</td>
-                      <td className="px-2 py-1">{i.mode === "NOT_TAKEN" ? "–" : cost(i.spreadCostKr)}</td>
-                      <td className="px-2 py-1">{i.mode === "NOT_TAKEN" ? "–" : cost(i.slippageCostKr)}</td>
-                      <td className="px-2 py-1">{i.mode === "NOT_TAKEN" ? "–" : cost(i.financingCostKr)}</td>
-                      <td className="px-2 py-1">{i.mode === "NOT_TAKEN" ? "–" : cost(i.commissionKr)}</td>
-                      <td className="px-2 py-1">{num(verified.grossR)}</td>
-                      <td className="px-2 py-1">{verified.netR == null ? "NOT_VERIFIED" : num(verified.netR)}</td>
-                      <td className="px-2 py-1 whitespace-normal min-w-[12rem]">{i.notes}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {shown.length > 0 && <JournalTable rows={shown} testId="table-journal" />}
+        {archivedRows.length > 0 && <details className="rounded border border-border p-3" data-testid="journal-archive">
+          <summary className="cursor-pointer text-xs font-semibold">
+            Visa historiskt/utanför OMXS30-arkiv ({archivedRows.length}) · REAL {archivedCounts.REAL}, SIMULATED {archivedCounts.SIMULATED}, NOT_TAKEN {archivedCounts.NOT_TAKEN}
+          </summary>
+          <p className="mt-2 text-[11px] text-amber-700">ARKIV · originalposter och valuta-/FX-värden är oförändrade. Dessa rader ingår inte i aktiv OMXS30-statistik och ger ingen entrybekräftelse.</p>
+          <div className="mt-2"><JournalAnalysis records={archivedRows} /></div>
+          <div className="mt-2"><JournalTable rows={archivedRows} testId="table-journal-archive" archive /></div>
+        </details>}
       </div>
     </div>
   );

@@ -11,9 +11,12 @@ import {
 import { parseBrokerExport, type BrokerImportRow } from "../lib/portfolioBrokerParser";
 import { PortfolioRiskPanel } from "../components/PortfolioRiskPanel";
 import { QuotePresentation } from "../components/QuotePresentation";
+import { activeOmxs30Candidate } from "../lib/omxs30ActiveView";
+import { partitionPortfolioPositions } from "../lib/omxs30PortfolioScope";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const api = (path: string) => `${BASE}/api${path}`;
+const stockholmDate = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm" }).format(new Date());
 
 // ── types ──────────────────────────────────────────────────────────────────────
 type Position = PortfolioPosition;
@@ -731,7 +734,7 @@ const EMPTY_FORM = {
   productType: "", productSide: "", underlyingDirection: "", underlyingTicker: "",
   indicativeLeverage: "", financingLevel: "", barrierLevel: "", barrierType: "",
   entryPrice: "", shares: "", stopPrice: "", targetPrice: "",
-  market: "SE" as "SE" | "US", notes: "",
+  market: "SE" as const, notes: "",
 };
 
 function AddPositionForm({ onSuccess }: { onSuccess: () => void }) {
@@ -744,6 +747,11 @@ function AddPositionForm({ onSuccess }: { onSuccess: () => void }) {
   const submit = async () => {
     if (!form.ticker.trim() || !form.entryPrice || !form.shares) {
       setError("Ticker, entrypris och antal aktier krävs.");
+      return;
+    }
+    const underlyingTicker = form.underlyingTicker.trim() || form.ticker.trim();
+    if (!activeOmxs30Candidate({ ticker: underlyingTicker, market: "SE", sessionDate: stockholmDate() })) {
+      setError("Nya positioner måste avse en verifierad OMXS30-medlem på dagens beslutsdag. Ange underliggande ticker om du registrerar en produkt.");
       return;
     }
     setSubmitting(true);
@@ -768,7 +776,7 @@ function AddPositionForm({ onSuccess }: { onSuccess: () => void }) {
           shares: parseFloat(form.shares),
           stopPrice: form.stopPrice ? parseFloat(form.stopPrice) : undefined,
           targetPrice: form.targetPrice ? parseFloat(form.targetPrice) : undefined,
-          market: form.market || undefined,
+          market: "SE",
           notes: form.notes.trim() || undefined,
         }),
       });
@@ -855,12 +863,8 @@ function AddPositionForm({ onSuccess }: { onSuccess: () => void }) {
           <label className={label}>Barriärtyp</label>
           <input className={inp} placeholder="Knock-out" value={form.barrierType} onChange={e => set("barrierType", e.target.value)} />
         </div>
-        <div>
-          <label className={label}>Marknad</label>
-          <select className={inp} value={form.market} onChange={e => set("market", e.target.value as "SE" | "US")}>
-            <option value="SE">SE</option>
-            <option value="US">US</option>
-          </select>
+        <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
+          Marknad: SE · nya positioner begränsas till OMXS30 på beslutsdagen
         </div>
         <div>
           <label className={label}>Antal aktier</label>
@@ -933,8 +937,9 @@ export function Portfolio() {
   }, [qc]);
 
   const positions = data?.positions ?? [];
-  const longs = positions.filter(p => p.direction === "LONG");
-  const shorts = positions.filter(p => p.direction === "SHORT");
+  const { active: activePositions, archived: archivedPositions } = partitionPortfolioPositions(positions, stockholmDate());
+  const longs = activePositions.filter(p => p.direction === "LONG");
+  const shorts = activePositions.filter(p => p.direction === "SHORT");
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -946,7 +951,7 @@ export function Portfolio() {
             Nuvarande portfölj
           </h2>
           <p className="text-muted-foreground mt-1 text-sm">
-            Registrerade positioner med hämtad eller senast importerad kurs, orealiserat P&amp;L och avstånd till stop/target. Ingen garanti för realtidskurs.
+            Aktiva innehav visas endast för OMXS30-medlemmar på dagens beslutsdag. Äldre och utanför-index-innehav bevaras i arkivet; inga order skapas.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -976,7 +981,7 @@ export function Portfolio() {
             }`}
           >
             <Plus className="h-4 w-4" />
-            {showForm ? "Avbryt" : "Ny position"}
+            {showForm ? "Avbryt" : "Ny OMXS30-position"}
           </button>
         </div>
       </header>
@@ -1004,14 +1009,19 @@ export function Portfolio() {
         <div className="mt-3"><PortfolioRiskPanel positions={positions} /></div>
       </details>}
       {data && positions.length > 0 && (
-        <SummaryBar summary={data.summary} fetchedAt={data.fetchedAt} />
+        <>
+          {archivedPositions.length > 0 && <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-800">
+            Portföljsammanställningen omfattar även {archivedPositions.length} arkiverad(e) position(er); listan nedan visar endast OMXS30. Öppna arkivet för att granska eller hantera övriga poster.
+          </p>}
+          <SummaryBar summary={data.summary} fetchedAt={data.fetchedAt} />
+        </>
       )}
 
       {/* empty state */}
-      {data && positions.length === 0 && !showForm && (
+      {data && activePositions.length === 0 && !showForm && archivedPositions.length === 0 && (
         <div className="flex flex-col items-center justify-center h-64 bg-card border border-border rounded-lg text-muted-foreground gap-3">
           <Briefcase className="h-12 w-12 opacity-20" />
-          <p className="text-base">Inga öppna positioner</p>
+          <p className="text-base">Inga aktiva OMXS30-positioner</p>
           <p className="text-sm opacity-70">Klicka på "Ny position" för att lägga till en trade.</p>
         </div>
       )}
@@ -1038,6 +1048,18 @@ export function Portfolio() {
             <PositionCard key={pos.id} pos={pos} onDelete={id => deleteMutation.mutate(id)} onEdited={onEdited} />
           ))}
         </section>
+      )}
+      {archivedPositions.length > 0 && (
+        <details className="rounded-xl border border-border bg-card p-4" data-testid="portfolio-archive">
+          <summary className="cursor-pointer text-sm font-medium">Visa arkiv / innehav utanför OMXS30 ({archivedPositions.length})</summary>
+          <p className="mt-2 text-xs text-amber-700">ARKIV · befintliga innehav bevaras för portföljhantering, men visas inte som aktiva OMXS30-positioner eller nya förslag.</p>
+          <div className="mt-3 space-y-3">
+            {archivedPositions.map(pos => <div key={pos.id}>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700">Arkiv · {pos.market ?? "marknad okänd"} · {pos.underlyingTicker ?? pos.ticker}</p>
+              <PositionCard pos={pos} onDelete={id => deleteMutation.mutate(id)} onEdited={onEdited} />
+            </div>)}
+          </div>
+        </details>
       )}
     </div>
   );
