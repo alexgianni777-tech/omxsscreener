@@ -100,7 +100,7 @@ export function Dashboard() {
         <StatCard
           title="Overall Win Rate"
           value={
-            summary.overallWinRate ? formatPercent(summary.overallWinRate) : "–"
+            summary.overallWinRate != null ? formatPercent(summary.overallWinRate) : "–"
           }
           icon={<CheckCircle2 className="h-4 w-4 text-muted-foreground" />}
           valueClass={winRateColor}
