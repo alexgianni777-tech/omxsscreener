@@ -55,7 +55,7 @@ router.post(
       return;
     }
 
-    // Validate each exchange independently BEFORE writing any session.
+    // Validate the Swedish session BEFORE writing any session.
     // The creation timestamp may be Saturday for Friday's completed data.
     // A force-reimport must never bypass freshness validation.
     const generatedAt = edgeData?.generatedAt;
@@ -63,11 +63,9 @@ router.post(
       res.status(422).json({ error: "EdgeAI publication timestamp invalid or in the future" });
       return;
     }
-    const marketStatus = {
-      SE: assessEdgeMarket("SE", edgeData?.markets?.SE),
-      US: assessEdgeMarket("US", edgeData?.markets?.US),
-    };
-    const eligibleKeys = (["SE", "US"] as const).filter(key => marketStatus[key].fresh);
+    // AG Invest trades ONLY underlying OMXS30 shares. Never import US ideas.
+    const marketStatus = { SE: assessEdgeMarket("SE", edgeData?.markets?.SE) };
+    const eligibleKeys = marketStatus.SE.fresh ? ["SE"] : [];
     if (!eligibleKeys.length) {
       res.status(422).json({
         error: "EdgeAI saknar verifierad data från senaste avslutade handelsdag. Import stoppad.",
@@ -77,11 +75,16 @@ router.post(
     }
     const se = edgeData?.markets?.SE;
     // Only import proposals from a market with a verified completed session.
-    // Never silently allow stale US setups through a current SE session.
-    const setups: any[] = marketStatus.SE.fresh && Array.isArray(se?.setups) ? se.setups : [];
-    const usSetups: any[] = marketStatus.US.fresh && Array.isArray(edgeData?.markets?.US?.setups)
-      ? edgeData.markets.US.setups : [];
-    const allSetups = [...setups, ...usSetups];
+    if (edgeData?.strategyScope !== "OMXS30_ONLY") {
+      res.status(422).json({ error: "EdgeAI är inte verifierad som OMXS30_ONLY. Import stoppad." });
+      return;
+    }
+    const allSetups: any[] = marketStatus.SE.fresh && Array.isArray(se?.setups) ? se.setups : [];
+    // A Swedish market label alone is insufficient; foreign symbols fail closed.
+    if (allSetups.some(s => typeof s?.ticker !== "string" || !/^[A-Z0-9-]+\.ST$/i.test(s.ticker))) {
+      res.status(422).json({ error: "Minst en kandidat saknar verifierat svenskt aktietickerformat. Import stoppad." });
+      return;
+    }
     if (!allSetups.length) {
       res.status(422).json({
         error: "Ingen aktuell och verifierad EdgeAI-signal finns att importera.",
@@ -90,8 +93,8 @@ router.post(
       return;
     }
     // Date of the underlying completed market close, never generatedAt.
-    const sessionDate = eligibleKeys.map(key => marketStatus[key].actual as string).sort().at(-1)!;
-    const primaryMarket = marketStatus.SE.fresh ? se : edgeData.markets.US;
+    const sessionDate = marketStatus.SE.actual as string;
+    const primaryMarket = se;
 
     // 2b. Fetch real OMXS30 market weather from Yahoo Finance
     let omxsValue = 0, perf5d = 0, perf1m = 0, perf3m = 0, marketRsi = 0;
@@ -160,7 +163,7 @@ router.post(
       return;
     }
 
-    // 4. Map setups → candidates (SE + US combined), group by category for ranking
+    // 4. Map verified SE setups only, group by category for ranking
     const rankCounter: Record<string, number> = {};
 
     const mappedSetups = allSetups.map((s: any) => {
@@ -171,9 +174,8 @@ router.post(
       const stop = Number(s.stop ?? 0);
       const target = Number(s.target ?? 0);
       const oneR = Math.abs(entry - stop);
-      // Strip .ST so SE tickers are stored as base form (ALFA, ERIC-B).
-      // US tickers have no .ST so stripping is a no-op (AMD stays AMD).
-      // resolveYahooTicker() re-adds .ST for SE tickers via SE_BASE_TICKERS / hyphen rule.
+      // Strip .ST for display; all source setups must be SE symbols.
+      // resolveYahooTicker() maps stored SE symbols back to exchange symbols.
       const ticker = String(s.ticker ?? "").replace(/\.ST$/i, "").toUpperCase();
       // barsAgo: how many bars (trading days) ago the signal was first triggered
       const barsAgo = Number(s.barsAgo ?? 0);
@@ -249,7 +251,7 @@ router.post(
           .update(screenerSessionsTable)
           .set({
             trendLabel: primaryMarket.regime?.label ?? "n/a",
-            rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt} · SE dataAsOf ${marketStatus.SE.actual ?? "n/a"} · US dataAsOf ${marketStatus.US.actual ?? "n/a"}`,
+            rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt} · SE dataAsOf ${marketStatus.SE.actual ?? "n/a"}`,
             omxsValue,
             perf5d,
             perf1m,
@@ -293,7 +295,7 @@ router.post(
           perf3m,
           marketRsi,
           trendLabel: primaryMarket.regime?.label ?? "n/a",
-          rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt} · SE dataAsOf ${marketStatus.SE.actual ?? "n/a"} · US dataAsOf ${marketStatus.US.actual ?? "n/a"}`,
+          rawText: `EdgeAI import — generatedAt ${edgeData.generatedAt} · SE dataAsOf ${marketStatus.SE.actual ?? "n/a"}`,
           source: "edgeai",
           edgeRegime: JSON.stringify(primaryMarket.regime ?? {}),
           edgeExpectancy: primaryMarket.edge?.expectancyR ?? null,

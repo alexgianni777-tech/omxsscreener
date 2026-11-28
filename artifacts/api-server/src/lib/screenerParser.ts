@@ -203,13 +203,17 @@ export function parseScreenerText(rawText: string): ParsedSession {
       const rank = parseInt(candidateLineMatch[1], 10);
       // Next line should be the plan line
       const planLine = lines[i + 1] ?? "";
-      if (!planLine.includes("plan(")) continue; // skip if no plan (e.g. "Inga kvalificerade idag")
+      if (!planLine.includes("plan(")) {
+        throw new ScreenerParseError(`Kandidat på rad ${i + 1} saknar planrad: ${line.trim()}`);
+      }
 
       try {
         const candidate = parseCandidate(line, planLine, currentCategory, rank);
         candidates.push(candidate);
-      } catch {
-        // skip malformed candidate rather than failing the whole import
+      } catch (error) {
+        // Never silently lose a trade candidate while claiming successful import.
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new ScreenerParseError(`Ogiltig kandidat på rad ${i + 1}: ${reason}`);
       }
       i++; // skip plan line
     }

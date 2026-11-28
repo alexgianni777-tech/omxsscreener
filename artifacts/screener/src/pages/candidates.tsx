@@ -77,6 +77,7 @@ export function Candidates() {
         </select>
       </div>
 
+      <p className="text-xs text-muted-foreground">* Yahoo-kurser kan vara fördröjda. Kontrollera aktuell kurs hos Avanza innan handel.</p>
       {/* Data Table */}
       <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
@@ -88,7 +89,7 @@ export function Candidates() {
                 <th className="px-4 py-3">Dir</th>
                 <th className="px-4 py-3">Category</th>
                 <th className="px-4 py-3 text-right">Screen Px</th>
-                <th className="px-4 py-3 text-right">Live Px</th>
+                <th className="px-4 py-3 text-right" title="Yahoo-kurs, kan vara fördröjd och är inte en exekverbar köp-/säljkurs">Yahoo Px*</th>
                 <th className="px-4 py-3 text-right">Entry</th>
                 <th className="px-4 py-3 text-right">Target</th>
                 <th className="px-4 py-3 text-right">Stop</th>
