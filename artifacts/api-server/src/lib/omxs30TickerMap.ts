@@ -15,7 +15,7 @@ export const OMXS30_TICKER_MAP: Record<string, string> = {
 
   // ── E ──
   Electrolux: "ELUX-B.ST",
-  Epiroc: "EPIR-A.ST",
+  Epiroc: "EPI-A.ST",
   Ericsson: "ERIC-B.ST",
   Essity: "ESSITY-B.ST",
   Evolution: "EVO.ST",
