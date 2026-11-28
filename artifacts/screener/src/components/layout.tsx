@@ -76,9 +76,9 @@ export function Shell({ children }: { children: ReactNode }) {
             </div>
           )}
           <div className="text-xs text-muted-foreground font-mono">
-            System: ONLINE
+            Status: kontrollera datadatum
             <br />
-            Market: NASDAQ STO
+            Marknad: Nasdaq Stockholm
           </div>
         </div>
       </aside>
