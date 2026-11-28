@@ -55,7 +55,7 @@ router.post(
       return;
     }
 
-    // Validate each exchange independently BEFORE writing any session.
+    // Validate the Swedish session BEFORE writing any session.
     // The creation timestamp may be Saturday for Friday's completed data.
     // A force-reimport must never bypass freshness validation.
     const generatedAt = edgeData?.generatedAt;
@@ -75,14 +75,13 @@ router.post(
     }
     const se = edgeData?.markets?.SE;
     // Only import proposals from a market with a verified completed session.
-    // Never silently allow stale US setups through a current SE session.
     if (edgeData?.strategyScope !== "OMXS30_ONLY") {
       res.status(422).json({ error: "EdgeAI är inte verifierad som OMXS30_ONLY. Import stoppad." });
       return;
     }
     const allSetups: any[] = marketStatus.SE.fresh && Array.isArray(se?.setups) ? se.setups : [];
     // A Swedish market label alone is insufficient; foreign symbols fail closed.
-    if (allSetups.some(s => typeof s?.ticker !== "string" || !/^[A-Z0-9-]+\\.ST$/i.test(s.ticker))) {
+    if (allSetups.some(s => typeof s?.ticker !== "string" || !/^[A-Z0-9-]+\.ST$/i.test(s.ticker))) {
       res.status(422).json({ error: "Minst en kandidat saknar verifierat svenskt aktietickerformat. Import stoppad." });
       return;
     }
