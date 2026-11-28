@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
       - name: Test exchange-session freshness and stale-data gates
-        run: node --experimental-strip-types --test artifacts/api-server/src/lib/edgeaiFreshness.test.mjs
+        run: node --experimental-strip-types --test artifacts/api-server/src/lib/edgeaiFreshness.test.mjs artifacts/api-server/src/lib/screenerParser.test.mjs
       - name: Typecheck
         run: pnpm run typecheck
       - name: Production build
