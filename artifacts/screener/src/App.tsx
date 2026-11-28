@@ -9,6 +9,7 @@ import { Import } from './pages/import';
 import { Candidates } from './pages/candidates';
 import { Survival } from './pages/survival';
 import { Earnings } from './pages/earnings';
+import { RiskDesk } from './pages/risk-desk';
 import { Loader2, Lock } from 'lucide-react';
 
 const queryClient = new QueryClient({
@@ -74,6 +75,7 @@ function LoginGate() {
         <Route path="/import" component={Import} />
         <Route path="/candidates" component={Candidates} />
         <Route path="/survival" component={Survival} />
+        <Route path="/risk" component={RiskDesk} />
         <Route path="/earnings" component={Earnings} />
         <Route component={NotFound} />
       </Switch>
