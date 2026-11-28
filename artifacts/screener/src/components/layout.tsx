@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { LineChart, LayoutDashboard, History, FileDown, Activity, ShieldAlert, CalendarDays, LogOut } from "lucide-react";
+import { LineChart, LayoutDashboard, History, FileDown, Activity, ShieldAlert, CalendarDays, LogOut, Calculator } from "lucide-react";
 import { useAuth } from "@workspace/replit-auth-web";
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -13,6 +13,7 @@ export function Shell({ children }: { children: ReactNode }) {
     { href: "/candidates", label: "Candidates", icon: Activity },
     { href: "/import", label: "Import Data", icon: FileDown },
     { href: "/survival", label: "Survival", icon: ShieldAlert },
+    { href: "/risk", label: "Risk Desk", icon: Calculator },
     { href: "/earnings", label: "Rapporter", icon: CalendarDays },
   ];
 
