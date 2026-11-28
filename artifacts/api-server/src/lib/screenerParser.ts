@@ -208,8 +208,11 @@ export function parseScreenerText(rawText: string): ParsedSession {
       try {
         const candidate = parseCandidate(line, planLine, currentCategory, rank);
         candidates.push(candidate);
-      } catch {
-        // skip malformed candidate rather than failing the whole import
+      } catch (error) {
+        // Fail closed: partial imports can hide missing or corrupt trade candidates.
+        // Never claim a successful import when an advertised plan failed to parse.
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new ScreenerParseError(`Invalid candidate in section ${currentCategory} at line ${i + 1}: ${reason}`);
       }
       i++; // skip plan line
     }
